@@ -16,8 +16,8 @@ type Service interface {
 	GetTask(id uuid.UUID) (task Task, ok bool)
 	// GetTasks gets all tasks
 	GetTasks() []Task
-	// CancellAll cancels all tasks
-	CancellAll()
+	// CancelAll cancels all tasks
+	CancelAll()
 	// CancelTask cancels a task by its ID
 	CancelTask(id uuid.UUID)
 }

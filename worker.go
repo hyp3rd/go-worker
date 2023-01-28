@@ -103,8 +103,8 @@ func (tm *TaskManager) GetTasks() []Task {
 	return tasks
 }
 
-// CancellAll cancels all tasks
-func (tm *TaskManager) CancellAll() {
+// CancelAll cancels all tasks
+func (tm *TaskManager) CancelAll() {
 	tm.Registry.Range(func(key, value interface{}) bool {
 		task := value.(Task)
 		// cancel the task

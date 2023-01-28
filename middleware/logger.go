@@ -68,9 +68,9 @@ func (mw *loggerMiddleware) GetTasks() []worker.Task {
 	return mw.next.GetTasks()
 }
 
-// CancellAll cancels all tasks
-func (mw *loggerMiddleware) CancellAll() {
-	mw.next.CancellAll()
+// CancelAll cancels all tasks
+func (mw *loggerMiddleware) CancelAll() {
+	mw.next.CancelAll()
 }
 
 // CancelTask cancels a task by its ID
