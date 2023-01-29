@@ -9,6 +9,8 @@ Each `Task` represents a function scheduled by priority.
 
 - Task prioritization: You can register tasks with a priority level influencing the execution order.
 - Concurrent execution: Tasks are executed concurrently by a pool of workers.
+- Middleware: You can apply middleware to the `TaskManager` to add additional functionality.
+- Results: You can access the results of the tasks via the `Results` channel.
 - Rate limiting: You can rate limit the tasks schedule by setting a maximum number of jobs per second.
 - Cancellation: Tasks can be canceled before or while they are running.
 
@@ -102,42 +104,44 @@ package main
 
 import (
     "fmt"
-    "log"
     "time"
 
+    "github.com/google/uuid"
     worker "github.com/hyp3rd/go-worker"
     "github.com/hyp3rd/go-worker/middleware"
-    "github.com/google/uuid"
 )
 
-func main() {
+    func main() {
     tm := worker.NewTaskManager(5, 10)
-    // Example of using zap logger from uber
-    logger := log.Default()
 
     // apply middleware in the same order as you want to execute them
     tm = worker.RegisterMiddleware(tm,
-        //middleware.YourMiddleware,
+        // middleware.YourMiddleware,
         func(next worker.Service) worker.Service {
-            return middleware.NewLoggerMiddleware(next, logger)
+            return middleware.NewLoggerMiddleware(next, middleware.DefaultLogger())
         },
     )
 
     task := worker.Task{
         ID:       uuid.New(),
         Priority: 1,
-        Fn:       func() interface{} { return "Hello, World from Task 1!" },
-    }
-
-    task2 := worker.Task{
-        ID:       uuid.New(),
-        Priority: 5,
-        // You can pass in parameters to the function and return a value using a closure
         Fn: func() interface{} {
             return func(a int, b int) interface{} {
                 return a + b
             }(2, 5)
         },
+    }
+
+    // Invalid task, it doesn't have a function
+    task1 := worker.Task{
+        ID:       uuid.New(),
+        Priority: 1,
+    }
+
+    task2 := worker.Task{
+        ID:       uuid.New(),
+        Priority: 5,
+        Fn:       func() interface{} { return "Hello, World from Task 2!" },
     }
 
     task3 := worker.Task{
@@ -160,7 +164,7 @@ func main() {
         },
     }
 
-    tm.RegisterTask(task, task2, task3, task4)
+    tm.RegisterTask(task, task1, task2, task3, task4)
     tm.Start(5)
 
     tm.CancelTask(task3.ID)
@@ -175,7 +179,6 @@ func main() {
         fmt.Println(task)
     }
 }
-
 ```
 
 ## Conclusion
