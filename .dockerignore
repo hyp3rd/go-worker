@@ -93,3 +93,10 @@ tags
 # Ignore all local history of files
 .history
 .ionide
+
+### Project ###
+# Local example
+*.bak
+.dccache
+./examples/
+./tests/
