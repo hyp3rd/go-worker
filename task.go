@@ -127,9 +127,3 @@ func (h *taskHeap) Pop() interface{} {
 	*h = old[0 : n-1]
 	return task
 }
-
-// update modifies the priority of `Task` in the queue.
-// func (h *taskHeap) update(task *Task, priority int) {
-// 	task.Priority = priority
-// 	heap.Fix(h, task.index)
-// }
