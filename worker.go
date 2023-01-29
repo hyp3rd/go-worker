@@ -3,6 +3,7 @@ package worker
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
 	"time"
@@ -47,13 +48,15 @@ func NewTaskManager(maxTasks int, tasksPerSecond float64) Service {
 
 // RegisterTask registers a new task to the task manager
 func (tm *TaskManager) RegisterTask(tasks ...Task) {
-	for _, task := range tasks {
+	for idx, task := range tasks {
 		tm.mutex.RLock()
 		defer tm.mutex.RUnlock()
 		if task.IsValid() != nil {
 			tm.Results <- task
 			continue
 		}
+		task.index = idx
+		fmt.Println("Registering task", task.ID, task.Priority)
 		// add a wait group for the task
 		tm.wg.Add(1)
 		// create a context for the task and store it in the task
@@ -171,13 +174,17 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID) (interface{}, error) {
 
 // worker is a goroutine that executes tasks
 func (tm *TaskManager) worker(workerID int) {
-	for {
+	for tm.taskHeap.Len() > 0 {
+		// safety check
 		if tm.taskHeap.Len() == 0 {
 			break
 		}
 		// pop the next task from the heap
-		// newTask := heap.Pop(&tm.taskHeap).(Task)
-		newTask := tm.taskHeap.Pop().(Task)
+		newTask, ok := heap.Pop(&tm.taskHeap).(Task)
+		// safety check
+		if !ok {
+			break
+		}
 
 		// check if the task has been cancelled before starting it and if so, skip it and continue
 		if newTask.Cancelled.Load() > 0 {

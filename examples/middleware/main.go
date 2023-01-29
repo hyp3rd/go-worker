@@ -33,7 +33,7 @@ func main() {
 	// Invalid task, it doesn't have a function
 	task1 := worker.Task{
 		ID:       uuid.New(),
-		Priority: 1,
+		Priority: 10,
 	}
 
 	task2 := worker.Task{

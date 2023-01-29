@@ -49,6 +49,7 @@ type Task struct {
 	Completed    atomic.Int64       `json:"completed"`     // Completed is the time the task completed
 	Cancelled    atomic.Int64       `json:"cancelled"`     // Cancelled is the time the task was cancelled
 	CancelReason CancelReason       `json:"cancel_reason"` // CancelReason is the reason the task was cancelled
+	index        int                `json:"-"`             // The index of the task in the heap.
 }
 
 // IsValid returns an error if the task is invalid
@@ -88,21 +89,47 @@ type taskHeap []Task
 func (h taskHeap) Len() int { return len(h) }
 
 // Less returns true if the priority of the first task is less than the second task
-func (h taskHeap) Less(i, j int) bool { return h[i].Priority < h[j].Priority }
+func (h taskHeap) Less(i, j int) bool {
+	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	return h[i].Priority > h[j].Priority
+}
 
 // Swap swaps the position of two tasks in the heap
-func (h taskHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h taskHeap) Swap(i, j int) {
+	// This is a safety check to make sure we don't panic if the heap is empty
+	if h.Len() <= i || h.Len() <= j || h.Len() <= 0 {
+		return
+	}
+
+	h[i], h[j] = h[j], h[i]
+	h[i].index = i
+	h[j].index = j
+}
 
 // Push adds a new task to the heap
 func (h *taskHeap) Push(x interface{}) {
-	*h = append(*h, x.(Task))
+	n := len(*h)
+	task := x.(Task)
+	task.index = n
+	*h = append(*h, task)
 }
 
 // Pop removes the last task from the heap and returns it
 func (h *taskHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
-	x := old[n-1]
+	if n == 0 {
+		return nil
+	}
+	task := old[n-1]
+	// old[n-1] = nil  // avoid memory leak
+	task.index = -1 // for safety
 	*h = old[0 : n-1]
-	return x
+	return task
 }
+
+// update modifies the priority of `Task` in the queue.
+// func (h *taskHeap) update(task *Task, priority int) {
+// 	task.Priority = priority
+// 	heap.Fix(h, task.index)
+// }

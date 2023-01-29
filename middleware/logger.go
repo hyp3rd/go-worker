@@ -43,6 +43,10 @@ func NewLoggerMiddleware(next worker.Service, logger Logger) worker.Service {
 func (mw *loggerMiddleware) RegisterTask(tasks ...worker.Task) {
 	defer func(begin time.Time) {
 		for _, t := range tasks {
+			if t.Error.Load() != nil {
+				mw.logger.Printf("error while registering task ID %v - %v", t.ID, t.Error.Load())
+				continue
+			}
 			mw.logger.Printf("registering task ID %v with priority: %v", t.ID, t.Priority)
 		}
 		mw.logger.Printf("`RegisterTask` took: %s", time.Since(begin))
@@ -87,14 +91,13 @@ func (mw *loggerMiddleware) GetTasks() []worker.Task {
 // ExecuteTask executes a task given its ID and returns the result
 func (mw *loggerMiddleware) ExecuteTask(id uuid.UUID) (res interface{}, err error) {
 	defer func(begin time.Time) {
+		if err != nil {
+			mw.logger.Printf("error while executing task ID %v - %v", id, err)
+		}
 		mw.logger.Printf("`ExecuteTask` took: %s", time.Since(begin))
 	}(time.Now())
 
 	mw.logger.Printf("executing task ID %v", id)
-
-	// if res, err = mw.next.ExecuteTask(id); err != nil {
-	// 	mw.logger.Printf("error while executing task ID %v - %v", id, err)
-	// }
 
 	return mw.next.ExecuteTask(id)
 }
