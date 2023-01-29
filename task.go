@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -53,8 +52,7 @@ type Task struct {
 }
 
 // IsValid returns an error if the task is invalid
-func (t Task) IsValid() (err error) {
-	fmt.Println("validating task")
+func (t *Task) IsValid() (err error) {
 	if t.ID == uuid.Nil {
 		err = ErrInvalidTaskID
 		t.Error.Store(err.Error())

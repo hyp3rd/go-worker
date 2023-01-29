@@ -36,4 +36,12 @@ func main() {
 	} else {
 		fmt.Println(res)
 	}
+
+	tm.RegisterTask(task)
+	res, err = tm.ExecuteTask(task.ID)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(res)
+	}
 }

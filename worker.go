@@ -16,8 +16,9 @@ type TaskManager struct {
 	Registry sync.Map         // Registry is a map of registered tasks
 	Results  chan interface{} // Results is the channel of results
 	taskHeap taskHeap         // heap of tasks
-	wg       sync.WaitGroup   // wg is a wait group that waits for all tasks to finish
 	limiter  *rate.Limiter    // limiter is a rate limiter that limits the number of tasks that can be executed at once
+	wg       sync.WaitGroup   // wg is a wait group that waits for all tasks to finish
+	mutex    sync.RWMutex     // mutex protects the task handling
 }
 
 // NewTaskManager creates a new task manager
@@ -47,6 +48,8 @@ func NewTaskManager(maxTasks int, tasksPerSecond float64) Service {
 // RegisterTask registers a new task to the task manager
 func (tm *TaskManager) RegisterTask(tasks ...Task) {
 	for _, task := range tasks {
+		tm.mutex.RLock()
+		defer tm.mutex.RUnlock()
 		if task.IsValid() != nil {
 			tm.Results <- task
 			continue
@@ -101,6 +104,8 @@ func (tm *TaskManager) GetResults() <-chan interface{} {
 
 // GetTask gets a task by its ID
 func (tm *TaskManager) GetTask(id uuid.UUID) (task Task, ok bool) {
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
 	t, ok := tm.Registry.Load(id)
 	if !ok {
 		return
@@ -155,7 +160,8 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID) (interface{}, error) {
 		// task not found
 		return nil, ErrTaskNotFound
 	}
-
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
 	// execute the task
 	tm.executeTask(&task)
 	// drain the results channel and return the result
@@ -192,6 +198,8 @@ func (tm *TaskManager) worker(workerID int) {
 
 // executeTask executes a task
 func (tm *TaskManager) executeTask(task *Task) {
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
 	defer tm.wg.Done()
 
 	// reserve a token from the limiter
@@ -232,6 +240,8 @@ func (tm *TaskManager) cancelTask(task *Task, reason CancelReason, notifyWG bool
 	if notifyWG {
 		defer tm.wg.Done()
 	}
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
 	task.Cancel()
 	// set the cancelled time
 	task.setCancelled()
