@@ -132,7 +132,12 @@ func main() {
     task2 := worker.Task{
         ID:       uuid.New(),
         Priority: 5,
-        Fn:       func() interface{} { return "Hello, World from Task 2!" },
+        // You can pass in parameters to the function and return a value using a closure
+        Fn: func() interface{} {
+            return func(a int, b int) interface{} {
+                return a + b
+            }(2, 5)
+        },
     }
 
     task3 := worker.Task{

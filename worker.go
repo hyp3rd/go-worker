@@ -3,6 +3,7 @@ package worker
 import (
 	"container/heap"
 	"context"
+	"runtime"
 	"sync"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 
 // TaskManager is a struct that manages a pool of goroutines that can execute tasks
 type TaskManager struct {
-	Registry sync.Map         // Registry is a map of registerd tasks
+	Registry sync.Map         // Registry is a map of registered tasks
 	Results  chan interface{} // Results is the channel of results
 	taskHeap taskHeap         // heap of tasks
 	wg       sync.WaitGroup   // wg is a wait group that waits for all tasks to finish
@@ -20,12 +21,22 @@ type TaskManager struct {
 }
 
 // NewTaskManager creates a new task manager
-func NewTaskManager(maxTasks int, limit float64) Service {
+//   - `maxTasks` is the maximum number of tasks that can be executed at once, defaults to 1
+//   - `tasksPerSecond` is the rate limit of tasks that can be executed per second, defaults to 1
+func NewTaskManager(maxTasks int, tasksPerSecond float64) Service {
+	if maxTasks <= 0 {
+		maxTasks = 1
+	}
+	// avoid values that would lock the program
+	if tasksPerSecond <= 0 {
+		tasksPerSecond = 1
+	}
+
 	tm := &TaskManager{
 		Registry: sync.Map{},
 		Results:  make(chan interface{}, maxTasks),
 		taskHeap: make(taskHeap, 0, maxTasks),
-		limiter:  rate.NewLimiter(rate.Limit(limit), maxTasks),
+		limiter:  rate.NewLimiter(rate.Limit(tasksPerSecond), maxTasks),
 	}
 	// initialize the heap of tasks
 	heap.Init(&tm.taskHeap)
@@ -36,6 +47,10 @@ func NewTaskManager(maxTasks int, limit float64) Service {
 // RegisterTask registers a new task to the task manager
 func (tm *TaskManager) RegisterTask(tasks ...Task) {
 	for _, task := range tasks {
+		if task.IsValid() != nil {
+			tm.Results <- task
+			continue
+		}
 		// add a wait group for the task
 		tm.wg.Add(1)
 		// create a context for the task and store it in the task
@@ -44,12 +59,17 @@ func (tm *TaskManager) RegisterTask(tasks ...Task) {
 		tm.Registry.Store(task.ID, task)
 		// add the task to the heap
 		heap.Push(&tm.taskHeap, task)
-		// fmt.Println("regsitered task", task.ID)
 	}
 }
 
 // Start starts the task manager and its goroutines
+//   - `numWorkers` is the number of workers to start, if not specified, the number of CPUs will be used
 func (tm *TaskManager) Start(numWorkers int) {
+	// if numWorkers is not specified, use the number of CPUs
+	if numWorkers <= 0 {
+		numWorkers = runtime.NumCPU()
+	}
+
 	// start the workers
 	for i := 0; i < numWorkers; i++ {
 		// add a wait group for the worker
@@ -70,7 +90,7 @@ func (tm *TaskManager) Start(numWorkers int) {
 
 // Stop stops the task manager and its goroutines
 func (tm *TaskManager) Stop() {
-	tm.wg.Wait()
+	// tm.wg.Wait()
 	close(tm.Results)
 }
 
@@ -108,7 +128,7 @@ func (tm *TaskManager) CancelAll() {
 	tm.Registry.Range(func(key, value interface{}) bool {
 		task := value.(Task)
 		// cancel the task
-		tm.cancelTask(&task)
+		tm.cancelTask(&task, Cancelled, true)
 
 		return true
 	})
@@ -124,7 +144,23 @@ func (tm *TaskManager) CancelTask(id uuid.UUID) {
 		return
 	}
 	// cancel the task
-	tm.cancelTask(&task)
+	tm.cancelTask(&task, Cancelled, true)
+}
+
+// ExecuteTask executes a task given its ID and returns the result
+func (tm *TaskManager) ExecuteTask(id uuid.UUID) (interface{}, error) {
+	// get the task
+	task, ok := tm.GetTask(id)
+	if !ok {
+		// task not found
+		return nil, ErrTaskNotFound
+	}
+
+	// execute the task
+	tm.executeTask(&task)
+	// drain the results channel and return the result
+	res := <-tm.Results
+	return res, nil
 }
 
 // worker is a goroutine that executes tasks
@@ -134,7 +170,8 @@ func (tm *TaskManager) worker(workerID int) {
 			break
 		}
 		// pop the next task from the heap
-		newTask := heap.Pop(&tm.taskHeap).(Task)
+		// newTask := heap.Pop(&tm.taskHeap).(Task)
+		newTask := tm.taskHeap.Pop().(Task)
 
 		// check if the task has been cancelled before starting it and if so, skip it and continue
 		if newTask.Cancelled.Load() > 0 {
@@ -143,9 +180,8 @@ func (tm *TaskManager) worker(workerID int) {
 
 		// wait for the task to be ready to execute
 		if err := tm.limiter.Wait(newTask.Ctx); err != nil {
-			newTask.Cancel()
-			newTask.setCancelled()
-			tm.Registry.Store(newTask.ID, &newTask)
+			// the task has been cancelled at this time
+			tm.cancelTask(&newTask, RateLimited, err != context.Canceled)
 			continue
 		}
 
@@ -157,15 +193,16 @@ func (tm *TaskManager) worker(workerID int) {
 // executeTask executes a task
 func (tm *TaskManager) executeTask(task *Task) {
 	defer tm.wg.Done()
+
 	// reserve a token from the limiter
 	r := tm.limiter.ReserveN(time.Now(), 1)
 	if !r.OK() {
 		// not allowed to execute the task yet
 		return
 	}
+
 	// create a timer for the delay
 	t := time.After(r.Delay())
-
 	// wait for the task to be ready
 	select {
 	case <-t:
@@ -191,11 +228,15 @@ func (tm *TaskManager) executeTask(task *Task) {
 }
 
 // cancelTask cancels a task
-func (tm *TaskManager) cancelTask(task *Task) {
-	defer tm.wg.Done()
+func (tm *TaskManager) cancelTask(task *Task, reason CancelReason, notifyWG bool) {
+	if notifyWG {
+		defer tm.wg.Done()
+	}
 	task.Cancel()
 	// set the cancelled time
 	task.setCancelled()
+	// set the cancel reason
+	task.CancelReason = reason
 	// update the task in the registry
 	tm.Registry.Store(task.ID, task)
 }

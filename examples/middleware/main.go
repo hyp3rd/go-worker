@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,21 +11,29 @@ import (
 
 func main() {
 	tm := worker.NewTaskManager(5, 10)
-	// Example of using zap logger from uber
-	logger := log.Default()
 
 	// apply middleware in the same order as you want to execute them
 	tm = worker.RegisterMiddleware(tm,
 		// middleware.YourMiddleware,
 		func(next worker.Service) worker.Service {
-			return middleware.NewLoggerMiddleware(next, logger)
+			return middleware.NewLoggerMiddleware(next, middleware.DefaultLogger())
 		},
 	)
 
 	task := worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Fn:       func() interface{} { return "Hello, World from Task 1!" },
+		Fn: func() interface{} {
+			return func(a int, b int) interface{} {
+				return a + b
+			}(2, 5)
+		},
+	}
+
+	// Invalid task, it doesn't have a function
+	task1 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 1,
 	}
 
 	task2 := worker.Task{
@@ -55,7 +62,7 @@ func main() {
 		},
 	}
 
-	tm.RegisterTask(task, task2, task3, task4)
+	tm.RegisterTask(task, task1, task2, task3, task4)
 	tm.Start(5)
 
 	tm.CancelTask(task3.ID)
