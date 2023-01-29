@@ -3,7 +3,6 @@ package worker
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 	"time"
@@ -55,8 +54,8 @@ func (tm *TaskManager) RegisterTask(tasks ...Task) {
 			tm.Results <- task
 			continue
 		}
+		// assign the index for the task
 		task.index = idx
-		fmt.Println("Registering task", task.ID, task.Priority)
 		// add a wait group for the task
 		tm.wg.Add(1)
 		// create a context for the task and store it in the task
