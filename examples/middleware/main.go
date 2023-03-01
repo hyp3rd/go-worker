@@ -54,7 +54,7 @@ func main() {
 
 	task4 := worker.Task{
 		ID:       uuid.New(),
-		Priority: 15,
+		Priority: 150,
 		Fn: func() interface{} {
 			// Simulate a long running task
 			time.Sleep(5 * time.Second)
@@ -62,7 +62,43 @@ func main() {
 		},
 	}
 
-	tm.RegisterTask(task, task1, task2, task3, task4)
+	task5 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 50,
+		Fn:       func() interface{} { return "Hello, World from Task 5!" },
+	}
+
+	task6 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 5,
+		Fn:       func() interface{} { return "Hello, World from Task 6!" },
+	}
+
+	task7 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 8,
+		Fn:       func() interface{} { return "Hello, World from Task 7!" },
+	}
+
+	task8 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 9,
+		Fn:       func() interface{} { return "Hello, World from Task 8!" },
+	}
+
+	task9 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 105,
+		Fn:       func() interface{} { return "Hello, World from Task 9!" },
+	}
+
+	task10 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 15,
+		Fn:       func() interface{} { return "Hello, World from Task 10!" },
+	}
+
+	tm.RegisterTask(task, task1, task2, task3, task4, task5, task6, task7, task8, task9, task10)
 	tm.Start(5)
 
 	tm.CancelTask(task3.ID)
