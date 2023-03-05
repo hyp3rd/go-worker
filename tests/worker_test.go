@@ -26,8 +26,8 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 
 	tm.RegisterTask(context.Background(), task)
 
-	tk, ok := tm.GetTask(task.ID)
-	if !ok {
+	tk, err := tm.GetTask(task.ID)
+	if err != nil {
 		t.Fatalf("Task was not found in the registry")
 	}
 	if tk.Ctx == nil {
@@ -47,7 +47,7 @@ func TestTaskManager_Start(t *testing.T) {
 	}
 	tm.RegisterTask(context.Background(), task)
 
-	res := <-tm.GetResultsChannel()
+	res := <-tm.GetResults()
 	if res == nil {
 		t.Fatalf("Task result was not added to the results channel")
 	}
@@ -62,7 +62,7 @@ func TestTaskManager_GetResults(t *testing.T) {
 	}
 	tm.RegisterTask(context.Background(), task)
 
-	results := <-tm.GetResultsChannel()
+	results := <-tm.GetResults()
 	if results == nil {
 		t.Fatalf("results channel is nil")
 	}
@@ -76,8 +76,8 @@ func TestTaskManager_GetTask(t *testing.T) {
 		Priority: 10,
 	}
 	tm.RegisterTask(context.Background(), task)
-	tk, ok := tm.GetTask(task.ID)
-	if !ok {
+	tk, err := tm.GetTask(task.ID)
+	if err != nil {
 		t.Fatalf("Task was not found in the registry")
 	}
 

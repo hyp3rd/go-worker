@@ -10,7 +10,7 @@ import (
 // Service is an interface for a task manager
 type Service interface {
 	// RegisterTask registers a new task to the worker
-	RegisterTask(ctx context.Context, task Task)
+	RegisterTask(ctx context.Context, task Task) error
 	// RegisterTasks registers multiple tasks to the worker
 	RegisterTasks(ctx context.Context, tasks ...Task)
 	// StartWorkers starts the task manager's workers
@@ -27,14 +27,12 @@ type Service interface {
 	CancelTask(id uuid.UUID)
 	// GetActiveTasks returns the number of active tasks
 	GetActiveTasks() int
-	// GetResults gets the results channel
-	GetResults() []interface{}
-	// GetResultsChannel retruns the results channel
-	GetResultsChannel() <-chan interface{}
+	// GetResults retruns the results channel
+	GetResults() <-chan interface{}
 	// GetCancelled gets the cancelled tasks channel
 	GetCancelled() <-chan Task
 	// GetTask gets a task by its ID
-	GetTask(id uuid.UUID) (task *Task, ok bool)
+	GetTask(id uuid.UUID) (task *Task, err error)
 	// GetTasks gets all tasks
 	GetTasks() []Task
 	// ExecuteTask executes a task given its ID and returns the result

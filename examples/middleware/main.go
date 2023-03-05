@@ -88,7 +88,7 @@ func main() {
 	// 	fmt.Println(result)
 	// }
 	// // Print results
-	for result := range srv.GetResultsChannel() {
+	for result := range srv.GetResults() {
 		fmt.Println(result)
 	}
 

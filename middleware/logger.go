@@ -41,7 +41,7 @@ func NewLoggerMiddleware(next worker.Service, logger Logger) worker.Service {
 }
 
 // RegisterTask registers a new task to the worker
-func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task worker.Task) {
+func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task worker.Task) error {
 	defer func(begin time.Time) {
 		if task.Error.Load() != nil {
 			mw.logger.Printf("error while registering task ID %v - %v", task.ID, task.Error.Load())
@@ -52,7 +52,7 @@ func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task worker.Task) 
 		mw.logger.Printf("`RegisterTask` took: %s", time.Since(begin))
 	}(time.Now())
 
-	mw.next.RegisterTask(ctx, task)
+	return mw.next.RegisterTask(ctx, task)
 }
 
 // RegisterTasks registers multiple tasks to the worker
@@ -131,14 +131,9 @@ func (mw *loggerMiddleware) GetActiveTasks() int {
 	return mw.next.GetActiveTasks()
 }
 
-// GetResults gets the results channel
-func (mw *loggerMiddleware) GetResults() []interface{} {
+// GetResults returns the results channel
+func (mw *loggerMiddleware) GetResults() <-chan interface{} {
 	return mw.next.GetResults()
-}
-
-// GetResultsChannel returns the results channel
-func (mw *loggerMiddleware) GetResultsChannel() <-chan interface{} {
-	return mw.next.GetResultsChannel()
 }
 
 // GetCancelled streams the cancelled tasks channel
@@ -147,7 +142,7 @@ func (mw *loggerMiddleware) GetCancelled() <-chan worker.Task {
 }
 
 // GetTask gets a task by its ID
-func (mw *loggerMiddleware) GetTask(id uuid.UUID) (task *worker.Task, ok bool) {
+func (mw *loggerMiddleware) GetTask(id uuid.UUID) (task *worker.Task, err error) {
 	return mw.next.GetTask(id)
 }
 

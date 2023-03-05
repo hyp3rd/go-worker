@@ -72,7 +72,7 @@ func main() {
 	// tm.Close()
 
 	// wait for the tasks to finish and print the results
-	for result := range tm.GetResultsChannel() {
+	for result := range tm.GetResults() {
 		fmt.Println(result)
 	}
 
