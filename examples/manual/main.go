@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyp3rd/go-worker"
@@ -10,12 +12,12 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(1, 10)
+	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
 	// Example of using zap logger from uber
 	logger := log.Default()
 
 	// apply middleware in the same order as you want to execute them
-	tm = worker.RegisterMiddleware(tm,
+	srv := worker.RegisterMiddleware(tm,
 		// middleware.YourMiddleware,
 		func(next worker.Service) worker.Service {
 			return middleware.NewLoggerMiddleware(next, logger)
@@ -25,20 +27,18 @@ func main() {
 	task := worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Fn:       func() interface{} { return "Hello, World from Task!" },
+		Fn:       func() (val interface{}, err error) { return "Hello, World from Task!", err },
 	}
 
-	// tm.RegisterTask(task)
-
-	res, err := tm.ExecuteTask(task.ID)
+	res, err := srv.ExecuteTask(task.ID, time.Second*5)
 	if err != nil {
 		fmt.Println(err)
 	} else {
 		fmt.Println(res)
 	}
 
-	tm.RegisterTask(task)
-	res, err = tm.ExecuteTask(task.ID)
+	srv.RegisterTask(context.TODO(), task)
+	res, err = srv.ExecuteTask(task.ID, time.Second*5)
 	if err != nil {
 		fmt.Println(err)
 	} else {

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// Errors returned by the TaskManager
 var (
 	// ErrInvalidTaskID is returned when a task has an invalid ID
 	ErrInvalidTaskID = errors.New("invalid task id")
@@ -16,15 +17,29 @@ var (
 	ErrInvalidTaskFunc = errors.New("invalid task function")
 	// ErrTaskNotFound is returned when a task is not found
 	ErrTaskNotFound = errors.New("task not found")
+	// ErrTaskTimeout is returned when a task times out
+	ErrTaskTimeout = errors.New("task timeout")
+	// ErrTaskCancelled is returned when a task is cancelled
+	ErrTaskCancelled = errors.New("task cancelled")
+	// ErrTaskAlreadyStarted is returned when a task is already started
+	ErrTaskAlreadyStarted = errors.New("task already started")
+	// ErrTaskCompleted is returned when a task is already completed
+	ErrTaskCompleted = errors.New("task completed")
 )
 
-// CancelReason is a value used to represent the cancel reason.
-type CancelReason uint8
+type (
+	// CancelReason is a value used to represent the cancel reason.
+	CancelReason uint8
+
+	// TaskFunc signature of `Task` function
+	TaskFunc func() (interface{}, error)
+)
 
 // CancelReason values
 //   - 1: `ContextDeadlineReached`
 //   - 2: `RateLimited`
 //   - 3: `Cancelled`
+//   - 4: `Failed`
 const (
 	// ContextDeadlineReached means the context is past its deadline.
 	ContextDeadlineReached = CancelReason(1)
@@ -32,98 +47,138 @@ const (
 	RateLimited = CancelReason(2)
 	// Cancelled means `CancelTask` was invked and the `Task` was cancelled.
 	Cancelled = CancelReason(3)
+	// Failed means the `Task` failed.
+	Failed = CancelReason(4)
 )
 
-// TaskFunc signature of `Task` function
-type TaskFunc func() interface{}
+// String returns the string representation of the cancel reason.
+func (cr CancelReason) String() string {
+	switch cr {
+	case Cancelled:
+		return "Cancelled"
+	case RateLimited:
+		return "RateLimited"
+	case ContextDeadlineReached:
+		return "ContextDeadlineReached"
+	case Failed:
+		return "Failed"
+	default:
+		return "Unknown"
+	}
+}
 
 // Task represents a function that can be executed by the task manager
 type Task struct {
 	ID           uuid.UUID          `json:"id"`            // ID is the id of the task
+	Name         string             `json:"name"`          // Name is the name of the task
+	Description  string             `json:"description"`   // Description is the description of the task
 	Priority     int                `json:"priority"`      // Priority is the priority of the task
 	Fn           TaskFunc           `json:"-"`             // Fn is the function that will be executed by the task
 	Ctx          context.Context    `json:"context"`       // Ctx is the context of the task
-	Cancel       context.CancelFunc `json:"-"`             // Cancel is the cancel function of the task
+	CancelFunc   context.CancelFunc `json:"-"`             // CancelFunc is the cancel function of the task
 	Error        atomic.Value       `json:"error"`         // Error is the error of the task
 	Started      atomic.Int64       `json:"started"`       // Started is the time the task started
 	Completed    atomic.Int64       `json:"completed"`     // Completed is the time the task completed
 	Cancelled    atomic.Int64       `json:"cancelled"`     // Cancelled is the time the task was cancelled
 	CancelReason CancelReason       `json:"cancel_reason"` // CancelReason is the reason the task was cancelled
-	index        int                `json:"-"`             // The index of the task in the heap.
+	Retries      int                `json:"retries"`       // Retries is the maximum number of retries for failed tasks
+	RetryDelay   time.Duration      `json:"retry_delay"`   // RetryDelay is the time delay between retries for failed tasks
+	index        int                `json:"-"`             // index is the index of the task in the task manager
 }
 
 // IsValid returns an error if the task is invalid
-func (t *Task) IsValid() (err error) {
-	if t.ID == uuid.Nil {
+func (task *Task) IsValid() (err error) {
+	if task.ID == uuid.Nil {
 		err = ErrInvalidTaskID
-		t.Error.Store(err.Error())
+		task.Error.Store(err.Error())
 		return
 	}
-	if t.Fn == nil {
+	if task.Fn == nil {
 		err = ErrInvalidTaskFunc
-		t.Error.Store(err.Error())
+		task.Error.Store(err.Error())
 		return
 	}
 	return
 }
 
 // setStarted handles the start of a task by setting the start time
-func (t *Task) setStarted() {
-	t.Started.Store(time.Now().UnixNano())
+func (task *Task) setStarted() {
+	task.Started.Store(time.Now().UnixNano())
 }
 
 // setCompleted handles the finish of a task by setting the finish time
-func (t *Task) setCompleted() {
-	t.Completed.Store(time.Now().UnixNano())
+func (task *Task) setCompleted() {
+	task.Completed.Store(time.Now().UnixNano())
 }
 
 // setCancelled handles the cancellation of a task by setting the cancellation time
-func (t *Task) setCancelled() {
-	t.Cancelled.Store(time.Now().UnixNano())
+func (task *Task) setCancelled() {
+	task.Cancelled.Store(time.Now().UnixNano())
 }
 
-// taskHeap is a heap of tasks that can be sorted by priority
-type taskHeap []Task
-
-// Len returns the length of the heap of tasks
-func (h taskHeap) Len() int { return len(h) }
-
-// Less returns true if the priority of the first task is less than the second task
-func (h taskHeap) Less(i, j int) bool {
-	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return h[i].Priority > h[j].Priority
+// setRetryDelay sets the retry delay for the task
+func (task *Task) setRetryDelay(delay time.Duration) {
+	task.RetryDelay = delay
 }
 
-// Swap swaps the position of two tasks in the heap
-func (h taskHeap) Swap(i, j int) {
-	// This is a safety check to make sure we don't panic if the heap is empty
-	if h.Len() <= i || h.Len() <= j || h.Len() <= 0 {
-		return
+// WaitCancelled waits for the task to be cancelled
+func (task *Task) WaitCancelled() {
+	for task.Cancelled.Load() == 0 {
+		// create a timer with a short duration to check if the task has been cancelled
+		timer := time.NewTimer(time.Millisecond * 100)
+		defer timer.Stop()
+		defer timer.Reset(0)
+
+		// wait for either the timer to fire or the task to be cancelled
+		select {
+		case <-timer.C:
+			// timer expired, check if the task has been cancelled
+			continue
+		case <-task.CancelledChan():
+			// task has been cancelled, return
+			return
+		}
+	}
+}
+
+// CancelledChan returns a channel that will be closed when the task is cancelled
+func (task *Task) CancelledChan() <-chan struct{} {
+	if task.Cancelled.Load() > 0 {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
 	}
 
-	h[i], h[j] = h[j], h[i]
-	h[i].index = i
-	h[j].index = j
+	cancelledChan := make(chan struct{})
+	go func() {
+		defer close(cancelledChan)
+		for {
+			if task.Cancelled.Load() > 0 {
+				return
+			}
+			time.Sleep(time.Millisecond * 10)
+		}
+	}()
+	return cancelledChan
 }
 
-// Push adds a new task to the heap
-func (h *taskHeap) Push(x interface{}) {
-	n := len(*h)
-	task := x.(Task)
-	task.index = n
-	*h = append(*h, task)
-}
+// ShouldExecute returns an error if the task should not be executed
+func (task *Task) ShouldExecute() error {
 
-// Pop removes the last task from the heap and returns it
-func (h *taskHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	if n == 0 {
-		return nil
+	// check if the task has been cancelled
+	if task.Cancelled.Load() > 0 {
+		return ErrTaskCancelled
 	}
-	task := old[n-1]
-	// old[n-1] = nil  // avoid memory leak
-	task.index = -1 // for safety
-	*h = old[0 : n-1]
-	return task
+
+	// check if the task has started
+	if task.Started.Load() > 0 {
+		return ErrTaskAlreadyStarted
+	}
+
+	// check if the task has completed
+	if task.Completed.Load() > 0 {
+		return ErrTaskCompleted
+	}
+
+	return nil
 }

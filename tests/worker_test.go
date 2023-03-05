@@ -1,28 +1,30 @@
 package tests
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hyp3rd/go-worker"
 )
 
 func TestTaskManager_NewTaskManager(t *testing.T) {
-	tm := worker.NewTaskManager(10, 10)
+	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
 	if tm == nil {
 		t.Fatalf("Task manager is nil")
 	}
 }
 
 func TestTaskManager_RegisterTask(t *testing.T) {
-	tm := worker.NewTaskManager(10, 10)
+	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() interface{} { return nil },
+		Fn:       func() (val interface{}, err error) { return nil, err },
 		Priority: 10,
 	}
 
-	tm.RegisterTask(task)
+	tm.RegisterTask(context.Background(), task)
 
 	tk, ok := tm.GetTask(task.ID)
 	if !ok {
@@ -31,19 +33,19 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 	if tk.Ctx == nil {
 		t.Fatalf("Task context is nil")
 	}
-	if tk.Cancel == nil {
+	if tk.CancelFunc == nil {
 		t.Fatalf("Task cancel function is nil")
 	}
 }
 
 func TestTaskManager_Start(t *testing.T) {
-	tm := worker.NewTaskManager(10, 10)
+	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() interface{} { return "task" },
+		Fn:       func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
-	tm.RegisterTask(task)
+	tm.RegisterTask(context.Background(), task)
 	tm.Start(2)
 	res := <-tm.GetResults()
 	if res == nil {
@@ -52,13 +54,13 @@ func TestTaskManager_Start(t *testing.T) {
 }
 
 func TestTaskManager_GetResults(t *testing.T) {
-	tm := worker.NewTaskManager(10, 10)
+	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() interface{} { return "task" },
+		Fn:       func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
-	tm.RegisterTask(task)
+	tm.RegisterTask(context.Background(), task)
 	tm.Start(2)
 	results := <-tm.GetResults()
 	if results == nil {
@@ -67,13 +69,13 @@ func TestTaskManager_GetResults(t *testing.T) {
 }
 
 func TestTaskManager_GetTask(t *testing.T) {
-	tm := worker.NewTaskManager(10, 10)
+	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() interface{} { return "task" },
+		Fn:       func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
-	tm.RegisterTask(task)
+	tm.RegisterTask(context.Background(), task)
 	tk, ok := tm.GetTask(task.ID)
 	if !ok {
 		t.Fatalf("Task was not found in the registry")
@@ -85,15 +87,15 @@ func TestTaskManager_GetTask(t *testing.T) {
 }
 
 func TestTaskManager_ExecuteTask(t *testing.T) {
-	tm := worker.NewTaskManager(10, 10)
+	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() interface{} { return "task" },
+		Fn:       func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
-	tm.RegisterTask(task)
+	tm.RegisterTask(context.Background(), task)
 	tm.Start(2)
-	res, err := tm.ExecuteTask(task.ID)
+	res, err := tm.ExecuteTask(task.ID, time.Second*10)
 	if err != nil {
 		t.Fatalf("Task execution failed")
 	}

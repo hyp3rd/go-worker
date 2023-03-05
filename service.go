@@ -1,27 +1,42 @@
 package worker
 
-import "github.com/google/uuid"
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Service is an interface for a task manager
 type Service interface {
 	// RegisterTask registers a new task to the worker
-	RegisterTask(tasks ...Task)
+	RegisterTask(ctx context.Context, task Task)
+	// RegisterTasks registers multiple tasks to the worker
+	RegisterTasks(ctx context.Context, tasks ...Task)
 	// Start the task manager
 	Start(numWorkers int)
-	// Stop the task manage
-	Stop()
-	// GetResults gets the results channel
-	GetResults() <-chan interface{}
-	// GetTask gets a task by its ID
-	GetTask(id uuid.UUID) (task Task, ok bool)
-	// GetTasks gets all tasks
-	GetTasks() []Task
-	// ExecuteTask executes a task given its ID and returns the result
-	ExecuteTask(id uuid.UUID) (interface{}, error)
+	// Wait for all tasks to finish
+	Wait(timeout time.Duration)
+	// Close the task manage
+	Close()
+	// CloseAndWait the task manage to finish all tasks
+	CancelAllAndWait()
 	// CancelAll cancels all tasks
 	CancelAll()
 	// CancelTask cancels a task by its ID
 	CancelTask(id uuid.UUID)
+	// GetActiveTasks returns the number of active tasks
+	GetActiveTasks() int
+	// GetResults gets the results channel
+	GetResults() <-chan interface{}
+	// GetCancelled gets the cancelled tasks channel
+	GetCancelled() <-chan Task
+	// GetTask gets a task by its ID
+	GetTask(id uuid.UUID) (task *Task, ok bool)
+	// GetTasks gets all tasks
+	GetTasks() []Task
+	// ExecuteTask executes a task given its ID and returns the result
+	ExecuteTask(id uuid.UUID, timeout time.Duration) (interface{}, error)
 }
 
 // Middleware describes a `Service` middleware.

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log"
 	"os"
 	"runtime"
@@ -40,7 +41,22 @@ func NewLoggerMiddleware(next worker.Service, logger Logger) worker.Service {
 }
 
 // RegisterTask registers a new task to the worker
-func (mw *loggerMiddleware) RegisterTask(tasks ...worker.Task) {
+func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task worker.Task) {
+	defer func(begin time.Time) {
+		if task.Error.Load() != nil {
+			mw.logger.Printf("error while registering task ID %v - %v", task.ID, task.Error.Load())
+			return
+		}
+		mw.logger.Printf("registering task ID %v with priority: %v", task.ID, task.Priority)
+
+		mw.logger.Printf("`RegisterTask` took: %s", time.Since(begin))
+	}(time.Now())
+
+	mw.next.RegisterTask(ctx, task)
+}
+
+// RegisterTasks registers multiple tasks to the worker
+func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...worker.Task) {
 	defer func(begin time.Time) {
 		for _, t := range tasks {
 			if t.Error.Load() != nil {
@@ -49,10 +65,10 @@ func (mw *loggerMiddleware) RegisterTask(tasks ...worker.Task) {
 			}
 			mw.logger.Printf("registering task ID %v with priority: %v", t.ID, t.Priority)
 		}
-		mw.logger.Printf("`RegisterTask` took: %s", time.Since(begin))
+		mw.logger.Printf("`RegisterTasks` took: %s", time.Since(begin))
 	}(time.Now())
 
-	mw.next.RegisterTask(tasks...)
+	mw.next.RegisterTasks(ctx, tasks...)
 }
 
 // Start the task manager
@@ -68,42 +84,35 @@ func (mw *loggerMiddleware) Start(numWorkers int) {
 	mw.next.Start(numWorkers)
 }
 
-// Stop the task manage
-func (mw *loggerMiddleware) Stop() {
-	mw.next.Stop()
-}
-
-// GetResults gets the results channel
-func (mw *loggerMiddleware) GetResults() <-chan interface{} {
-	return mw.next.GetResults()
-}
-
-// GetTask gets a task by its ID
-func (mw *loggerMiddleware) GetTask(id uuid.UUID) (task worker.Task, ok bool) {
-	return mw.next.GetTask(id)
-}
-
-// GetTasks gets all tasks
-func (mw *loggerMiddleware) GetTasks() []worker.Task {
-	return mw.next.GetTasks()
-}
-
-// ExecuteTask executes a task given its ID and returns the result
-func (mw *loggerMiddleware) ExecuteTask(id uuid.UUID) (res interface{}, err error) {
+// Close the task manage
+func (mw *loggerMiddleware) Close() {
 	defer func(begin time.Time) {
-		if err != nil {
-			mw.logger.Printf("error while executing task ID %v - %v", id, err)
-		}
-		mw.logger.Printf("`ExecuteTask` took: %s", time.Since(begin))
+		mw.logger.Printf("`Close` took: %s", time.Since(begin))
 	}(time.Now())
 
-	mw.logger.Printf("executing task ID %v", id)
+	mw.next.Close()
+}
 
-	return mw.next.ExecuteTask(id)
+// Wait for the task manager to finish all tasks
+func (mw *loggerMiddleware) Wait(timeout time.Duration) {
+	mw.next.Wait(timeout)
+}
+
+// CancelAllAndWait cancels all tasks and waits for them to finish
+func (mw *loggerMiddleware) CancelAllAndWait() {
+	defer func(begin time.Time) {
+		mw.logger.Printf("`CancelAllAndWait` took: %s", time.Since(begin))
+	}(time.Now())
+
+	mw.next.CancelAllAndWait()
 }
 
 // CancelAll cancels all tasks
 func (mw *loggerMiddleware) CancelAll() {
+	defer func(begin time.Time) {
+		mw.logger.Printf("`CancelAll` took: %s", time.Since(begin))
+	}(time.Now())
+
 	mw.next.CancelAll()
 }
 
@@ -116,4 +125,43 @@ func (mw *loggerMiddleware) CancelTask(id uuid.UUID) {
 	mw.logger.Printf("cancelling task ID %v", id)
 
 	mw.next.CancelTask(id)
+}
+
+// GetActiveTasks gets the number of active tasks
+func (mw *loggerMiddleware) GetActiveTasks() int {
+	return mw.next.GetActiveTasks()
+}
+
+// GetResults gets the results channel
+func (mw *loggerMiddleware) GetResults() <-chan interface{} {
+	return mw.next.GetResults()
+}
+
+// GetCancelled streams the cancelled tasks channel
+func (mw *loggerMiddleware) GetCancelled() <-chan worker.Task {
+	return mw.next.GetCancelled()
+}
+
+// GetTask gets a task by its ID
+func (mw *loggerMiddleware) GetTask(id uuid.UUID) (task *worker.Task, ok bool) {
+	return mw.next.GetTask(id)
+}
+
+// GetTasks gets all tasks
+func (mw *loggerMiddleware) GetTasks() []worker.Task {
+	return mw.next.GetTasks()
+}
+
+// ExecuteTask executes a task given its ID and returns the result
+func (mw *loggerMiddleware) ExecuteTask(id uuid.UUID, timeout time.Duration) (res interface{}, err error) {
+	defer func(begin time.Time) {
+		if err != nil {
+			mw.logger.Printf("error while executing task ID %v - %v", id, err)
+		}
+		mw.logger.Printf("`ExecuteTask` took: %s", time.Since(begin))
+	}(time.Now())
+
+	mw.logger.Printf("executing task ID %v", id)
+
+	return mw.next.ExecuteTask(id, timeout)
 }

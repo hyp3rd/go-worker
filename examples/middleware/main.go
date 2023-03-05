@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -10,22 +11,27 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(5, 10)
+	tm := worker.NewTaskManager(1, 1, time.Second*30, time.Second*30, 3)
 
+	defer tm.Close()
+
+	var srv worker.Service = tm
 	// apply middleware in the same order as you want to execute them
-	tm = worker.RegisterMiddleware(tm,
+	srv = worker.RegisterMiddleware(tm,
 		// middleware.YourMiddleware,
 		func(next worker.Service) worker.Service {
 			return middleware.NewLoggerMiddleware(next, middleware.DefaultLogger())
 		},
 	)
 
+	defer srv.Close()
+
 	task := worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Fn: func() interface{} {
-			return func(a int, b int) interface{} {
-				return a + b
+		Fn: func() (val interface{}, err error) {
+			return func(a int, b int) (val interface{}, err error) {
+				return a + b, err
 			}(2, 5)
 		},
 	}
@@ -34,81 +40,59 @@ func main() {
 	task1 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 10,
+		// Fn:       func() (val interface{}, err error) { return "Hello, World from Task 1!", err },
 	}
 
 	task2 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 5,
-		Fn:       func() interface{} { return "Hello, World from Task 2!" },
+		Fn: func() (val interface{}, err error) {
+			time.Sleep(time.Second * 3)
+			return "Hello, World from Task 2!", err
+		},
 	}
 
 	task3 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 90,
-		Fn: func() interface{} {
+		Fn: func() (val interface{}, err error) {
 			// Simulate a long running task
 			time.Sleep(3 * time.Second)
-			return "Hello, World from Task 3!"
+			return "Hello, World from Task 3!", err
 		},
 	}
 
 	task4 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 150,
-		Fn: func() interface{} {
+		Fn: func() (val interface{}, err error) {
 			// Simulate a long running task
 			time.Sleep(5 * time.Second)
-			return "Hello, World from Task 4!"
+			return "Hello, World from Task 4!", err
 		},
 	}
 
-	task5 := worker.Task{
-		ID:       uuid.New(),
-		Priority: 50,
-		Fn:       func() interface{} { return "Hello, World from Task 5!" },
-	}
+	srv.RegisterTasks(context.Background(), task, task1, task2, task3, task4)
+	// srv.RegisterTask(context.Background(), task)
+	// srv.RegisterTask(context.Background(), task1)
+	// srv.RegisterTask(context.Background(), task2)
+	// srv.RegisterTask(context.Background(), task3)
+	// srv.RegisterTask(context.Background(), task4)
 
-	task6 := worker.Task{
-		ID:       uuid.New(),
-		Priority: 5,
-		Fn:       func() interface{} { return "Hello, World from Task 6!" },
-	}
+	srv.CancelTask(task3.ID)
 
-	task7 := worker.Task{
-		ID:       uuid.New(),
-		Priority: 8,
-		Fn:       func() interface{} { return "Hello, World from Task 7!" },
-	}
-
-	task8 := worker.Task{
-		ID:       uuid.New(),
-		Priority: 9,
-		Fn:       func() interface{} { return "Hello, World from Task 8!" },
-	}
-
-	task9 := worker.Task{
-		ID:       uuid.New(),
-		Priority: 105,
-		Fn:       func() interface{} { return "Hello, World from Task 9!" },
-	}
-
-	task10 := worker.Task{
-		ID:       uuid.New(),
-		Priority: 15,
-		Fn:       func() interface{} { return "Hello, World from Task 10!" },
-	}
-
-	tm.RegisterTask(task, task1, task2, task3, task4, task5, task6, task7, task8, task9, task10)
-	tm.Start(5)
-
-	tm.CancelTask(task3.ID)
+	srv.Start(1)
 
 	// Print results
-	for result := range tm.GetResults() {
+	// for result := range srv.GetCancelled() {
+	// 	fmt.Println(result)
+	// }
+	// // Print results
+	for result := range srv.GetResults() {
 		fmt.Println(result)
 	}
 
-	tasks := tm.GetTasks()
+	tasks := srv.GetTasks()
 	for _, task := range tasks {
 		fmt.Println(task)
 	}
