@@ -99,7 +99,7 @@ func NewTaskManager(maxWorkers int, maxTasks int, tasksPerSecond float64, timeou
 	return tm
 }
 
-// Start starts the task manager and its goroutines
+// StartWorkers starts the task manager and its goroutines
 func (tm *TaskManager) StartWorkers() {
 	// start the workers
 	for i := 0; i < tm.MaxWorkers; i++ {
