@@ -37,6 +37,8 @@ type TaskManager struct {
 	Tasks      chan Task        // Tasks is the channel of tasks
 	Cancelled  chan Task        // Cancelled is the channel of cancelled tasks
 	Timeout    time.Duration    // Timeout is the default timeout for tasks
+	MaxWorkers int              // MaxWorkers is the maximum number of workers that can be started
+	MaxTasks   int              // MaxTasks is the maximum number of tasks that can be executed at once
 	RetryDelay time.Duration    // RetryDelay is the delay between retries
 	MaxRetries int              // MaxRetries is the maximum number of retries
 	limiter    *rate.Limiter    // limiter is a rate limiter that limits the number of tasks that can be executed at once
@@ -48,13 +50,15 @@ type TaskManager struct {
 }
 
 // NewTaskManager creates a new task manager
+//   - `maxWorkers` is the number of workers to start, if not specified, the number of CPUs will be used
 //   - `maxTasks` is the maximum number of tasks that can be executed at once, defaults to 10
 //   - `tasksPerSecond` is the rate limit of tasks that can be executed per second, defaults to 1
 //   - `timeout` is the default timeout for tasks, defaults to 5 minute
 //   - `retryDelay` is the default delay between retries, defaults to 1 second
 //   - `maxRetries` is the default maximum number of retries, defaults to 3
-func NewTaskManager(maxTasks int, tasksPerSecond float64, timeout time.Duration, retryDelay time.Duration, maxRetries int) *TaskManager {
+func NewTaskManager(maxWorkers int, maxTasks int, tasksPerSecond float64, timeout time.Duration, retryDelay time.Duration, maxRetries int) *TaskManager {
 	// avoid values that would lock the program
+	maxWorkers = int(math.Max(float64(runtime.NumCPU()), float64(maxWorkers)))
 	maxTasks = int(math.Max(DefaultMaxTasks, float64(maxTasks)))
 	tasksPerSecond = math.Max(DefaultTasksPerSecond, tasksPerSecond)
 	maxRetries = int(math.Max(DefaultMaxRetries, float64(maxRetries)))
@@ -74,6 +78,8 @@ func NewTaskManager(maxTasks int, tasksPerSecond float64, timeout time.Duration,
 		Tasks:      make(chan Task),
 		Cancelled:  cancelled,
 		Timeout:    timeout,
+		MaxWorkers: maxWorkers,
+		MaxTasks:   maxTasks,
 		RetryDelay: retryDelay,
 		MaxRetries: maxRetries,
 		limiter:    rate.NewLimiter(rate.Limit(tasksPerSecond), maxTasks),
@@ -88,25 +94,83 @@ func NewTaskManager(maxTasks int, tasksPerSecond float64, timeout time.Duration,
 	heap.Init(tm.scheduler)
 
 	// start the workers
-	for i := 0; i < maxTasks; i++ {
+	tm.StartWorkers()
+
+	return tm
+}
+
+// Start starts the task manager and its goroutines
+func (tm *TaskManager) StartWorkers() {
+	// start the workers
+	for i := 0; i < tm.MaxWorkers; i++ {
 		// add a wait group for the worker
 		tm.wg.Add(1)
-		// start the worker
 		go func() {
 			defer tm.wg.Done()
 			for {
 				select {
 				case <-tm.quit:
 					return
-				case task := <-tm.Tasks:
-					// wait for the task to be ready to execute
-					if err := tm.limiter.Wait(task.Ctx); err != nil {
-						// the task has been cancelled at this time
-						tm.cancelTask(&task, RateLimited, err != context.Canceled)
+				// case t := <-tm.Tasks:
+				case t := <-tm.Tasks:
+					// safety check
+					if tm.scheduler.Len() == 0 {
+						if t.ShouldExecute() == nil {
+							// add the task back to the scheduler
+							heap.Push(tm.scheduler, t)
+						}
+						break
+					}
+
+					tm.mutex.Lock()
+					// pop the next task from the heap
+					task, ok := heap.Pop(tm.scheduler).(Task)
+					tm.mutex.Unlock()
+					// safety check
+					if !ok {
+						return
+					}
+
+					// check if the task has been cancelled before starting it and if so, skip it and continue
+					select {
+					case <-task.Ctx.Done():
+						tm.cancelTask(&task, Cancelled, false)
+						continue
+					default:
+					}
+
+					// check if the task has been cancelled before starting it and if so, skip it and continue
+					if task.ShouldExecute() != nil {
 						continue
 					}
+
+					// wait for the task to be ready to execute
+					waitCtx, waitCancel := context.WithTimeout(task.Ctx, tm.Timeout)
+					if err := tm.limiter.Wait(waitCtx); err != nil {
+						// the task has been cancelled at this time
+						tm.cancelTask(&task, RateLimited, err != context.Canceled)
+						waitCancel()
+						continue
+					}
+					waitCancel()
+
 					// execute the task
 					tm.executeTask(&task)
+
+					// check if all tasks have been done
+					if tm.limiter.Allow() {
+						select {
+						case <-tm.Tasks:
+							// there is still a task in the queue, continue processing
+							continue
+						default:
+							// all tasks have been done, close the channels
+							tm.Wait(tm.Timeout)
+							return
+
+						}
+					}
+
 				case <-time.After(time.Millisecond * 10):
 					// wait for a short duration to avoid busy waiting
 					// check if the task manager has been closed
@@ -120,8 +184,6 @@ func NewTaskManager(maxTasks int, tasksPerSecond float64, timeout time.Duration,
 			}
 		}()
 	}
-
-	return tm
 }
 
 // RegisterTask registers a new task to the task manager
@@ -198,102 +260,41 @@ func (tm *TaskManager) RegisterTasks(ctx context.Context, tasks ...Task) {
 	}
 }
 
-// Start starts the task manager and its goroutines
-//   - `numWorkers` is the number of workers to start, if not specified, the number of CPUs will be used
-func (tm *TaskManager) Start(numWorkers int) {
-	// if numWorkers is not specified, use the number of CPUs
-	if numWorkers <= 0 {
-		numWorkers = runtime.NumCPU()
-	}
-
-	// start the workers
-	for i := 0; i < numWorkers; i++ {
-		// add a wait group for the worker
-		tm.wg.Add(1)
-		// start the worker
-		go func() {
-			defer tm.wg.Done()
-			for {
-				// wait for a new task to be available
-				t, ok := <-tm.Tasks
-				if !ok {
-					// channel closed
-					return
-				}
-
-				// safety check
-				if tm.scheduler.Len() == 0 {
-					if t.ShouldExecute() == nil {
-						// add the task back to the scheduler
-						heap.Push(tm.scheduler, t)
-					}
-					break
-				}
-
-				// pop the next task from the heap
-				task, ok := heap.Pop(tm.scheduler).(Task)
-				// safety check
-				if !ok {
-					return
-				}
-
-				// check if the task has been cancelled before starting it and if so, skip it and continue
-				if task.ShouldExecute() != nil {
-					continue
-				}
-
-				// wait for the task to be ready to execute
-				if err := tm.limiter.Wait(task.Ctx); err != nil {
-					// the task has been cancelled at this time
-					tm.cancelTask(&task, RateLimited, err != context.Canceled)
-					continue
-				}
-
-				// execute the task
-				tm.executeTask(&task)
-
-				// check if all tasks have been done
-				if tm.limiter.Allow() {
-					select {
-					case <-tm.Tasks:
-						// there is still a task in the queue, continue processing
-						continue
-					default:
-						// all tasks have been done, close the channels
-						tm.Wait(tm.Timeout)
-						return
-
-					}
-				}
-			}
-		}()
-	}
-}
-
-// Wait waits for all tasks to finish
+// Wait waits for all tasks to complete or for the timeout to elapse
 func (tm *TaskManager) Wait(timeout time.Duration) {
-	select {
-	case <-time.After(timeout):
-		// timeout reached, cancel all tasks
-		tm.CancelAll()
-	case <-tm.quit:
-		// task manager has been closed, cancel all tasks
-		tm.CancelAll()
-	default:
-		// close the results and cancelled channels
-		defer close(tm.Results)
-		defer close(tm.ctx.Value(ctxKeyCancelled{}).(chan Task))
-		// wait for all tasks to finish
-		tm.wg.Wait()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-tm.quit:
+			// task manager has been closed, cancel all tasks
+			tm.CancelAll()
+			close(tm.Results)
+			close(tm.ctx.Value(ctxKeyCancelled{}).(chan Task))
+
+		case <-timer.C:
+			// timeout reached, cancel all tasks
+			tm.CancelAll()
+		default:
+			// wait for all tasks to finish
+			// tm.scheduler.Wait()
+			tm.wg.Wait()
+			// close the results and cancelled channels
+			close(tm.Results)
+			close(tm.ctx.Value(ctxKeyCancelled{}).(chan Task))
+		}
 	}
 }
 
 // Close stops the task manager and waits for all tasks to finish
 func (tm *TaskManager) Close() {
+	// close the tasks channel
+	defer close(tm.Tasks)
+	// close the quit channel
+	defer close(tm.quit)
 	// wait for all tasks to finish before closing the task manager
 	tm.Wait(tm.Timeout)
-	// close the quit channel
-	close(tm.quit)
 }
 
 // CancelAllAndWait cancels all tasks and waits for them to finish
@@ -350,7 +351,20 @@ func (tm *TaskManager) GetActiveTasks() int {
 }
 
 // GetResults gets the results channel
-func (tm *TaskManager) GetResults() <-chan interface{} {
+func (tm *TaskManager) GetResults() []interface{} {
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
+
+	var results []interface{}
+
+	for res := range tm.Results {
+		results = append(results, res)
+	}
+	return results
+}
+
+// GetResultsChannel gets the results channel
+func (tm *TaskManager) GetResultsChannel() <-chan interface{} {
 	return tm.Results
 }
 
@@ -381,7 +395,7 @@ func (tm *TaskManager) GetTask(id uuid.UUID) (task *Task, ok bool) {
 
 // GetTasks gets all tasks
 func (tm *TaskManager) GetTasks() []Task {
-	tasks := make([]Task, 0)
+	tasks := make([]Task, 0, tm.MaxTasks)
 	tm.Registry.Range(func(key, value interface{}) bool {
 		task, ok := value.(*Task)
 		if !ok {
@@ -400,6 +414,14 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 	if !ok {
 		// task not found
 		return nil, ErrTaskNotFound
+	}
+
+	// check if the context has been cancelled before checking if the task is already running
+	select {
+	case <-task.Ctx.Done():
+		tm.cancelTask(task, Cancelled, false)
+		return nil, ErrTaskAlreadyStarted
+	default:
 	}
 
 	// if the task is invalid, send it to the results channel
@@ -425,7 +447,7 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 	}
 
 	// create a new context for this task
-	ctx, cancel := context.WithTimeout(context.WithValue(tm.ctx, ctxKeyTaskID{}, task.ID), tm.Timeout)
+	ctx, cancel := context.WithTimeout(context.WithValue(task.Ctx, ctxKeyTaskID{}, task.ID), tm.Timeout)
 	defer cancel()
 
 	// wait for the result to be available and return it
@@ -452,20 +474,15 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 func (tm *TaskManager) executeTask(task *Task) {
 	defer tm.wg.Done()
 
-	t, ok := tm.GetTask(task.ID)
-	if !ok {
-		return
-	}
-
-	// check if the task should run
-	err := t.ShouldExecute()
-	if err != nil {
-		return
-	}
-
 	// Lock the mutex to access the task data
 	tm.mutex.RLock()
 	defer tm.mutex.RUnlock()
+
+	// check if the task can be executed
+	err := task.ShouldExecute()
+	if err != nil {
+		return
+	}
 
 	// check if the context has been cancelled
 	if task.Ctx.Err() != nil {
@@ -501,17 +518,21 @@ func (tm *TaskManager) executeTask(task *Task) {
 				continue
 			}
 		}
+		// create a new context for this task
+		ctx, cancel := context.WithTimeout(context.WithValue(task.Ctx, ctxKeyTaskID{}, task.ID), tm.Timeout)
+		defer cancel()
 
 		select {
 		case <-tm.quit:
 			// the task manager has been closed
 			return
-		case <-task.Ctx.Done():
+		case <-ctx.Done():
 			// the task has been cancelled
 			tm.cancelTask(task, Cancelled, false)
 			return
 		default:
 			task.setStarted()
+
 			// execute the task
 			result, err := task.Fn()
 			if err != nil {
@@ -547,20 +568,20 @@ func (tm *TaskManager) retryTask(task *Task) {
 }
 
 // cancelTask cancels a task
-func (tm *TaskManager) cancelTask(task *Task, reason CancelReason, notifyWG bool) {
+func (tm *TaskManager) cancelTask(task *Task, status TaskStatus, notifyWG bool) {
 	tm.mutex.Lock()
 	defer tm.mutex.Unlock()
 
-	if notifyWG || reason == Cancelled {
+	if notifyWG || status == Cancelled {
 		defer tm.wg.Done()
 	}
 	task.CancelFunc()
 	// set the cancelled time
 	task.setCancelled()
-	// set the cancel reason
-	task.CancelReason = reason
+	// set the task status
+	task.Status = status
 
-	heap.Remove(tm.scheduler, task.index)
+	// heap.Remove(tm.scheduler, task.index)
 
 	// update the task in the registry
 	tm.Registry.Store(task.ID, task)
@@ -579,7 +600,8 @@ func (tm *TaskManager) cancelTask(task *Task, reason CancelReason, notifyWG bool
 	}
 
 	// if the task has retries remaining, add it back to the queue with a delay
-	if task.Retries > 0 && reason != Cancelled {
+	if task.Retries > 0 && status != Cancelled {
+		// task.Status = Queued
 		task.Retries--
 		go func() {
 			time.Sleep(task.RetryDelay)

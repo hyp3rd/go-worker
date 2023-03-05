@@ -28,8 +28,8 @@ var (
 )
 
 type (
-	// CancelReason is a value used to represent the cancel reason.
-	CancelReason uint8
+	// TaskStatus is a value used to represent the task status.
+	TaskStatus uint8
 
 	// TaskFunc signature of `Task` function
 	TaskFunc func() (interface{}, error)
@@ -42,18 +42,22 @@ type (
 //   - 4: `Failed`
 const (
 	// ContextDeadlineReached means the context is past its deadline.
-	ContextDeadlineReached = CancelReason(1)
+	ContextDeadlineReached = TaskStatus(1)
 	// RateLimited means the number of concurrent tasks per second exceeded the maximum allowed.
-	RateLimited = CancelReason(2)
+	RateLimited = TaskStatus(2)
 	// Cancelled means `CancelTask` was invked and the `Task` was cancelled.
-	Cancelled = CancelReason(3)
+	Cancelled = TaskStatus(3)
 	// Failed means the `Task` failed.
-	Failed = CancelReason(4)
+	Failed = TaskStatus(4)
+	// Queued means the `Task` is queued.
+	Queued = TaskStatus(5)
+	// Running means the `Task` is running.
+	Running = TaskStatus(6)
 )
 
-// String returns the string representation of the cancel reason.
-func (cr CancelReason) String() string {
-	switch cr {
+// String returns the string representation of the task status.
+func (ts TaskStatus) String() string {
+	switch ts {
 	case Cancelled:
 		return "Cancelled"
 	case RateLimited:
@@ -62,6 +66,10 @@ func (cr CancelReason) String() string {
 		return "ContextDeadlineReached"
 	case Failed:
 		return "Failed"
+	case Queued:
+		return "Queued"
+	case Running:
+		return "Running"
 	default:
 		return "Unknown"
 	}
@@ -69,21 +77,21 @@ func (cr CancelReason) String() string {
 
 // Task represents a function that can be executed by the task manager
 type Task struct {
-	ID           uuid.UUID          `json:"id"`            // ID is the id of the task
-	Name         string             `json:"name"`          // Name is the name of the task
-	Description  string             `json:"description"`   // Description is the description of the task
-	Priority     int                `json:"priority"`      // Priority is the priority of the task
-	Fn           TaskFunc           `json:"-"`             // Fn is the function that will be executed by the task
-	Ctx          context.Context    `json:"context"`       // Ctx is the context of the task
-	CancelFunc   context.CancelFunc `json:"-"`             // CancelFunc is the cancel function of the task
-	Error        atomic.Value       `json:"error"`         // Error is the error of the task
-	Started      atomic.Int64       `json:"started"`       // Started is the time the task started
-	Completed    atomic.Int64       `json:"completed"`     // Completed is the time the task completed
-	Cancelled    atomic.Int64       `json:"cancelled"`     // Cancelled is the time the task was cancelled
-	CancelReason CancelReason       `json:"cancel_reason"` // CancelReason is the reason the task was cancelled
-	Retries      int                `json:"retries"`       // Retries is the maximum number of retries for failed tasks
-	RetryDelay   time.Duration      `json:"retry_delay"`   // RetryDelay is the time delay between retries for failed tasks
-	index        int                `json:"-"`             // index is the index of the task in the task manager
+	ID          uuid.UUID          `json:"id"`          // ID is the id of the task
+	Name        string             `json:"name"`        // Name is the name of the task
+	Description string             `json:"description"` // Description is the description of the task
+	Priority    int                `json:"priority"`    // Priority is the priority of the task
+	Fn          TaskFunc           `json:"-"`           // Fn is the function that will be executed by the task
+	Ctx         context.Context    `json:"context"`     // Ctx is the context of the task
+	CancelFunc  context.CancelFunc `json:"-"`           // CancelFunc is the cancel function of the task
+	Status      TaskStatus         `json:"task_status"` // TaskStatus is stores the status of the task
+	Error       atomic.Value       `json:"error"`       // Error is the error of the task
+	Started     atomic.Int64       `json:"started"`     // Started is the time the task started
+	Completed   atomic.Int64       `json:"completed"`   // Completed is the time the task completed
+	Cancelled   atomic.Int64       `json:"cancelled"`   // Cancelled is the time the task was cancelled
+	Retries     int                `json:"retries"`     // Retries is the maximum number of retries for failed tasks
+	RetryDelay  time.Duration      `json:"retry_delay"` // RetryDelay is the time delay between retries for failed tasks
+	index       int                `json:"-"`           // index is the index of the task in the task manager
 }
 
 // IsValid returns an error if the task is invalid
@@ -166,7 +174,7 @@ func (task *Task) CancelledChan() <-chan struct{} {
 func (task *Task) ShouldExecute() error {
 
 	// check if the task has been cancelled
-	if task.Cancelled.Load() > 0 {
+	if task.Cancelled.Load() > 0 && task.Status != Cancelled {
 		return ErrTaskCancelled
 	}
 

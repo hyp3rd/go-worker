@@ -10,14 +10,14 @@ import (
 )
 
 func TestTaskManager_NewTaskManager(t *testing.T) {
-	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 	if tm == nil {
 		t.Fatalf("Task manager is nil")
 	}
 }
 
 func TestTaskManager_RegisterTask(t *testing.T) {
-	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
 		Fn:       func() (val interface{}, err error) { return nil, err },
@@ -39,37 +39,37 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 }
 
 func TestTaskManager_Start(t *testing.T) {
-	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
 		Fn:       func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
 	tm.RegisterTask(context.Background(), task)
-	tm.Start(2)
-	res := <-tm.GetResults()
+
+	res := <-tm.GetResultsChannel()
 	if res == nil {
 		t.Fatalf("Task result was not added to the results channel")
 	}
 }
 
 func TestTaskManager_GetResults(t *testing.T) {
-	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
 		Fn:       func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
 	tm.RegisterTask(context.Background(), task)
-	tm.Start(2)
-	results := <-tm.GetResults()
+
+	results := <-tm.GetResultsChannel()
 	if results == nil {
 		t.Fatalf("results channel is nil")
 	}
 }
 
 func TestTaskManager_GetTask(t *testing.T) {
-	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
 		Fn:       func() (val interface{}, err error) { return "task", err },
@@ -87,14 +87,14 @@ func TestTaskManager_GetTask(t *testing.T) {
 }
 
 func TestTaskManager_ExecuteTask(t *testing.T) {
-	tm := worker.NewTaskManager(10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
 		Fn:       func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
 	tm.RegisterTask(context.Background(), task)
-	tm.Start(2)
+
 	res, err := tm.ExecuteTask(task.ID, time.Second*10)
 	if err != nil {
 		t.Fatalf("Task execution failed")

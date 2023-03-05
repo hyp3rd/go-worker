@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(1, 1, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 
 	defer tm.Close()
 
@@ -47,7 +47,7 @@ func main() {
 		ID:       uuid.New(),
 		Priority: 5,
 		Fn: func() (val interface{}, err error) {
-			time.Sleep(time.Second * 3)
+			time.Sleep(time.Second * 2)
 			return "Hello, World from Task 2!", err
 		},
 	}
@@ -57,7 +57,7 @@ func main() {
 		Priority: 90,
 		Fn: func() (val interface{}, err error) {
 			// Simulate a long running task
-			time.Sleep(3 * time.Second)
+			// time.Sleep(3 * time.Second)
 			return "Hello, World from Task 3!", err
 		},
 	}
@@ -67,7 +67,7 @@ func main() {
 		Priority: 150,
 		Fn: func() (val interface{}, err error) {
 			// Simulate a long running task
-			time.Sleep(5 * time.Second)
+			time.Sleep(1 * time.Second)
 			return "Hello, World from Task 4!", err
 		},
 	}
@@ -81,14 +81,14 @@ func main() {
 
 	srv.CancelTask(task3.ID)
 
-	srv.Start(1)
+	// srv.Start(1)
 
 	// Print results
 	// for result := range srv.GetCancelled() {
 	// 	fmt.Println(result)
 	// }
 	// // Print results
-	for result := range srv.GetResults() {
+	for result := range srv.GetResultsChannel() {
 		fmt.Println(result)
 	}
 

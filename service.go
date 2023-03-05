@@ -13,8 +13,8 @@ type Service interface {
 	RegisterTask(ctx context.Context, task Task)
 	// RegisterTasks registers multiple tasks to the worker
 	RegisterTasks(ctx context.Context, tasks ...Task)
-	// Start the task manager
-	Start(numWorkers int)
+	// StartWorkers starts the task manager's workers
+	StartWorkers()
 	// Wait for all tasks to finish
 	Wait(timeout time.Duration)
 	// Close the task manage
@@ -28,7 +28,9 @@ type Service interface {
 	// GetActiveTasks returns the number of active tasks
 	GetActiveTasks() int
 	// GetResults gets the results channel
-	GetResults() <-chan interface{}
+	GetResults() []interface{}
+	// GetResultsChannel retruns the results channel
+	GetResultsChannel() <-chan interface{}
 	// GetCancelled gets the cancelled tasks channel
 	GetCancelled() <-chan Task
 	// GetTask gets a task by its ID

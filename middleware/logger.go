@@ -72,16 +72,15 @@ func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...worker.T
 }
 
 // Start the task manager
-func (mw *loggerMiddleware) Start(numWorkers int) {
+func (mw *loggerMiddleware) StartWorkers() {
 	defer func(begin time.Time) {
 		// var numCPU = runtime.GOMAXPROCS(0)
 		var numCPU = runtime.NumCPU()
 		mw.logger.Printf("the task manager is running on %v CPUs", numCPU)
-		mw.logger.Printf("the task manager started with %v workers", numWorkers)
-		mw.logger.Printf("`Start` took: %s", time.Since(begin))
+		mw.logger.Printf("`StartWorkers` took: %s", time.Since(begin))
 	}(time.Now())
 
-	mw.next.Start(numWorkers)
+	mw.next.StartWorkers()
 }
 
 // Close the task manage
@@ -133,8 +132,13 @@ func (mw *loggerMiddleware) GetActiveTasks() int {
 }
 
 // GetResults gets the results channel
-func (mw *loggerMiddleware) GetResults() <-chan interface{} {
+func (mw *loggerMiddleware) GetResults() []interface{} {
 	return mw.next.GetResults()
+}
+
+// GetResultsChannel returns the results channel
+func (mw *loggerMiddleware) GetResultsChannel() <-chan interface{} {
+	return mw.next.GetResultsChannel()
 }
 
 // GetCancelled streams the cancelled tasks channel
