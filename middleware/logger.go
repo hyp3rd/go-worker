@@ -132,7 +132,7 @@ func (mw *loggerMiddleware) GetActiveTasks() int {
 }
 
 // GetResults returns the results channel
-func (mw *loggerMiddleware) GetResults() <-chan interface{} {
+func (mw *loggerMiddleware) GetResults() <-chan worker.Result {
 	return mw.next.GetResults()
 }
 

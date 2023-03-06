@@ -48,7 +48,7 @@ func TestTaskManager_Start(t *testing.T) {
 	tm.RegisterTask(context.Background(), task)
 
 	res := <-tm.GetResults()
-	if res == nil {
+	if res.Task == nil {
 		t.Fatalf("Task result was not added to the results channel")
 	}
 }
@@ -63,7 +63,7 @@ func TestTaskManager_GetResults(t *testing.T) {
 	tm.RegisterTask(context.Background(), task)
 
 	results := <-tm.GetResults()
-	if results == nil {
+	if results.Task == nil {
 		t.Fatalf("results channel is nil")
 	}
 }

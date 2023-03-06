@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(4, 10, 5, time.Second*3, time.Second*30, 3)
 
 	defer tm.Close()
 
@@ -72,7 +72,7 @@ func main() {
 		},
 	}
 
-	srv.RegisterTasks(context.Background(), task, task1, task2, task3, task4)
+	srv.RegisterTasks(context.Background(), task, task1, task2, task3)
 	// srv.RegisterTask(context.Background(), task)
 	// srv.RegisterTask(context.Background(), task1)
 	// srv.RegisterTask(context.Background(), task2)
@@ -80,6 +80,8 @@ func main() {
 	// srv.RegisterTask(context.Background(), task4)
 
 	srv.CancelTask(task3.ID)
+
+	srv.RegisterTask(context.Background(), task4)
 
 	// srv.Start(1)
 

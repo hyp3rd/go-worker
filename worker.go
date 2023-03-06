@@ -33,21 +33,21 @@ const (
 
 // TaskManager is a struct that manages a pool of goroutines that can execute tasks
 type TaskManager struct {
-	Registry   sync.Map         // Registry is a map of registered tasks
-	Results    chan interface{} // Results is the channel of results
-	Tasks      chan Task        // Tasks is the channel of tasks
-	Cancelled  chan Task        // Cancelled is the channel of cancelled tasks
-	Timeout    time.Duration    // Timeout is the default timeout for tasks
-	MaxWorkers int              // MaxWorkers is the maximum number of workers that can be started
-	MaxTasks   int              // MaxTasks is the maximum number of tasks that can be executed at once
-	RetryDelay time.Duration    // RetryDelay is the delay between retries
-	MaxRetries int              // MaxRetries is the maximum number of retries
-	limiter    *rate.Limiter    // limiter is a rate limiter that limits the number of tasks that can be executed at once
-	wg         sync.WaitGroup   // wg is a wait group that waits for all tasks to finish
-	mutex      sync.RWMutex     // mutex protects the task handling
-	quit       chan struct{}    // quit is a channel to signal all goroutines to stop
-	ctx        context.Context  // ctx is the context for the task manager
-	scheduler  *taskHeap        // scheduler is a heap of tasks that are scheduled to be executed
+	Registry   sync.Map        // Registry is a map of registered tasks
+	Results    chan Result     // Results is the channel of results
+	Tasks      chan Task       // Tasks is the channel of tasks
+	Cancelled  chan Task       // Cancelled is the channel of cancelled tasks
+	Timeout    time.Duration   // Timeout is the default timeout for tasks
+	MaxWorkers int             // MaxWorkers is the maximum number of workers that can be started
+	MaxTasks   int             // MaxTasks is the maximum number of tasks that can be executed at once
+	RetryDelay time.Duration   // RetryDelay is the delay between retries
+	MaxRetries int             // MaxRetries is the maximum number of retries
+	limiter    *rate.Limiter   // limiter is a rate limiter that limits the number of tasks that can be executed at once
+	wg         sync.WaitGroup  // wg is a wait group that waits for all tasks to finish
+	mutex      sync.RWMutex    // mutex protects the task handling
+	quit       chan struct{}   // quit is a channel to signal all goroutines to stop
+	ctx        context.Context // ctx is the context for the task manager
+	scheduler  *taskHeap       // scheduler is a heap of tasks that are scheduled to be executed
 }
 
 // NewTaskManager creates a new task manager
@@ -75,7 +75,7 @@ func NewTaskManager(maxWorkers int, maxTasks int, tasksPerSecond float64, timeou
 
 	tm := &TaskManager{
 		Registry:   sync.Map{},
-		Results:    make(chan interface{}, maxTasks),
+		Results:    make(chan Result, maxTasks),
 		Tasks:      make(chan Task),
 		Cancelled:  cancelled,
 		Timeout:    timeout,
@@ -156,7 +156,7 @@ func (tm *TaskManager) StartWorkers() {
 					waitCancel()
 
 					// execute the task
-					tm.executeTask(&task)
+					tm.ExecuteTask(task.ID, tm.Timeout)
 
 					// check if all tasks have been done
 					if tm.limiter.Allow() {
@@ -362,7 +362,7 @@ func (tm *TaskManager) GetActiveTasks() int {
 }
 
 // GetResults gets the results channel
-func (tm *TaskManager) GetResults() <-chan interface{} {
+func (tm *TaskManager) GetResults() <-chan Result {
 	return tm.Results
 }
 
@@ -408,11 +408,16 @@ func (tm *TaskManager) GetTasks() []Task {
 
 // ExecuteTask executes a task given its ID and returns the result
 func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interface{}, error) {
+	defer tm.wg.Done()
 	// get the task
 	task, err := tm.GetTask(id)
 	if err != nil {
 		return nil, err
 	}
+
+	// Lock the mutex to access the task data
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
 
 	// check if the context has been cancelled before checking if the task is already running
 	select {
@@ -449,107 +454,83 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 	defer cancel()
 
 	// wait for the result to be available and return it
-	select {
-	case res := <-tm.Results:
-		return res, nil
-	case cancelledTask := <-tm.GetCancelled():
-		if cancelledTask.ID == task.ID {
-			// the task was cancelled before it could complete
-			return nil, ErrTaskCancelled
-		}
-	case <-ctx.Done():
-		// the task has timed out
-		tm.CancelTask(task.ID)
-		return nil, ErrTaskTimeout
-	case <-time.After(timeout):
-		return nil, ErrTaskTimeout
-	}
-
-	return nil, ErrTaskTimeout
-}
-
-// executeTask executes a task
-func (tm *TaskManager) executeTask(task *Task) {
-	defer tm.wg.Done()
-
-	// Lock the mutex to access the task data
-	tm.mutex.RLock()
-	defer tm.mutex.RUnlock()
-
-	// check if the task can be executed
-	err := task.ShouldExecute()
-	if err != nil {
-		return
-	}
-
-	// check if the context has been cancelled
-	if task.Ctx.Err() != nil {
-		return
-	}
-
-	select {
-	case <-task.Ctx.Done():
-		// the task has been cancelled
-		tm.cancelTask(task, Cancelled, false)
-		return
-	default:
-		// continue with the task execution
-	}
-
 	for {
-		// reserve a token from the limiter
-		r := tm.limiter.Reserve()
+		select {
+		case res := <-tm.Results:
+			if res.Task.ID == task.ID {
+				return res.Result, nil
+			}
+		case cancelledTask := <-tm.GetCancelled():
+			if cancelledTask.ID == task.ID {
+				// the task was cancelled before it could complete
+				return nil, ErrTaskCancelled
+			}
+		case <-ctx.Done():
+			// the task has timed out
+			tm.CancelTask(task.ID)
+			return nil, ErrTaskTimeout
+		case <-time.After(timeout):
+			return nil, ErrTaskTimeout
+		default:
+			// execute the task
+			// reserve a token from the limiter
+			r := tm.limiter.Reserve()
 
-		if !r.OK() {
-			// not allowed to execute the task yet
-			waitTime := r.Delay()
+			if !r.OK() {
+				// not allowed to execute the task yet
+				waitTime := r.Delay()
+				select {
+				case <-tm.quit:
+					// the task manager has been closed
+					tm.cancelTask(task, Cancelled, false)
+					return nil, ErrTaskCancelled
+				case <-task.Ctx.Done():
+					// the task has been cancelled
+					tm.cancelTask(task, Cancelled, false)
+					return nil, ErrTaskCancelled
+				case <-time.After(waitTime):
+					// continue with the task execution
+					continue
+				}
+			}
+
 			select {
 			case <-tm.quit:
 				// the task manager has been closed
-				return
+				tm.cancelTask(task, Cancelled, false)
+				return nil, ErrTaskCancelled
 			case <-task.Ctx.Done():
 				// the task has been cancelled
 				tm.cancelTask(task, Cancelled, false)
-				return
-			case <-time.After(waitTime):
-				// continue with the task execution
-				continue
-			}
-		}
-		// create a new context for this task
-		ctx, cancel := context.WithTimeout(context.WithValue(task.Ctx, ctxKeyTaskID{}, task.ID), tm.Timeout)
-		defer cancel()
+				return nil, ErrTaskCancelled
+			default:
+				task.setStarted()
 
-		select {
-		case <-tm.quit:
-			// the task manager has been closed
-			return
-		case <-ctx.Done():
-			// the task has been cancelled
-			tm.cancelTask(task, Cancelled, false)
-			return
-		default:
-			task.setStarted()
+				// execute the task
+				result, err := task.Fn()
+				if err != nil {
+					// task failed, retry up to max retries with delay between retries
+					if task.Retries > 0 {
+						task.Retries--
+						tm.retryTask(task)
+						return nil, err
+					}
 
-			// execute the task
-			result, err := task.Fn()
-			if err != nil {
-				// task failed, retry up to max retries with delay between retries
-				if task.Retries > 0 {
-					task.Retries--
-					tm.retryTask(task)
-					continue
+					// task failed, no more retries
+					tm.cancelTask(task, Failed, false)
+					return nil, err
+				}
+				// task completed successfully
+				task.setCompleted()
+				// send the result to the results channel
+				tm.Results <- Result{
+					Task:   task,
+					Result: result,
+					Error:  err,
 				}
 
-				// task failed, no more retries
-				tm.cancelTask(task, Failed, false)
-				return
+				return result, nil
 			}
-			// task completed successfully
-			task.setCompleted()
-			// send the result to the results channel
-			tm.Results <- result
-			return
 		}
 	}
 }
