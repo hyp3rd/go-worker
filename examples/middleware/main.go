@@ -73,23 +73,12 @@ func main() {
 	}
 
 	srv.RegisterTasks(context.Background(), task, task1, task2, task3)
-	// srv.RegisterTask(context.Background(), task)
-	// srv.RegisterTask(context.Background(), task1)
-	// srv.RegisterTask(context.Background(), task2)
-	// srv.RegisterTask(context.Background(), task3)
-	// srv.RegisterTask(context.Background(), task4)
 
 	srv.CancelTask(task3.ID)
 
 	srv.RegisterTask(context.Background(), task4)
 
-	// srv.Start(1)
-
 	// Print results
-	// for result := range srv.GetCancelled() {
-	// 	fmt.Println(result)
-	// }
-	// // Print results
 	for result := range srv.GetResults() {
 		fmt.Println(result)
 	}

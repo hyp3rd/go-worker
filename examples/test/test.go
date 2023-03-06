@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	// create a new task manager with a rate limit of 1 task per second
+	// create a new task manager
 	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
 	// close the task manager
 
@@ -24,10 +24,12 @@ func main() {
 			// create a new task
 			id := uuid.New()
 			task := worker.Task{
-				ID: id,
+				ID:          id,
+				Name:        "Some task",
+				Description: "Here goes the description of the task",
+				Priority:    10,
 				Fn: func() (val interface{}, err error) {
 					emptyFile, error := os.Create(path.Join("examples", "test", "res", fmt.Sprintf("1st__EmptyFile___%v.txt", j)))
-
 					if error != nil {
 						log.Fatal(error)
 					}
@@ -35,6 +37,8 @@ func main() {
 					time.Sleep(time.Second)
 					return fmt.Sprintf("** task number %v with id %s executed", j, id), err
 				},
+				Retries:    10,
+				RetryDelay: 3,
 			}
 
 			// register the task
