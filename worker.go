@@ -407,6 +407,16 @@ func (tm *TaskManager) GetTasks() []Task {
 }
 
 // ExecuteTask executes a task given its ID and returns the result
+//   - It gets the task by ID and locks the mutex to access the task data.
+//   - If the task has already been started, it cancels it and returns an error.
+//   - If the task is invalid, it sends it to the cancelled channel and returns an error.
+//   - If the task is already running, it returns an error.
+//   - It creates a new context for this task and waits for the result to be available and return it.
+//   - It reserves a token from the limiter and waits for the task execution.
+//   - If the token reservation fails, it waits for a delay and tries again.
+//   - It executes the task and sends the result to the results channel.
+//   - If the task execution fails, it retries the task up to max retries with a delay between retries.
+//   - If the task fails with all retries exhausted, it cancels the task and returns an error.
 func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interface{}, error) {
 	defer tm.wg.Done()
 	// get the task
