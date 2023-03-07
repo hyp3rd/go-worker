@@ -170,8 +170,8 @@ func (task *Task) CancelledChan() <-chan struct{} {
 	return cancelledChan
 }
 
-// ShouldExecute returns an error if the task should not be executed
-func (task *Task) ShouldExecute() error {
+// ShouldSchedule returns an error if the task should not be scheduled
+func (task *Task) ShouldSchedule() error {
 
 	// check if the task has been cancelled
 	if task.Cancelled.Load() > 0 && task.Status != Cancelled {

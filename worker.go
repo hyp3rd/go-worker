@@ -22,7 +22,7 @@ const (
 	// DefaultMaxTasks is the default maximum number of tasks that can be executed at once
 	DefaultMaxTasks = 10
 	// DefaultTasksPerSecond is the default rate limit of tasks that can be executed per second
-	DefaultTasksPerSecond = 1
+	DefaultTasksPerSecond = 5
 	// DefaultTimeout is the default timeout for tasks
 	DefaultTimeout = 5
 	// DefaultRetryDelay is the default delay between retries
@@ -48,6 +48,23 @@ type TaskManager struct {
 	quit       chan struct{}   // quit is a channel to signal all goroutines to stop
 	ctx        context.Context // ctx is the context for the task manager
 	scheduler  *taskHeap       // scheduler is a heap of tasks that are scheduled to be executed
+}
+
+// NewTaskManagerWithDefaults creates a new task manager with default values
+//   - `maxWorkers`: `runtime.NumCPU()`
+//   - `maxTasks`: 10
+//   - `tasksPerSecond`: 5
+//   - `timeout`: 5 minute
+//   - `retryDelay`: 1 second
+//   - `maxRetries`: 3
+func NewTaskManagerWithDefaults() *TaskManager {
+	return NewTaskManager(runtime.NumCPU(),
+		DefaultMaxTasks,
+		DefaultTasksPerSecond,
+		DefaultTimeout,
+		DefaultRetryDelay,
+		DefaultMaxRetries,
+	)
 }
 
 // NewTaskManager creates a new task manager
@@ -116,7 +133,7 @@ func (tm *TaskManager) StartWorkers() {
 				case t := <-tm.Tasks:
 					// safety check
 					if tm.scheduler.Len() == 0 {
-						if t.ShouldExecute() == nil {
+						if t.ShouldSchedule() == nil {
 							// add the task back to the scheduler
 							heap.Push(tm.scheduler, t)
 						}
@@ -141,7 +158,7 @@ func (tm *TaskManager) StartWorkers() {
 					}
 
 					// check if the task has been cancelled before starting it and if so, skip it and continue
-					if task.ShouldExecute() != nil {
+					if task.ShouldSchedule() != nil {
 						continue
 					}
 
@@ -454,7 +471,7 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 	}
 
 	// check if the task is already running
-	err = task.ShouldExecute()
+	err = task.ShouldSchedule()
 	if err != nil {
 		return nil, err
 	}

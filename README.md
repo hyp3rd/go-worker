@@ -20,7 +20,7 @@ Each `Task` represents a function scheduled by priority.
 
 Create a new `TaskManager` by calling the `NewTaskManager()` function with the following parameters:
 
-- `maxWorkers` is the number of workers to start. If 0 is specified, it will default to the number of available CPUs 
+- `maxWorkers` is the number of workers to start. If 0 is specified, it will default to the number of available CPUs
 - `maxTasks` is the maximum number of tasks that can be executed at once, defaults to 10
 - `tasksPerSecond` is the rate limit of tasks that can be executed per second, defaults to 1
 - `timeout` is the default timeout for tasks, defaults to 5 minute
