@@ -27,8 +27,10 @@ type Service interface {
 	CancelTask(id uuid.UUID)
 	// GetActiveTasks returns the number of active tasks
 	GetActiveTasks() int
+	// StreamResults streams the `Result` channel
+	StreamResults() <-chan Result
 	// GetResults retruns the `Result` channel
-	GetResults() <-chan Result
+	GetResults() []Result
 	// GetCancelled gets the cancelled tasks channel
 	GetCancelled() <-chan Task
 	// GetTask gets a task by its ID

@@ -44,6 +44,7 @@ type TaskManager struct {
 	MaxRetries int             // MaxRetries is the maximum number of retries
 	limiter    *rate.Limiter   // limiter is a rate limiter that limits the number of tasks that can be executed at once
 	wg         sync.WaitGroup  // wg is a wait group that waits for all tasks to finish
+	running    sync.WaitGroup  // running is a wait group that waits for all running tasks to finish
 	mutex      sync.RWMutex    // mutex protects the task handling
 	quit       chan struct{}   // quit is a channel to signal all goroutines to stop
 	ctx        context.Context // ctx is the context for the task manager
@@ -102,6 +103,7 @@ func NewTaskManager(maxWorkers int, maxTasks int, tasksPerSecond float64, timeou
 		MaxRetries: maxRetries,
 		limiter:    rate.NewLimiter(rate.Limit(tasksPerSecond), maxTasks),
 		wg:         sync.WaitGroup{},
+		running:    sync.WaitGroup{},
 		mutex:      sync.RWMutex{},
 		quit:       make(chan struct{}),
 		ctx:        ctx,
@@ -282,37 +284,23 @@ func (tm *TaskManager) RegisterTasks(ctx context.Context, tasks ...Task) {
 
 // Wait waits for all tasks to complete or for the timeout to elapse
 func (tm *TaskManager) Wait(timeout time.Duration) {
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
+	done := make(chan struct{})
+	go func() {
+		tm.wg.Wait()      // Wait for all tasks to be started
+		tm.running.Wait() // Wait for all running tasks to finish
+		close(done)
+	}()
 
-	// flag to indicate if any tasks have been executed
-	executed := false
-
-	for {
-		select {
-		case <-tm.quit:
-			// task manager has been closed, cancel all tasks
-			tm.CancelAll()
-			close(tm.Results)
-			close(tm.ctx.Value(ctxKeyCancelled{}).(chan Task))
-
-		case <-timer.C:
-			// timeout reached, cancel all tasks
-			tm.CancelAll()
-		default:
-			// check if any tasks have been executed
-			if !executed {
-				// no tasks have been executed, return immediately
-				return
-			}
-			// wait for all tasks to finish
-			// tm.scheduler.Wait()
-			tm.wg.Wait()
-			// close the results and cancelled channels
-			close(tm.Results)
-			close(tm.ctx.Value(ctxKeyCancelled{}).(chan Task))
-		}
+	select {
+	case <-done:
+		// All tasks have finished
+	case <-time.After(timeout):
+		// Timeout reached before all tasks finished
 	}
+
+	// close the results and cancelled channels
+	close(tm.Results)
+	close(tm.ctx.Value(ctxKeyCancelled{}).(chan Task))
 }
 
 // Close stops the task manager and waits for all tasks to finish
@@ -378,9 +366,33 @@ func (tm *TaskManager) GetActiveTasks() int {
 	return int(tm.limiter.Limit()) - tm.limiter.Burst()
 }
 
-// GetResults gets the results channel
-func (tm *TaskManager) GetResults() <-chan Result {
+// StreamResults streams the results channel
+func (tm *TaskManager) StreamResults() <-chan Result {
 	return tm.Results
+}
+
+// GetResults gets the results channel
+func (tm *TaskManager) GetResults() []Result {
+	results := make([]Result, 0)
+
+	// Create a done channel to signal when all tasks have finished
+	done := make(chan struct{})
+
+	// Start a goroutine to read from the Results channel
+	go func() {
+		for result := range tm.Results {
+			results = append(results, result)
+		}
+		close(done)
+	}()
+
+	// Wait for all tasks to finish
+	tm.Wait(tm.Timeout)
+
+	// Wait for the results goroutine to finish
+	<-done
+
+	return results
 }
 
 // GetCancelled gets the cancelled tasks channel
@@ -532,6 +544,9 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 				return nil, ErrTaskCancelled
 			default:
 				task.setStarted()
+				// Increment the running wait group when the task starts
+				tm.running.Add(1)
+				defer tm.running.Done()
 
 				// execute the task
 				result, err := task.Fn()

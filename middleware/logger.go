@@ -131,8 +131,13 @@ func (mw *loggerMiddleware) GetActiveTasks() int {
 	return mw.next.GetActiveTasks()
 }
 
+// StreamResults streams the results channel
+func (mw *loggerMiddleware) StreamResults() <-chan worker.Result {
+	return mw.next.StreamResults()
+}
+
 // GetResults returns the results channel
-func (mw *loggerMiddleware) GetResults() <-chan worker.Result {
+func (mw *loggerMiddleware) GetResults() []worker.Result {
 	return mw.next.GetResults()
 }
 
