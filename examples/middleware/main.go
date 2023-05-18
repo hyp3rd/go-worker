@@ -62,29 +62,29 @@ func main() {
 		},
 	}
 
-	// task4 := worker.Task{
-	// 	ID:       uuid.New(),
-	// 	Priority: 150,
-	// 	Fn: func() (val interface{}, err error) {
-	// 		// Simulate a long running task
-	// 		time.Sleep(1 * time.Second)
-	// 		return "Hello, World from Task 4!", err
-	// 	},
-	// }
+	task4 := worker.Task{
+		ID:       uuid.New(),
+		Priority: 150,
+		Fn: func() (val interface{}, err error) {
+			// Simulate a long running task
+			time.Sleep(1 * time.Second)
+			return "Hello, World from Task 4!", err
+		},
+	}
 
 	srv.RegisterTasks(context.TODO(), task, task1, task2, task3)
 
 	srv.CancelTask(task3.ID)
 
-	// srv.RegisterTask(context.TODO(), task4)
+	srv.RegisterTask(context.TODO(), task4)
 
 	// Print results
 	for result := range srv.GetResults() {
 		fmt.Println(result)
 	}
 
-	// tasks := srv.GetTasks()
-	// for _, task := range tasks {
-	// 	fmt.Println(task)
-	// }
+	tasks := srv.GetTasks()
+	for _, task := range tasks {
+		fmt.Println(task)
+	}
 }
