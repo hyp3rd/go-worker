@@ -83,27 +83,18 @@ func (mw *loggerMiddleware) StartWorkers() {
 	mw.next.StartWorkers()
 }
 
-// Close the task manage
-func (mw *loggerMiddleware) Close() {
+// Stop the task manage
+func (mw *loggerMiddleware) Stop() {
 	defer func(begin time.Time) {
-		mw.logger.Printf("`Close` took: %s", time.Since(begin))
+		mw.logger.Printf("`Stop` took: %s", time.Since(begin))
 	}(time.Now())
 
-	mw.next.Close()
+	mw.next.Stop()
 }
 
 // Wait for the task manager to finish all tasks
 func (mw *loggerMiddleware) Wait(timeout time.Duration) {
 	mw.next.Wait(timeout)
-}
-
-// CancelAllAndWait cancels all tasks and waits for them to finish
-func (mw *loggerMiddleware) CancelAllAndWait() {
-	defer func(begin time.Time) {
-		mw.logger.Printf("`CancelAllAndWait` took: %s", time.Since(begin))
-	}(time.Now())
-
-	mw.next.CancelAllAndWait()
 }
 
 // CancelAll cancels all tasks
