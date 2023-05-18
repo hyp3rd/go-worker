@@ -15,8 +15,6 @@ import (
 func main() {
 	// create a new task manager
 	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
-	// close the task manager
-	// defer tm.Close()
 
 	// register and execute 10 tasks in a separate goroutine
 	go func() {
@@ -72,14 +70,16 @@ func main() {
 			tm.RegisterTask(context.Background(), task)
 		}
 	}()
-	// defer tm.Close()
-	// start the task manager
-	// tm.Start(10)
-	// tm.Close()
+
+	// tm.CancelAll()
 
 	// wait for the tasks to finish and print the results
 	for id, result := range tm.GetResults() {
 		fmt.Println(id, result)
+	}
+
+	for cancelled := range tm.GetCancelled() {
+		fmt.Println(cancelled)
 	}
 
 }

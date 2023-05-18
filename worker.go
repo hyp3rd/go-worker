@@ -44,7 +44,7 @@ type TaskManager struct {
 	MaxRetries int             // MaxRetries is the maximum number of retries
 	limiter    *rate.Limiter   // limiter is a rate limiter that limits the number of tasks that can be executed at once
 	wg         sync.WaitGroup  // wg is a wait group that waits for all tasks to finish
-	running    sync.WaitGroup  // running is a wait group that waits for all running tasks to finish
+	cancel     chan struct{}   // This channel is used to signal all tasks to cancel
 	mutex      sync.RWMutex    // mutex protects the task handling
 	quit       chan struct{}   // quit is a channel to signal all goroutines to stop
 	ctx        context.Context // ctx is the context for the task manager
@@ -103,7 +103,7 @@ func NewTaskManager(maxWorkers int, maxTasks int, tasksPerSecond float64, timeou
 		MaxRetries: maxRetries,
 		limiter:    rate.NewLimiter(rate.Limit(tasksPerSecond), maxTasks),
 		wg:         sync.WaitGroup{},
-		running:    sync.WaitGroup{},
+		cancel:     make(chan struct{}), // Initialize the cancel channel
 		mutex:      sync.RWMutex{},
 		quit:       make(chan struct{}),
 		ctx:        ctx,
@@ -142,12 +142,17 @@ func (tm *TaskManager) StartWorkers() {
 						break
 					}
 
+					var (
+						task Task
+						ok   bool
+					)
+
 					tm.mutex.Lock()
 					// pop the next task from the heap
-					task, ok := heap.Pop(tm.scheduler).(Task)
+					heapTask := heap.Pop(tm.scheduler)
 					tm.mutex.Unlock()
-					// safety check
-					if !ok {
+
+					if task, ok = heapTask.(Task); !ok {
 						return
 					}
 
@@ -186,8 +191,7 @@ func (tm *TaskManager) StartWorkers() {
 						default:
 							// all tasks have been done, close the channels
 							tm.Wait(tm.Timeout)
-							return
-
+							continue
 						}
 					}
 
@@ -197,8 +201,11 @@ func (tm *TaskManager) StartWorkers() {
 					select {
 					case <-tm.quit:
 						return
+					case <-tm.cancel: // Listen for the cancellation signal
+						// When a signal is received, return from the goroutine
+						return
 					default:
-						continue
+						return
 					}
 				}
 			}
@@ -249,25 +256,24 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task Task) error {
 
 	// create a new context for this task
 	task.Ctx, task.CancelFunc = context.WithCancel(context.WithValue(ctx, ctxKeyTaskID{}, task.ID))
-	defer func() {
-		if ctx.Err() != nil {
-			tm.cancelTask(&task, Cancelled, false)
-		}
-	}()
+
+	if ctx.Err() != nil {
+		tm.cancelTask(&task, Cancelled, false)
+		return ctx.Err()
+	}
 	if err := tm.limiter.Wait(ctx); err != nil {
 		// the task has been cancelled at this time
 		tm.cancelTask(&task, RateLimited, err != context.Canceled)
 		return err
 	}
 
-	tm.mutex.Lock()
-	defer tm.mutex.Unlock()
-
 	// store the task in the registry
 	tm.Registry.Store(task.ID, &task)
 
+	tm.mutex.Lock()
 	// add the task to the scheduler
 	heap.Push(tm.scheduler, task)
+	tm.mutex.Unlock()
 
 	// send the task to the NewTasks channel
 	tm.Tasks <- task
@@ -286,8 +292,8 @@ func (tm *TaskManager) RegisterTasks(ctx context.Context, tasks ...Task) {
 func (tm *TaskManager) Wait(timeout time.Duration) {
 	done := make(chan struct{})
 	go func() {
-		tm.wg.Wait()      // Wait for all tasks to be started
-		tm.running.Wait() // Wait for all running tasks to finish
+		tm.wg.Wait() // Wait for all tasks to be started
+		// tm.running.Wait() // Wait for all running tasks to finish
 		close(done)
 	}()
 
@@ -327,8 +333,9 @@ func (tm *TaskManager) CancelAllAndWait() {
 	tm.Registry.Range(func(key, value interface{}) bool {
 		task := value.(Task)
 		tm.mutex.Lock()
-		defer tm.mutex.Unlock()
 		task.WaitCancelled()
+		tm.mutex.Unlock()
+
 		return true
 	})
 
@@ -339,14 +346,27 @@ func (tm *TaskManager) CancelAllAndWait() {
 // CancelAll cancels all tasks
 func (tm *TaskManager) CancelAll() {
 	tm.Registry.Range(func(key, value interface{}) bool {
-		task := value.(Task)
+		task, ok := value.(Task)
+		if !ok {
+			return false
+		}
+
+		if task.Started.Load() == 0 {
+			// task has not been started yet, remove it from the scheduler
+			tm.mutex.Lock()
+			heap.Remove(tm.scheduler, task.index)
+			tm.mutex.Unlock()
+
+			return false
+		}
 		// cancel the task
 		tm.cancelTask(&task, Cancelled, true)
 
 		return true
 	})
-	// wait for all tasks to finish
-	tm.wg.Wait()
+
+	// Notify that cancellation is done
+	close(tm.cancel)
 }
 
 // CancelTask cancels a task by its ID
@@ -388,7 +408,6 @@ func (tm *TaskManager) GetResults() []Result {
 
 	// Wait for all tasks to finish
 	tm.Wait(tm.Timeout)
-
 	// Wait for the results goroutine to finish
 	<-done
 
@@ -545,8 +564,8 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 			default:
 				task.setStarted()
 				// Increment the running wait group when the task starts
-				tm.running.Add(1)
-				defer tm.running.Done()
+				// tm.running.Add(1)
+				// defer tm.running.Done()
 
 				// execute the task
 				result, err := task.Fn()
