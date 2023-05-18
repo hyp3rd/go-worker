@@ -14,7 +14,7 @@ import (
 
 func main() {
 	// create a new task manager
-	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(context.TODO(), 4, 20, 10, time.Second*60, time.Second*1, 5)
 
 	// register and execute 10 tasks in a separate goroutine
 	go func() {
@@ -33,16 +33,16 @@ func main() {
 						log.Fatal(error)
 					}
 					emptyFile.Close()
-					time.Sleep(time.Millisecond * 100)
+					// time.Sleep(time.Millisecond * 100)
 
 					return fmt.Sprintf("** task number %v with id %s executed", j, id), err
 				},
-				Retries:    10,
-				RetryDelay: 3,
+				Retries:    5,
+				RetryDelay: 1,
 			}
 
 			// register the task
-			tm.RegisterTask(context.Background(), task)
+			tm.RegisterTask(context.TODO(), task)
 		}
 	}()
 
@@ -61,13 +61,15 @@ func main() {
 						log.Fatal(error)
 					}
 					emptyFile.Close()
-					time.Sleep(time.Millisecond * 100)
+					// time.Sleep(time.Millisecond * 100)
 					return fmt.Sprintf("**** task number %v with id %s executed", j, id), err
 				},
+				Retries:    5,
+				RetryDelay: 1,
 			}
 
 			// register the task
-			tm.RegisterTask(context.Background(), task)
+			tm.RegisterTask(context.TODO(), task)
 		}
 	}()
 

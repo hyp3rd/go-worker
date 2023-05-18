@@ -11,9 +11,9 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(4, 10, 5, time.Second*3, time.Second*30, 3)
+	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*3, time.Second*30, 3)
 
-	defer tm.Close()
+	// defer tm.Close()
 
 	var srv worker.Service = tm
 	// apply middleware in the same order as you want to execute them
@@ -24,7 +24,7 @@ func main() {
 		},
 	)
 
-	defer srv.Close()
+	// defer srv.Close()
 
 	task := worker.Task{
 		ID:       uuid.New(),
@@ -62,29 +62,29 @@ func main() {
 		},
 	}
 
-	task4 := worker.Task{
-		ID:       uuid.New(),
-		Priority: 150,
-		Fn: func() (val interface{}, err error) {
-			// Simulate a long running task
-			time.Sleep(1 * time.Second)
-			return "Hello, World from Task 4!", err
-		},
-	}
+	// task4 := worker.Task{
+	// 	ID:       uuid.New(),
+	// 	Priority: 150,
+	// 	Fn: func() (val interface{}, err error) {
+	// 		// Simulate a long running task
+	// 		time.Sleep(1 * time.Second)
+	// 		return "Hello, World from Task 4!", err
+	// 	},
+	// }
 
-	srv.RegisterTasks(context.Background(), task, task1, task2, task3)
+	srv.RegisterTasks(context.TODO(), task, task1, task2, task3)
 
 	srv.CancelTask(task3.ID)
 
-	srv.RegisterTask(context.Background(), task4)
+	// srv.RegisterTask(context.TODO(), task4)
 
 	// Print results
 	for result := range srv.GetResults() {
 		fmt.Println(result)
 	}
 
-	tasks := srv.GetTasks()
-	for _, task := range tasks {
-		fmt.Println(task)
-	}
+	// tasks := srv.GetTasks()
+	// for _, task := range tasks {
+	// 	fmt.Println(task)
+	// }
 }

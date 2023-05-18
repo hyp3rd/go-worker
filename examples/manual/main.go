@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	// Example of using zap logger from uber
 	logger := log.Default()
 

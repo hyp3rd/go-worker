@@ -17,10 +17,8 @@ type Service interface {
 	StartWorkers()
 	// Wait for all tasks to finish
 	Wait(timeout time.Duration)
-	// Close the task manage
-	Close()
-	// CloseAndWait the task manage to finish all tasks
-	CancelAllAndWait()
+	// Stop the task manage
+	Stop()
 	// CancelAll cancels all tasks
 	CancelAll()
 	// CancelTask cancels a task by its ID
