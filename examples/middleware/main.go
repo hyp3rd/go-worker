@@ -11,9 +11,9 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*3, time.Second*30, 3)
+	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*3, time.Second*3, 3)
 
-	// defer tm.Close()
+	// defer tm.Stop()
 
 	var srv worker.Service = tm
 	// apply middleware in the same order as you want to execute them
@@ -24,12 +24,12 @@ func main() {
 		},
 	)
 
-	// defer srv.Close()
+	// defer srv.Stop()
 
 	task := worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Fn: func() (val interface{}, err error) {
+		Execute: func() (val interface{}, err error) {
 			return func(a int, b int) (val interface{}, err error) {
 				return a + b, err
 			}(2, 5)
@@ -40,22 +40,23 @@ func main() {
 	task1 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 10,
-		// Fn:       func() (val interface{}, err error) { return "Hello, World from Task 1!", err },
+		// Execute:       func() (val interface{}, err error) { return "Hello, World from Task 1!", err },
 	}
 
 	task2 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 5,
-		Fn: func() (val interface{}, err error) {
+		Execute: func() (val interface{}, err error) {
 			time.Sleep(time.Second * 2)
 			return "Hello, World from Task 2!", err
 		},
+		Ctx: context.TODO(),
 	}
 
 	task3 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 90,
-		Fn: func() (val interface{}, err error) {
+		Execute: func() (val interface{}, err error) {
 			// Simulate a long running task
 			// time.Sleep(3 * time.Second)
 			return "Hello, World from Task 3!", err
@@ -65,7 +66,7 @@ func main() {
 	task4 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 150,
-		Fn: func() (val interface{}, err error) {
+		Execute: func() (val interface{}, err error) {
 			// Simulate a long running task
 			time.Sleep(1 * time.Second)
 			return "Hello, World from Task 4!", err
@@ -79,12 +80,26 @@ func main() {
 	srv.RegisterTask(context.TODO(), task4)
 
 	// Print results
-	for result := range srv.GetResults() {
-		fmt.Println(result)
-	}
+	// for result := range srv.GetResults() {
+	// 	fmt.Println(result)
+	// }
+	// tm.Wait(tm.Timeout)
 
 	tasks := srv.GetTasks()
 	for _, task := range tasks {
-		fmt.Println(task)
+		fmt.Print(task.ID, " ", task.Priority, " ", task.Status, " ", task.Error, " ", "\n")
 	}
+
+	fmt.Println("printing cancelled tasks")
+
+	// get the cancelled tasks
+	cancelledTasks := tm.GetCancelledTasks()
+
+	select {
+	case task := <-cancelledTasks:
+		fmt.Printf("Task %s was cancelled\n", task.ID.String())
+	default:
+		fmt.Println("No tasks have been cancelled yet")
+	}
+
 }

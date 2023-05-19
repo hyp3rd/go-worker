@@ -20,7 +20,7 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() (val interface{}, err error) { return nil, err },
+		Execute:  func() (val interface{}, err error) { return nil, err },
 		Priority: 10,
 	}
 
@@ -42,7 +42,7 @@ func TestTaskManager_Start(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() (val interface{}, err error) { return "task", err },
+		Execute:  func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
 	tm.RegisterTask(context.TODO(), task)
@@ -57,7 +57,7 @@ func TestTaskManager_GetResults(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() (val interface{}, err error) { return "task", err },
+		Execute:  func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
 	tm.RegisterTask(context.TODO(), task)
@@ -72,7 +72,7 @@ func TestTaskManager_GetTask(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() (val interface{}, err error) { return "task", err },
+		Execute:  func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
 	tm.RegisterTask(context.TODO(), task)
@@ -90,7 +90,7 @@ func TestTaskManager_ExecuteTask(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
-		Fn:       func() (val interface{}, err error) { return "task", err },
+		Execute:  func() (val interface{}, err error) { return "task", err },
 		Priority: 10,
 	}
 	tm.RegisterTask(context.TODO(), task)

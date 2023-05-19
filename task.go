@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +16,8 @@ var (
 	ErrInvalidTaskID = errors.New("invalid task id")
 	// ErrInvalidTaskFunc is returned when a task has an invalid function
 	ErrInvalidTaskFunc = errors.New("invalid task function")
+	// ErrInvalidTaskContext is returned when a task has an invalid context
+	ErrInvalidTaskContext = errors.New("invalid task context")
 	// ErrTaskNotFound is returned when a task is not found
 	ErrTaskNotFound = errors.New("task not found")
 	// ErrTaskTimeout is returned when a task times out
@@ -40,6 +43,10 @@ type (
 //   - 2: `RateLimited`
 //   - 3: `Cancelled`
 //   - 4: `Failed`
+//   - 5: `Queued`
+//   - 6: `Running`
+//   - 7: `Invalid`
+//   - 8: `Completed`
 const (
 	// ContextDeadlineReached means the context is past its deadline.
 	ContextDeadlineReached = TaskStatus(1)
@@ -53,6 +60,10 @@ const (
 	Queued = TaskStatus(5)
 	// Running means the `Task` is running.
 	Running = TaskStatus(6)
+	// Invalid means the `Task` is invalid.
+	Invalid = TaskStatus(7)
+	// Completed means the `Task` is completed.
+	Completed = TaskStatus(8)
 )
 
 // String returns the string representation of the task status.
@@ -70,6 +81,8 @@ func (ts TaskStatus) String() string {
 		return "Queued"
 	case Running:
 		return "Running"
+	case Invalid:
+		return "Invalid"
 	default:
 		return "Unknown"
 	}
@@ -81,7 +94,7 @@ type Task struct {
 	Name        string             `json:"name"`        // Name is the name of the task
 	Description string             `json:"description"` // Description is the description of the task
 	Priority    int                `json:"priority"`    // Priority is the priority of the task
-	Fn          TaskFunc           `json:"-"`           // Fn is the function that will be executed by the task
+	Execute     TaskFunc           `json:"-"`           // Execute is the function that will be executed by the task
 	Ctx         context.Context    `json:"context"`     // Ctx is the context of the task
 	CancelFunc  context.CancelFunc `json:"-"`           // CancelFunc is the cancel function of the task
 	Status      TaskStatus         `json:"task_status"` // TaskStatus is stores the status of the task
@@ -94,6 +107,26 @@ type Task struct {
 	index       int                `json:"-"`           // index is the index of the task in the task manager
 }
 
+// NewTask creates a new task with the provided function and context
+func NewTask(fn TaskFunc, ctx context.Context) (*Task, error) {
+	task := &Task{
+		ID:         uuid.New(),
+		Execute:    fn,
+		Ctx:        ctx,
+		Retries:    0,
+		RetryDelay: 0,
+	}
+
+	if err := task.IsValid(); err != nil {
+		// prevent the task from being rescheduled
+		task.Status = Invalid
+		task.setCancelled()
+		return nil, err
+	}
+
+	return task, nil
+}
+
 // IsValid returns an error if the task is invalid
 func (task *Task) IsValid() (err error) {
 	if task.ID == uuid.Nil {
@@ -101,7 +134,12 @@ func (task *Task) IsValid() (err error) {
 		task.Error.Store(err.Error())
 		return
 	}
-	if task.Fn == nil {
+	if task.Ctx == nil {
+		err = ErrInvalidTaskContext
+		task.Error.Store(err.Error())
+		return
+	}
+	if task.Execute == nil {
 		err = ErrInvalidTaskFunc
 		task.Error.Store(err.Error())
 		return
@@ -112,62 +150,39 @@ func (task *Task) IsValid() (err error) {
 // setStarted handles the start of a task by setting the start time
 func (task *Task) setStarted() {
 	task.Started.Store(time.Now().UnixNano())
+	task.Status = Running
 }
 
 // setCompleted handles the finish of a task by setting the finish time
 func (task *Task) setCompleted() {
 	task.Completed.Store(time.Now().UnixNano())
+	task.Status = Completed
 }
 
 // setCancelled handles the cancellation of a task by setting the cancellation time
 func (task *Task) setCancelled() {
 	task.Cancelled.Store(time.Now().UnixNano())
+	task.Status = Cancelled
 }
 
-// setRetryDelay sets the retry delay for the task
-func (task *Task) setRetryDelay(delay time.Duration) {
-	task.RetryDelay = delay
+// setQueued handles the queuing of a task by setting the status to queued
+func (task *Task) setQueued() {
+	task.Status = Queued
 }
 
 // WaitCancelled waits for the task to be cancelled
 func (task *Task) WaitCancelled() {
-	for task.Cancelled.Load() == 0 {
-		// create a timer with a short duration to check if the task has been cancelled
-		timer := time.NewTimer(time.Millisecond * 100)
-		defer timer.Stop()
-		defer timer.Reset(0)
-
-		// wait for either the timer to fire or the task to be cancelled
-		select {
-		case <-timer.C:
-			// timer expired, check if the task has been cancelled
-			continue
-		case <-task.CancelledChan():
-			// task has been cancelled, return
-			return
-		}
+	select {
+	case <-task.Ctx.Done():
+		return
+	case <-time.After(100 * time.Millisecond):
+		task.WaitCancelled()
 	}
 }
 
-// CancelledChan returns a channel that will be closed when the task is cancelled
+// CancelledChan returns a channel which gets closed when the task is cancelled.
 func (task *Task) CancelledChan() <-chan struct{} {
-	if task.Cancelled.Load() > 0 {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-
-	cancelledChan := make(chan struct{})
-	go func() {
-		defer close(cancelledChan)
-		for {
-			if task.Cancelled.Load() > 0 {
-				return
-			}
-			time.Sleep(time.Millisecond * 10)
-		}
-	}()
-	return cancelledChan
+	return task.Ctx.Done()
 }
 
 // ShouldSchedule returns an error if the task should not be scheduled
@@ -175,17 +190,17 @@ func (task *Task) ShouldSchedule() error {
 
 	// check if the task has been cancelled
 	if task.Cancelled.Load() > 0 && task.Status != Cancelled {
-		return ErrTaskCancelled
+		return fmt.Errorf("%w: Task ID %s is already cancelled", ErrTaskCancelled, task.ID)
 	}
 
 	// check if the task has started
 	if task.Started.Load() > 0 {
-		return ErrTaskAlreadyStarted
+		return fmt.Errorf("%w: Task ID %s has already started", ErrTaskAlreadyStarted, task.ID)
 	}
 
 	// check if the task has completed
 	if task.Completed.Load() > 0 {
-		return ErrTaskCompleted
+		return fmt.Errorf("%w: Task ID %s has already completed", ErrTaskCompleted, task.ID)
 	}
 
 	return nil

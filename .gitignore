@@ -118,5 +118,5 @@ $RECYCLE.BIN/
 # Local example
 *.bak
 *.now
-examples/test/res/*.txt
+examples/multi/res/*.txt
 .dccache

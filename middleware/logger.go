@@ -132,9 +132,9 @@ func (mw *loggerMiddleware) GetResults() []worker.Result {
 	return mw.next.GetResults()
 }
 
-// GetCancelled streams the cancelled tasks channel
-func (mw *loggerMiddleware) GetCancelled() <-chan worker.Task {
-	return mw.next.GetCancelled()
+// GetCancelledTasks streams the cancelled tasks channel
+func (mw *loggerMiddleware) GetCancelledTasks() <-chan worker.Task {
+	return mw.next.GetCancelledTasks()
 }
 
 // GetTask gets a task by its ID

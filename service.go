@@ -29,8 +29,8 @@ type Service interface {
 	StreamResults() <-chan Result
 	// GetResults retruns the `Result` channel
 	GetResults() []Result
-	// GetCancelled gets the cancelled tasks channel
-	GetCancelled() <-chan Task
+	// GetCancelledTasks gets the cancelled tasks channel
+	GetCancelledTasks() <-chan Task
 	// GetTask gets a task by its ID
 	GetTask(id uuid.UUID) (task *Task, err error)
 	// GetTasks gets all tasks

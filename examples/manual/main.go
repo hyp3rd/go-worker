@@ -27,7 +27,7 @@ func main() {
 	task := worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Fn:       func() (val interface{}, err error) { return "Hello, World from Task!", err },
+		Execute:  func() (val interface{}, err error) { return "Hello, World from Task!", err },
 	}
 
 	res, err := srv.ExecuteTask(task.ID, time.Second*5)
