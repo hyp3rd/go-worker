@@ -98,6 +98,7 @@ type Task struct {
 	Ctx         context.Context    `json:"context"`     // Ctx is the context of the task
 	CancelFunc  context.CancelFunc `json:"-"`           // CancelFunc is the cancel function of the task
 	Status      TaskStatus         `json:"task_status"` // TaskStatus is stores the status of the task
+	Result      atomic.Value       `json:"result"`      // Result is the result of the task
 	Error       atomic.Value       `json:"error"`       // Error is the error of the task
 	Started     atomic.Int64       `json:"started"`     // Started is the time the task started
 	Completed   atomic.Int64       `json:"completed"`   // Completed is the time the task completed
@@ -168,6 +169,27 @@ func (task *Task) setCancelled() {
 // setQueued handles the queuing of a task by setting the status to queued
 func (task *Task) setQueued() {
 	task.Status = Queued
+}
+
+// setRateLimited handles the rate limiting of a task by setting the status to rate limited
+func (task *Task) setRateLimited() {
+	task.Status = RateLimited
+}
+
+// setFailed handles the failure of a task by setting the status to failed
+func (task *Task) setFailed(err interface{}) {
+	task.Error.Store(err)
+	task.Status = Failed
+}
+
+// setError handles the error of a task by setting the error
+func (task *Task) setError(err error) {
+	task.Error.Store(err.Error())
+}
+
+// setResult handles the result of a task by setting the result
+func (task *Task) setResult(result interface{}) {
+	task.Result.Store(result)
 }
 
 // WaitCancelled waits for the task to be cancelled

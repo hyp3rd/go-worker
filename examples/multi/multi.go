@@ -124,6 +124,6 @@ func main() {
 
 	// wait for the tasks to finish and print the results
 	for id, result := range tm.GetResults() {
-		fmt.Println(id, result)
+		fmt.Println(id, result.String())
 	}
 }

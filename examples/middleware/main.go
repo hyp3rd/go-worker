@@ -58,7 +58,7 @@ func main() {
 		Priority: 90,
 		Execute: func() (val interface{}, err error) {
 			// Simulate a long running task
-			// time.Sleep(3 * time.Second)
+			time.Sleep(3 * time.Second)
 			return "Hello, World from Task 3!", err
 		},
 	}
@@ -74,20 +74,12 @@ func main() {
 	}
 
 	srv.RegisterTasks(context.TODO(), task, task1, task2, task3)
-
 	srv.CancelTask(task3.ID)
-
 	srv.RegisterTask(context.TODO(), task4)
-
-	// Print results
-	// for result := range srv.GetResults() {
-	// 	fmt.Println(result)
-	// }
-	// tm.Wait(tm.Timeout)
 
 	tasks := srv.GetTasks()
 	for _, task := range tasks {
-		fmt.Print(task.ID, " ", task.Priority, " ", task.Status, " ", task.Error, " ", "\n")
+		fmt.Println(task.Result)
 	}
 
 	fmt.Println("printing cancelled tasks")

@@ -250,7 +250,6 @@ func (tm *TaskManager) Wait(timeout time.Duration) {
 	done := make(chan struct{})
 	go func() {
 		tm.wg.Wait() // Wait for all tasks to be started
-		// tm.running.Wait() // Wait for all running tasks to finish
 		close(done)
 	}()
 
@@ -327,6 +326,7 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 
 	// if reservation is not okay, wait and retry
 	if !r.OK() {
+		task.setRateLimited()
 		// not allowed to execute the task yet
 		select {
 		case <-time.After(r.Delay()):
@@ -342,9 +342,11 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (interfa
 	// if reservation is okay, execute the task
 	task.setStarted()
 	result, err := task.Execute()
+	task.setResult(result)
 
 	// if task execution fails, cancel task
 	if err != nil {
+		task.setError(err)
 		tm.cancelTask(task, Failed, false)
 		return nil, err
 	}
@@ -451,7 +453,7 @@ func (tm *TaskManager) cancelTask(task *Task, status TaskStatus, notifyWG bool) 
 		task.Retries--
 		tm.retryTask(task)
 	} else {
-		task.Status = Failed
+		task.setFailed(fmt.Errorf("task ID %v failed after reaching the maximum number of retries %v", task.ID, tm.MaxTasks))
 	}
 }
 
@@ -513,9 +515,6 @@ func (tm *TaskManager) GetResults() []Result {
 
 // GetTask gets a task by its ID
 func (tm *TaskManager) GetTask(id uuid.UUID) (task *Task, err error) {
-	// tm.mutex.RLock()
-	// defer tm.mutex.RUnlock()
-
 	t, ok := tm.Registry.Load(id)
 	if !ok {
 		return nil, fmt.Errorf("task with ID %v not found", id)
@@ -553,6 +552,8 @@ func (tm *TaskManager) validateTask(task *Task) error {
 	if err != nil {
 		cancelled, ok := tm.ctx.Value(ctxKeyCancelled{}).(chan Task)
 		if !ok {
+			task.setCancelled()
+			task.setError(err)
 			return ErrTaskCancelled
 		}
 		select {
