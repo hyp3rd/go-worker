@@ -178,18 +178,24 @@ func (task *Task) setRateLimited() {
 
 // setFailed handles the failure of a task by setting the status to failed
 func (task *Task) setFailed(err interface{}) {
-	task.Error.Store(err)
+	if err != nil {
+		task.Error.Store(err)
+	}
 	task.Status = Failed
 }
 
 // setError handles the error of a task by setting the error
 func (task *Task) setError(err error) {
-	task.Error.Store(err.Error())
+	if err != nil {
+		task.Error.Store(err.Error())
+	}
 }
 
 // setResult handles the result of a task by setting the result
 func (task *Task) setResult(result interface{}) {
-	task.Result.Store(result)
+	if result != nil {
+		task.Result.Store(result)
+	}
 }
 
 // WaitCancelled waits for the task to be cancelled

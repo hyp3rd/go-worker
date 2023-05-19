@@ -1,6 +1,6 @@
 # test runs the Go tests for the current package and the tests package.
 test:
-	go test ./tests
+	go test -v ./tests
 
 # run runs the example specified in the example variable with the optional arguments specified in the ARGS variable.
 run:

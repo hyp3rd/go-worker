@@ -53,7 +53,7 @@ func TestTaskManager_Start(t *testing.T) {
 	}
 }
 
-func TestTaskManager_GetResults(t *testing.T) {
+func TestTaskManager_StreamResults(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := worker.Task{
 		ID:       uuid.New(),
