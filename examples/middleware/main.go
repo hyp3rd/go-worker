@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*3, time.Second*3, 3)
+	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*3, 3)
 
 	// defer tm.Stop()
 
@@ -40,14 +40,15 @@ func main() {
 	task1 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 10,
-		// Execute:       func() (val interface{}, err error) { return "Hello, World from Task 1!", err },
+		Name:     "wrong task",
+		Execute:  func() (val interface{}, err error) { return "Hello, World from Task 1!", err },
 	}
 
 	task2 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 5,
 		Execute: func() (val interface{}, err error) {
-			time.Sleep(time.Second * 2)
+			// time.Sleep(time.Second * 2)
 			return "Hello, World from Task 2!", err
 		},
 		Ctx: context.TODO(),
@@ -58,7 +59,7 @@ func main() {
 		Priority: 90,
 		Execute: func() (val interface{}, err error) {
 			// Simulate a long running task
-			time.Sleep(3 * time.Second)
+			// time.Sleep(3 * time.Second)
 			return "Hello, World from Task 3!", err
 		},
 	}
@@ -66,9 +67,10 @@ func main() {
 	task4 := worker.Task{
 		ID:       uuid.New(),
 		Priority: 150,
+
 		Execute: func() (val interface{}, err error) {
 			// Simulate a long running task
-			time.Sleep(1 * time.Second)
+			// time.Sleep(1 * time.Second)
 			return "Hello, World from Task 4!", err
 		},
 	}
@@ -79,19 +81,27 @@ func main() {
 
 	tasks := srv.GetTasks()
 	for _, task := range tasks {
-		fmt.Println(task.Result)
+		fmt.Println(task)
 	}
 
-	fmt.Println("printing cancelled tasks")
-
 	// get the cancelled tasks
-	cancelledTasks := tm.GetCancelledTasks()
 
-	select {
-	case task := <-cancelledTasks:
-		fmt.Printf("Task %s was cancelled\n", task.ID.String())
-	default:
-		fmt.Println("No tasks have been cancelled yet")
+	for {
+		select {
+		case result, ok := <-srv.StreamResults():
+			if !ok {
+				return
+			}
+			fmt.Println(result.Task.ID.String(), result.Result)
+		case cancelledTasks, ok := <-srv.GetCancelledTasks():
+			if !ok {
+				return
+			}
+			fmt.Println("printing cancelled tasks")
+			fmt.Printf("Task %s was cancelled\n", cancelledTasks.ID.String())
+		default:
+			continue
+		}
 	}
 
 }

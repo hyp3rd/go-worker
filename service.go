@@ -15,8 +15,10 @@ type Service interface {
 	RegisterTasks(ctx context.Context, tasks ...Task)
 	// StartWorkers starts the task manager's workers
 	StartWorkers()
-	// Wait for all tasks to finish
-	Wait(timeout time.Duration)
+	// WaitWithTimeout for all tasks to finish or timeout
+	WaitWithTimeout(timeout time.Duration)
+	// WaitWithTimeout for all tasks to finish
+	Wait()
 	// Stop the task manage
 	Stop()
 	// CancelAll cancels all tasks

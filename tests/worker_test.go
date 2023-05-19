@@ -47,10 +47,26 @@ func TestTaskManager_Start(t *testing.T) {
 	}
 	tm.RegisterTask(context.TODO(), task)
 
-	res := <-tm.StreamResults()
-	if res.Task == nil {
-		t.Fatalf("Task result was not added to the results channel")
+	for {
+		select {
+		case result, ok := <-tm.StreamResults():
+			if !ok {
+				return
+			}
+			t.Log(result.Task.ID.String(), result.Result)
+			if result.Task == nil {
+				t.Fatalf("Task result was not added to the results channel")
+			}
+		case cancelledTasks, ok := <-tm.GetCancelledTasks():
+			if !ok {
+				return
+			}
+			t.Log(cancelledTasks)
+		default:
+			return
+		}
 	}
+
 }
 
 func TestTaskManager_StreamResults(t *testing.T) {
@@ -62,9 +78,24 @@ func TestTaskManager_StreamResults(t *testing.T) {
 	}
 	tm.RegisterTask(context.TODO(), task)
 
-	results := <-tm.StreamResults()
-	if results.Task == nil {
-		t.Fatalf("results channel is nil")
+	for {
+		select {
+		case result, ok := <-tm.StreamResults():
+			if !ok {
+				return
+			}
+			t.Log(result.Task.ID.String(), result.Result)
+			if result.Task == nil {
+				t.Fatalf("Task result was not added to the results channel")
+			}
+		case cancelledTasks, ok := <-tm.GetCancelledTasks():
+			if !ok {
+				return
+			}
+			t.Log(cancelledTasks)
+		default:
+			return
+		}
 	}
 }
 

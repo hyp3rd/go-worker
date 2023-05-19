@@ -14,7 +14,7 @@ import (
 
 func main() {
 	// create a new task manager
-	tm := worker.NewTaskManager(context.TODO(), 1, 50, 10, time.Second*60, time.Second*2, 5)
+	tm := worker.NewTaskManager(context.TODO(), 1, 50, 50, time.Second*60, time.Second*2, 5)
 
 	// register and execute 10 tasks in a separate goroutine
 	go func() {
@@ -63,7 +63,7 @@ func main() {
 					// time.Sleep(time.Millisecond * 100)
 					return fmt.Sprintf("**** task number %v with id %s executed", j, id), err
 				},
-				// Ctx:        context.TODO(),
+				Ctx:        context.TODO(),
 				Retries:    5,
 				RetryDelay: 1,
 			}
@@ -89,6 +89,7 @@ func main() {
 				// time.Sleep(time.Millisecond * 100)
 				return fmt.Sprintf("**** task number %v with id %s executed", j, id), err
 			},
+			Priority:   j,
 			Ctx:        context.TODO(),
 			Retries:    5,
 			RetryDelay: 1,
@@ -122,8 +123,25 @@ func main() {
 		tm.RegisterTask(context.TODO(), task)
 	}
 
+	// for _, result := range tm.GetResults() {
+	// 	fmt.Println(result.Task.ID.String(), result.Result)
+	// }
+
 	// wait for the tasks to finish and print the results
-	for id, result := range tm.GetResults() {
-		fmt.Println(id, result.String())
+	for {
+		select {
+		case result, ok := <-tm.StreamResults():
+			if !ok {
+				return
+			}
+			fmt.Println(result.Task.ID.String(), result.Result)
+		case cancelledTasks, ok := <-tm.GetCancelledTasks():
+			if !ok {
+				return
+			}
+			fmt.Println("printing cancelled tasks")
+			fmt.Printf("Task %s was cancelled\n", cancelledTasks.ID.String())
+		}
 	}
+
 }

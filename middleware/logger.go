@@ -92,9 +92,14 @@ func (mw *loggerMiddleware) Stop() {
 	mw.next.Stop()
 }
 
+// WaitWithTimeout for the task manager to finish all tasks with or trigger the timeout
+func (mw *loggerMiddleware) WaitWithTimeout(timeout time.Duration) {
+	mw.next.WaitWithTimeout(timeout)
+}
+
 // Wait for the task manager to finish all tasks
-func (mw *loggerMiddleware) Wait(timeout time.Duration) {
-	mw.next.Wait(timeout)
+func (mw *loggerMiddleware) Wait() {
+	mw.next.Wait()
 }
 
 // CancelAll cancels all tasks
