@@ -462,7 +462,7 @@ func (tm *TaskManager) cancelTask(task *Task, status TaskStatus, notifyWG bool) 
 //
 // get the cancelled tasks
 // cancelledTasks := tm.GetCancelledTasks()
-
+//
 // select {
 // case task := <-cancelledTasks:
 //

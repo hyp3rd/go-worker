@@ -109,7 +109,7 @@ type Task struct {
 }
 
 // NewTask creates a new task with the provided function and context
-func NewTask(fn TaskFunc, ctx context.Context) (*Task, error) {
+func NewTask(ctx context.Context, fn TaskFunc) (*Task, error) {
 	task := &Task{
 		ID:         uuid.New(),
 		Execute:    fn,
