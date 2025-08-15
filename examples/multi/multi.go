@@ -22,7 +22,7 @@ func main() {
 			j := i
 			// create a new task
 			id := uuid.New()
-			task := worker.Task{
+			task := &worker.Task{
 				ID:          id,
 				Name:        "Some task",
 				Description: "Here goes the description of the task",
@@ -51,7 +51,7 @@ func main() {
 			j := i
 			// create a new task
 			id := uuid.New()
-			task := worker.Task{
+			task := &worker.Task{
 				ID: id,
 				Execute: func() (val interface{}, err error) {
 					emptyFile, error := os.Create(path.Join("examples", "multi", "res", fmt.Sprintf("2nd__EmptyFile___%v.txt", j)))
@@ -77,7 +77,7 @@ func main() {
 		j := i
 		// create a new task
 		id := uuid.New()
-		task := worker.Task{
+		task := &worker.Task{
 			ID: id,
 			Execute: func() (val interface{}, err error) {
 				emptyFile, error := os.Create(path.Join("examples", "multi", "res", fmt.Sprintf("3nd__EmptyFile___%v.txt", j)))
@@ -102,7 +102,7 @@ func main() {
 		j := i
 		// create a new task
 		id := uuid.New()
-		task := worker.Task{
+		task := &worker.Task{
 			ID: id,
 			Execute: func() (val interface{}, err error) {
 				emptyFile, err := os.Create(path.Join("examples", "wrong-path", "res", fmt.Sprintf("4nd__EmptyFile___%v.txt", j)))
