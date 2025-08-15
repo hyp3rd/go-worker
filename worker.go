@@ -162,7 +162,8 @@ func (tm *TaskManager) StartWorkers() {
 			case <-ticker.C:
 				tm.mutex.Lock()
 				if tm.scheduler.Len() > 0 {
-					tm.Tasks <- heap.Pop(tm.scheduler).(Task)
+					t := heap.Pop(tm.scheduler).(*Task)
+					tm.Tasks <- *t
 				}
 				tm.mutex.Unlock()
 			}
@@ -178,11 +179,12 @@ func (tm *TaskManager) StartWorkers() {
 				return
 			case task := <-tm.Cancelled:
 				// re-add the task back to the scheduler if it is still active
-				err := task.ShouldSchedule()
-				if err == nil {
-					tm.mutex.Lock()
-					heap.Push(tm.scheduler, task)
-					tm.mutex.Unlock()
+				if t, err := tm.GetTask(task.ID); err == nil {
+					if err := t.ShouldSchedule(); err == nil {
+						tm.mutex.Lock()
+						heap.Push(tm.scheduler, t)
+						tm.mutex.Unlock()
+					}
 				}
 			}
 		}
@@ -231,7 +233,7 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task Task) error {
 	// add a wait group for the task
 	tm.wg.Add(1)
 	// add the task to the scheduler
-	heap.Push(tm.scheduler, task)
+	heap.Push(tm.scheduler, &task)
 	// send the task to the NewTasks channel
 	tm.Tasks <- task
 	tm.mutex.Unlock()
@@ -379,9 +381,9 @@ func (tm *TaskManager) retryTask(task *Task) {
 // CancelAll cancels all tasks
 func (tm *TaskManager) CancelAll() {
 	tm.Registry.Range(func(key, value interface{}) bool {
-		task, ok := value.(Task)
+		task, ok := value.(*Task)
 		if !ok {
-			return false
+			return true
 		}
 
 		if task.Started.Load() <= 0 {
@@ -390,10 +392,10 @@ func (tm *TaskManager) CancelAll() {
 			heap.Remove(tm.scheduler, task.index)
 			tm.mutex.Unlock()
 
-			return false
+			return true
 		}
 		// cancel the task
-		tm.cancelTask(&task, Cancelled, true)
+		tm.cancelTask(task, Cancelled, true)
 
 		return true
 	})
