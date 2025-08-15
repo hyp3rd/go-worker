@@ -10,11 +10,13 @@ import (
 // Service is an interface for a task manager
 type Service interface {
 	// RegisterTask registers a new task to the worker
-	RegisterTask(ctx context.Context, task Task) error
+	RegisterTask(ctx context.Context, task *Task) error
 	// RegisterTasks registers multiple tasks to the worker
-	RegisterTasks(ctx context.Context, tasks ...Task)
+	RegisterTasks(ctx context.Context, tasks ...*Task)
 	// StartWorkers starts the task manager's workers
 	StartWorkers()
+	// SetMaxWorkers adjusts the worker pool size
+	SetMaxWorkers(n int)
 	// Wait for all tasks to finish
 	Wait(timeout time.Duration)
 	// Stop the task manage
@@ -30,24 +32,22 @@ type Service interface {
 	// GetResults retruns the `Result` channel
 	GetResults() []Result
 	// GetCancelledTasks gets the cancelled tasks channel
-	GetCancelledTasks() <-chan Task
+	GetCancelledTasks() <-chan *Task
 	// GetTask gets a task by its ID
 	GetTask(id uuid.UUID) (task *Task, err error)
 	// GetTasks gets all tasks
-	GetTasks() []Task
+	GetTasks() []*Task
 	// ExecuteTask executes a task given its ID and returns the result
 	ExecuteTask(id uuid.UUID, timeout time.Duration) (interface{}, error)
 }
 
-// Middleware describes a `Service` middleware.
-type Middleware func(Service) Service
+// Middleware describes a generic middleware.
+type Middleware[T any] func(T) T
 
-// RegisterMiddleware registers middlewares to the `Service`.
-func RegisterMiddleware(svc Service, mw ...Middleware) Service {
-	// Register each middleware in the chain
+// RegisterMiddleware registers middlewares to the provided service.
+func RegisterMiddleware[T any](svc T, mw ...Middleware[T]) T {
 	for _, m := range mw {
 		svc = m(svc)
 	}
-	// Return the decorated service
 	return svc
 }

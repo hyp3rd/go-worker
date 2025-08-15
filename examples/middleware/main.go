@@ -17,7 +17,7 @@ func main() {
 
 	var srv worker.Service = tm
 	// apply middleware in the same order as you want to execute them
-	srv = worker.RegisterMiddleware(tm,
+	srv = worker.RegisterMiddleware[worker.Service](srv,
 		// middleware.YourMiddleware,
 		func(next worker.Service) worker.Service {
 			return middleware.NewLoggerMiddleware(next, middleware.DefaultLogger())
@@ -26,7 +26,7 @@ func main() {
 
 	// defer srv.Stop()
 
-	task := worker.Task{
+	task := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
 		Execute: func() (val interface{}, err error) {
@@ -37,13 +37,13 @@ func main() {
 	}
 
 	// Invalid task, it doesn't have a function
-	task1 := worker.Task{
+	task1 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 10,
 		// Execute:       func() (val interface{}, err error) { return "Hello, World from Task 1!", err },
 	}
 
-	task2 := worker.Task{
+	task2 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 5,
 		Execute: func() (val interface{}, err error) {
@@ -53,7 +53,7 @@ func main() {
 		Ctx: context.TODO(),
 	}
 
-	task3 := worker.Task{
+	task3 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 90,
 		Execute: func() (val interface{}, err error) {
@@ -63,7 +63,7 @@ func main() {
 		},
 	}
 
-	task4 := worker.Task{
+	task4 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 150,
 		Execute: func() (val interface{}, err error) {
