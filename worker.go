@@ -174,6 +174,7 @@ func (tm *TaskManager) StartWorkers() {
 					t, _ := tm.scheduler.Pop()
 					tm.Tasks <- t
 				}
+        
 				tm.mutex.Unlock()
 			}
 		}
@@ -192,6 +193,7 @@ func (tm *TaskManager) StartWorkers() {
 					if err := t.ShouldSchedule(); err == nil {
 						tm.mutex.Lock()
 						tm.scheduler.Push(t)
+
 						tm.mutex.Unlock()
 					}
 				}
@@ -271,6 +273,7 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task *Task) error {
 	// add the task to the scheduler
 	tm.scheduler.Push(task)
 	// send the task to the Tasks channel
+
 	tm.Tasks <- task
 	tm.mutex.Unlock()
 	tm.metrics.scheduled.Add(1)
