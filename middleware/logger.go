@@ -41,7 +41,7 @@ func NewLoggerMiddleware(next worker.Service, logger Logger) worker.Service {
 }
 
 // RegisterTask registers a new task to the worker
-func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task worker.Task) error {
+func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task *worker.Task) error {
 	defer func(begin time.Time) {
 		if task.Error.Load() != nil {
 			mw.logger.Printf("error while registering task ID %v - %v", task.ID, task.Error.Load())
@@ -56,7 +56,7 @@ func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task worker.Task) 
 }
 
 // RegisterTasks registers multiple tasks to the worker
-func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...worker.Task) {
+func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...*worker.Task) {
 	defer func(begin time.Time) {
 		for _, t := range tasks {
 			if t.Error.Load() != nil {
@@ -81,6 +81,11 @@ func (mw *loggerMiddleware) StartWorkers() {
 	}(time.Now())
 
 	mw.next.StartWorkers()
+}
+
+// SetMaxWorkers adjusts the worker pool size
+func (mw *loggerMiddleware) SetMaxWorkers(n int) {
+	mw.next.SetMaxWorkers(n)
 }
 
 // Stop the task manage
@@ -133,7 +138,7 @@ func (mw *loggerMiddleware) GetResults() []worker.Result {
 }
 
 // GetCancelledTasks streams the cancelled tasks channel
-func (mw *loggerMiddleware) GetCancelledTasks() <-chan worker.Task {
+func (mw *loggerMiddleware) GetCancelledTasks() <-chan *worker.Task {
 	return mw.next.GetCancelledTasks()
 }
 
@@ -143,7 +148,7 @@ func (mw *loggerMiddleware) GetTask(id uuid.UUID) (task *worker.Task, err error)
 }
 
 // GetTasks gets all tasks
-func (mw *loggerMiddleware) GetTasks() []worker.Task {
+func (mw *loggerMiddleware) GetTasks() []*worker.Task {
 	return mw.next.GetTasks()
 }
 

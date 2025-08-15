@@ -17,14 +17,14 @@ func main() {
 	logger := log.Default()
 
 	// apply middleware in the same order as you want to execute them
-	srv := worker.RegisterMiddleware(tm,
-		// middleware.YourMiddleware,
-		func(next worker.Service) worker.Service {
-			return middleware.NewLoggerMiddleware(next, logger)
-		},
-	)
+        srv := worker.RegisterMiddleware[worker.Service](tm,
+                // middleware.YourMiddleware,
+                func(next worker.Service) worker.Service {
+                        return middleware.NewLoggerMiddleware(next, logger)
+                },
+        )
 
-	task := worker.Task{
+	task := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
 		Execute:  func() (val interface{}, err error) { return "Hello, World from Task!", err },

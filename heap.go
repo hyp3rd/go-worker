@@ -1,253 +1,108 @@
 package worker
 
-import "sync"
-
-// // taskHeap is a heap of tasks that implements the heap interface
-// type taskHeap struct {
-// 	tasks       []Task
-// 	numActive   int
-// 	mutex       sync.Mutex
-// 	waitersLock sync.Mutex
-// 	waiters     []*sync.Cond
-// }
-
-// func newTaskHeap() *taskHeap {
-// 	th := &taskHeap{
-// 		tasks:     make([]Task, 0),
-// 		numActive: 0,
-// 	}
-// 	th.waitersLock = sync.Mutex{}
-// 	th.mutex = sync.Mutex{}
-// 	th.waiters = make([]*sync.Cond, 0)
-// 	return th
-// }
-
-// // Len returns the number of tasks in the heap
-// func (th *taskHeap) Len() int {
-// 	th.mutex.Lock()
-// 	defer th.mutex.Unlock()
-
-// 	return len(th.tasks)
-// }
-
-// // Less returns whether the task with index i should sort before the task with index j in the heap
-// func (th *taskHeap) Less(i, j int) bool {
-// 	th.mutex.Lock()
-// 	defer th.mutex.Unlock()
-
-// 	// sort by priority first
-// 	if th.tasks[i].Priority != th.tasks[j].Priority {
-// 		return th.tasks[i].Priority < th.tasks[j].Priority
-// 	}
-
-// 	// if priorities are the same, sort by ID
-// 	return th.tasks[i].ID.String() < th.tasks[j].ID.String()
-// }
-
-// // Swap swaps the tasks with indexes i and j in the heap
-// func (th *taskHeap) Swap(i, j int) {
-// 	th.mutex.Lock()
-// 	defer th.mutex.Unlock()
-
-// 	th.tasks[i], th.tasks[j] = th.tasks[j], th.tasks[i]
-// 	th.tasks[i].index = i
-// 	th.tasks[j].index = j
-// }
-
-// // Push adds a task to the heap
-// func (th *taskHeap) Push(x interface{}) {
-// 	task := x.(Task)
-
-// 	// Lock the mutex to access the tasks slice
-// 	th.mutex.Lock()
-// 	defer th.mutex.Unlock()
-
-// 	// Add the task to the tasks slice
-// 	th.tasks = append(th.tasks, task)
-
-// 	// If there are no waiters, there's nothing else to do
-// 	if len(th.waiters) == 0 {
-// 		return
-// 	}
-
-// 	// Wake up the first waiter
-// 	waiter := th.waiters[0]
-// 	th.waiters = th.waiters[1:]
-// 	waiter.Signal()
-// }
-
-// // Pop removes and returns the highest priority task from the heap
-// func (th *taskHeap) Pop() interface{} {
-// 	th.mutex.Lock()
-// 	defer th.mutex.Unlock()
-
-// 	if len(th.tasks) == 0 {
-// 		return nil
-// 	}
-
-// 	// swap the first and last elements
-// 	n := len(th.tasks)
-// 	task := th.tasks[0]
-// 	th.tasks[0], th.tasks[n-1] = th.tasks[n-1], th.tasks[0]
-// 	th.tasks = th.tasks[:n-1]
-
-// 	// notify waiting goroutines that a new task is available
-// 	th.notifyWaiters()
-
-// 	return task
-// }
-
-// // notifyWaiters notifies waiting goroutines that a new task is available
-// func (th *taskHeap) notifyWaiters() {
-// 	th.waitersLock.Lock()
-// 	defer th.waitersLock.Unlock()
-
-// 	for _, waiter := range th.waiters {
-// 		waiter.Signal()
-// 	}
-// 	th.waiters = []*sync.Cond{}
-// }
-
-// // Wait waits for the task heap to be non-empty and returns a channel that signals when a task is added to the heap.
-// func (th *taskHeap) Wait() *sync.Cond {
-// 	// create a new condition variable for the waiters
-// 	waiter := sync.NewCond(&th.waitersLock)
-
-// 	// add the condition variable to the list of waiters
-// 	th.waitersLock.Lock()
-// 	th.waiters = append(th.waiters, waiter)
-// 	th.waitersLock.Unlock()
-
-// 	return waiter
-// }
-
-// // Unlock releases the lock.
-// func (th *taskHeap) Unlock() {
-// 	th.mutex.Unlock()
-// }
-
-// // Lock acquires the lock.
-// func (th *taskHeap) Lock() {
-// 	th.mutex.Lock()
-// }
-
-// taskHeap is a heap of tasks that implements the heap interface
-type taskHeap struct {
-	tasks       []Task
-	mutex       sync.Mutex
-	waitersLock sync.RWMutex
-	waiters     []*sync.Cond
+// priorityQueue is a min-heap ordered by the provided less function.
+// It is not safe for concurrent use; callers should synchronize access.
+type priorityQueue[T any] struct {
+	items    []T
+	less     func(a, b T) bool
+	setIndex func(T, int)
 }
 
-func newTaskHeap() *taskHeap {
-	return &taskHeap{
-		tasks: make([]Task, 0),
+func newPriorityQueue[T any](less func(a, b T) bool, setIndex func(T, int)) *priorityQueue[T] {
+	return &priorityQueue[T]{items: []T{}, less: less, setIndex: setIndex}
+}
+
+func (pq priorityQueue[T]) Len() int { return len(pq.items) }
+
+func (pq *priorityQueue[T]) Push(x T) {
+	pq.items = append(pq.items, x)
+	pq.setIndex(x, pq.Len()-1)
+	pq.up(pq.Len() - 1)
+}
+
+func (pq *priorityQueue[T]) Pop() (T, bool) {
+	var zero T
+	n := pq.Len()
+	if n == 0 {
+		return zero, false
+	}
+	pq.swap(0, n-1)
+	item := pq.items[n-1]
+	pq.items = pq.items[:n-1]
+	pq.down(0)
+	pq.setIndex(item, -1)
+	return item, true
+}
+
+func (pq *priorityQueue[T]) Remove(i int) (T, bool) {
+	var zero T
+	n := pq.Len() - 1
+	if i < 0 || i > n {
+		return zero, false
+	}
+	if i != n {
+		pq.swap(i, n)
+	}
+	item := pq.items[n]
+	pq.items = pq.items[:n]
+	if i != n {
+		pq.down(i)
+		pq.up(i)
+	}
+	pq.setIndex(item, -1)
+	return item, true
+}
+
+func (pq *priorityQueue[T]) swap(i, j int) {
+	pq.items[i], pq.items[j] = pq.items[j], pq.items[i]
+	pq.setIndex(pq.items[i], i)
+	pq.setIndex(pq.items[j], j)
+}
+
+func (pq *priorityQueue[T]) lessIndex(i, j int) bool {
+	return pq.less(pq.items[i], pq.items[j])
+}
+
+func (pq *priorityQueue[T]) up(j int) {
+	for {
+		i := (j - 1) / 2
+		if i == j || !pq.lessIndex(j, i) {
+			break
+		}
+		pq.swap(i, j)
+		j = i
 	}
 }
 
-// Len returns the number of tasks in the heap
-func (th *taskHeap) Len() int {
-	th.mutex.Lock()
-	defer th.mutex.Unlock()
-
-	return len(th.tasks)
-}
-
-// Less returns whether the task with index i should sort before the task with index j in the heap
-func (th *taskHeap) Less(i, j int) bool {
-	th.mutex.Lock()
-	defer th.mutex.Unlock()
-
-	// sort by priority first
-	if th.tasks[i].Priority != th.tasks[j].Priority {
-		return th.tasks[i].Priority < th.tasks[j].Priority
-	}
-
-	// if priorities are the same, sort by ID
-	return th.tasks[i].ID.String() < th.tasks[j].ID.String()
-}
-
-// Swap swaps the tasks with indexes i and j in the heap
-func (th *taskHeap) Swap(i, j int) {
-	th.mutex.Lock()
-	defer th.mutex.Unlock()
-
-	th.tasks[i], th.tasks[j] = th.tasks[j], th.tasks[i]
-	th.tasks[i].index = i
-	th.tasks[j].index = j
-}
-
-// Push adds a task to the heap
-func (th *taskHeap) Push(x interface{}) {
-	task := x.(Task)
-
-	// Lock the mutex to access the tasks slice
-	th.mutex.Lock()
-	defer th.mutex.Unlock()
-
-	// Add the task to the tasks slice
-	th.tasks = append(th.tasks, task)
-
-	// Wake up the first waiter
-	if len(th.waiters) > 0 {
-		waiter := th.waiters[0]
-		th.waiters = th.waiters[1:]
-		waiter.Signal()
+func (pq *priorityQueue[T]) down(i0 int) {
+	n := pq.Len()
+	i := i0
+	for {
+		l := 2*i + 1
+		if l >= n {
+			break
+		}
+		j := l
+		r := l + 1
+		if r < n && pq.lessIndex(r, l) {
+			j = r
+		}
+		if !pq.lessIndex(j, i) {
+			break
+		}
+		pq.swap(i, j)
+		i = j
 	}
 }
 
-// Pop removes and returns the highest priority task from the heap
-func (th *taskHeap) Pop() interface{} {
-	th.mutex.Lock()
-	defer th.mutex.Unlock()
-
-	if len(th.tasks) == 0 {
-		return nil
-	}
-
-	// swap the first and last elements
-	n := len(th.tasks)
-	task := th.tasks[0]
-	th.tasks[0], th.tasks[n-1] = th.tasks[n-1], th.tasks[0]
-	th.tasks = th.tasks[:n-1]
-
-	// notify waiting goroutines that a new task is available
-	th.notifyWaiters()
-
-	return task
-}
-
-// notifyWaiters notifies waiting goroutines that a new task is available
-func (th *taskHeap) notifyWaiters() {
-	th.waitersLock.Lock()
-	waiters := th.waiters
-	th.waiters = nil
-	th.waitersLock.Unlock()
-
-	for _, waiter := range waiters {
-		waiter.Signal()
-	}
-}
-
-// Wait waits for the task heap to be non-empty and returns a channel that signals when a task is added to the heap.
-func (th *taskHeap) Wait() *sync.Cond {
-	// create a new condition variable for the waiters
-	waiter := sync.NewCond(&th.waitersLock)
-
-	// add the condition variable to the list of waiters
-	th.waitersLock.Lock()
-	th.waiters = append(th.waiters, waiter)
-	th.waitersLock.Unlock()
-
-	return waiter
-}
-
-// Unlock releases the lock.
-func (th *taskHeap) Unlock() {
-	th.mutex.Unlock()
-}
-
-// Lock acquires the lock.
-func (th *taskHeap) Lock() {
-	th.mutex.Lock()
+// newTaskHeap returns a priority queue for *Task items ordered by priority.
+func newTaskHeap() *priorityQueue[*Task] {
+	return newPriorityQueue[*Task](func(a, b *Task) bool {
+		if a.Priority != b.Priority {
+			return a.Priority < b.Priority
+		}
+		return a.ID.String() < b.ID.String()
+	}, func(t *Task, i int) {
+		t.index = i
+	})
 }
