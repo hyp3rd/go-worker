@@ -7,11 +7,12 @@
 package workerpb
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -504,18 +505,20 @@ func file_worker_v1_worker_proto_rawDescGZIP() []byte {
 	return file_worker_v1_worker_proto_rawDescData
 }
 
-var file_worker_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
-var file_worker_v1_worker_proto_goTypes = []any{
-	(*Task)(nil),                  // 0: worker.v1.Task
-	(*RegisterTasksRequest)(nil),  // 1: worker.v1.RegisterTasksRequest
-	(*RegisterTasksResponse)(nil), // 2: worker.v1.RegisterTasksResponse
-	(*StreamResultsRequest)(nil),  // 3: worker.v1.StreamResultsRequest
-	(*StreamResultsResponse)(nil), // 4: worker.v1.StreamResultsResponse
-	(*CancelTaskRequest)(nil),     // 5: worker.v1.CancelTaskRequest
-	(*CancelTaskResponse)(nil),    // 6: worker.v1.CancelTaskResponse
-	(*GetTaskRequest)(nil),        // 7: worker.v1.GetTaskRequest
-	(*GetTaskResponse)(nil),       // 8: worker.v1.GetTaskResponse
-}
+var (
+	file_worker_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+	file_worker_v1_worker_proto_goTypes  = []any{
+		(*Task)(nil),                  // 0: worker.v1.Task
+		(*RegisterTasksRequest)(nil),  // 1: worker.v1.RegisterTasksRequest
+		(*RegisterTasksResponse)(nil), // 2: worker.v1.RegisterTasksResponse
+		(*StreamResultsRequest)(nil),  // 3: worker.v1.StreamResultsRequest
+		(*StreamResultsResponse)(nil), // 4: worker.v1.StreamResultsResponse
+		(*CancelTaskRequest)(nil),     // 5: worker.v1.CancelTaskRequest
+		(*CancelTaskResponse)(nil),    // 6: worker.v1.CancelTaskResponse
+		(*GetTaskRequest)(nil),        // 7: worker.v1.GetTaskRequest
+		(*GetTaskResponse)(nil),       // 8: worker.v1.GetTaskResponse
+	}
+)
 var file_worker_v1_worker_proto_depIdxs = []int32{
 	0, // 0: worker.v1.RegisterTasksRequest.tasks:type_name -> worker.v1.Task
 	1, // 1: worker.v1.WorkerService.RegisterTasks:input_type -> worker.v1.RegisterTasksRequest

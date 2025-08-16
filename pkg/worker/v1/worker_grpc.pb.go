@@ -8,6 +8,7 @@ package workerpb
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -106,18 +107,20 @@ type WorkerServiceServer interface {
 }
 
 // UnimplementedWorkerServiceServer should be embedded to have forward compatible implementations.
-type UnimplementedWorkerServiceServer struct {
-}
+type UnimplementedWorkerServiceServer struct{}
 
 func (UnimplementedWorkerServiceServer) RegisterTasks(context.Context, *RegisterTasksRequest) (*RegisterTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterTasks not implemented")
 }
+
 func (UnimplementedWorkerServiceServer) StreamResults(*StreamResultsRequest, WorkerService_StreamResultsServer) error {
 	return status.Errorf(codes.Unimplemented, "method StreamResults not implemented")
 }
+
 func (UnimplementedWorkerServiceServer) CancelTask(context.Context, *CancelTaskRequest) (*CancelTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelTask not implemented")
 }
+
 func (UnimplementedWorkerServiceServer) GetTask(context.Context, *GetTaskRequest) (*GetTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTask not implemented")
 }

@@ -17,9 +17,12 @@ words:
   - ireturn
   - Newf
   - nolint
+  - protogen
+  - protoimpl
   - stdlib
   - stdlib's
   - strconv
+  - workerpb
   - workerv
   - Wrapf
 ignoreWords: []
