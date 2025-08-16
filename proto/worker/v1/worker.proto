@@ -25,7 +25,27 @@ message StreamResultsResponse {
   string error = 3;
 }
 
+message CancelTaskRequest {
+  string id = 1;
+}
+
+message CancelTaskResponse {}
+
+message GetTaskRequest {
+  string id = 1;
+}
+
+message GetTaskResponse {
+  string id = 1;
+  string name = 2;
+  string status = 3;
+  string output = 4;
+  string error = 5;
+}
+
 service WorkerService {
   rpc RegisterTasks(RegisterTasksRequest) returns (RegisterTasksResponse);
   rpc StreamResults(StreamResultsRequest) returns (stream StreamResultsResponse);
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
 }

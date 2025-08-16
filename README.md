@@ -26,6 +26,37 @@ flowchart LR
     WorkerN --> Results
 ```
 
+## gRPC Service
+
+`go-worker` exposes its functionality over gRPC through the `WorkerService`.
+The service allows clients to register tasks, stream results, cancel running
+tasks and query their status.
+
+### Example
+
+```go
+tm := worker.NewTaskManagerWithDefaults(context.Background())
+srv := worker.NewGRPCServer(tm)
+
+gs := grpc.NewServer()
+workerpb.RegisterWorkerServiceServer(gs, srv)
+// listen and serve ...
+
+client := workerpb.NewWorkerServiceClient(conn)
+
+// register a task
+_, _ = client.RegisterTasks(ctx, &workerpb.RegisterTasksRequest{
+    Tasks: []*workerpb.Task{{Name: "demo", Payload: "hello"}},
+})
+
+// cancel by id
+_, _ = client.CancelTask(ctx, &workerpb.CancelTaskRequest{Id: "<task-id>"})
+
+// get task information
+res, _ := client.GetTask(ctx, &workerpb.GetTaskRequest{Id: "<task-id>"})
+fmt.Println(res.Status)
+```
+
 ## API Usage Examples
 
 ### Quick Start
