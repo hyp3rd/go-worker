@@ -2,11 +2,16 @@ syntax = "proto3";
 
 package worker.v1;
 
+import "google/protobuf/duration.proto";
+
 option go_package = "github.com/hyp3rd/go-worker/pkg/worker/v1;workerpb";
 
 message Task {
   string name = 1;
-  string payload = 2;
+  string description = 2;
+  int32 priority = 3;
+  int32 retries = 4;
+  google.protobuf.Duration retry_delay = 5;
 }
 
 message RegisterTasksRequest {

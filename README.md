@@ -46,7 +46,7 @@ client := workerpb.NewWorkerServiceClient(conn)
 
 // register a task
 _, _ = client.RegisterTasks(ctx, &workerpb.RegisterTasksRequest{
-    Tasks: []*workerpb.Task{{Name: "demo", Payload: "hello"}},
+    Tasks: []*workerpb.Task{{Name: "demo", Description: "demo task"}},
 })
 
 // cancel by id
