@@ -4,8 +4,6 @@ version: v2
 modules:
   - path: proto
     name: buf.build/hyp3rd/go-worker
-deps:
-  - buf.build/googleapis/googleapis
 lint:
   use:
     - STANDARD
