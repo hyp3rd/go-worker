@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	workerpb "github.com/hyp3rd/go-worker/pkg/worker/v1"
 )
 
@@ -47,26 +49,74 @@ func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTa
 
 // StreamResults streams task results back to the client.
 func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream workerpb.WorkerService_StreamResultsServer) error {
-	for res := range s.svc.StreamResults() {
-		out := &workerpb.StreamResultsResponse{
-			Id: res.Task.ID.String(),
-		}
+	results := s.svc.StreamResults()
 
-		if res.Result != nil {
-			out.Output = fmt.Sprint(res.Result)
-		}
+	for {
+		select {
+		case <-stream.Context().Done():
+			return fmt.Errorf("stream context: %w", stream.Context().Err())
+		case res, ok := <-results:
+			if !ok {
+				return nil
+			}
 
-		if res.Error != nil {
-			out.Error = res.Error.Error()
-		}
+			out := &workerpb.StreamResultsResponse{Id: res.Task.ID.String()}
 
-		err := stream.Send(out)
-		if err != nil {
-			return fmt.Errorf("stream send: %w", err)
+			if res.Result != nil {
+				out.Output = fmt.Sprint(res.Result)
+			}
+
+			if res.Error != nil {
+				out.Error = res.Error.Error()
+			}
+
+			err := stream.Send(out)
+			if err != nil {
+				return fmt.Errorf("stream send: %w", err)
+			}
 		}
 	}
+}
 
-	return nil
+// CancelTask cancels an active task by its ID.
+func (s *GRPCServer) CancelTask(ctx context.Context, req *workerpb.CancelTaskRequest) (*workerpb.CancelTaskResponse, error) {
+	id, err := uuid.Parse(req.GetId())
+	if err != nil {
+		return nil, fmt.Errorf("parse id: %w", err)
+	}
+
+	s.svc.CancelTask(id)
+
+	return &workerpb.CancelTaskResponse{}, nil
+}
+
+// GetTask returns information about a task by its ID.
+func (s *GRPCServer) GetTask(ctx context.Context, req *workerpb.GetTaskRequest) (*workerpb.GetTaskResponse, error) {
+	id, err := uuid.Parse(req.GetId())
+	if err != nil {
+		return nil, fmt.Errorf("parse id: %w", err)
+	}
+
+	task, err := s.svc.GetTask(id)
+	if err != nil {
+		return nil, fmt.Errorf("get task: %w", err)
+	}
+
+	resp := &workerpb.GetTaskResponse{
+		Id:     task.ID.String(),
+		Name:   task.Name,
+		Status: task.Status.String(),
+	}
+
+	if v := task.Result.Load(); v != nil {
+		resp.Output = fmt.Sprint(v)
+	}
+
+	if v := task.Error.Load(); v != nil {
+		resp.Error = fmt.Sprint(v)
+	}
+
+	return resp, nil
 }
 
 var _ workerpb.WorkerServiceServer = (*GRPCServer)(nil)
