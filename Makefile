@@ -21,7 +21,38 @@ update-deps:
 vet:
 	go vet ./...
 
-prepare-toolchain:
+prepare-proto-tools:
+	@echo "Installing buf $(BUF_VERSION)..."
+	$(call check_command_exists,buf) || go install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+
+	@echo "Installing protoc-gen-go..."
+	$(call check_command_exists,protoc-gen-go) || go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+	@echo "Installing protoc-gen-go-grpc..."
+	$(call check_command_exists,protoc-gen-go-grpc) || go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+	@echo "Installing protoc-gen-openapi..."
+	$(call check_command_exists,protoc-gen-openapi) || go install github.com/google/gnostic/cmd/protoc-gen-openapi@latest
+
+proto-update:
+	buf dep update
+
+proto-lint:
+	buf lint
+
+proto-breaking:
+	buf breaking --against '.git#branch=main'
+
+proto-generate:
+	buf generate
+
+proto-format: ## Format proto files
+	buf format -w
+
+proto: proto-update proto-lint proto-generate proto-format
+
+
+prepare-toolchain: prepare-proto-tools
 	$(call check_command_exists,docker) || (echo "Docker is missing, install it before starting to code." && exit 1)
 
 	$(call check_command_exists,git) || (echo "git is not present on the system, install it before starting to code." && exit 1)

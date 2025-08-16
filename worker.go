@@ -124,7 +124,7 @@ func NewTaskManager(ctx context.Context, maxWorkers int, maxTasks int, tasksPerS
 	}
 
 	// start the workers
-	tm.StartWorkers()
+	tm.StartWorkers(ctx)
 
 	return tm
 }
@@ -138,7 +138,7 @@ func (tm *TaskManager) IsEmpty() bool {
 }
 
 // StartWorkers starts the task manager and its goroutines.
-func (tm *TaskManager) StartWorkers() {
+func (tm *TaskManager) StartWorkers(ctx context.Context) {
 	tm.workerMutex.Lock()
 
 	for range tm.MaxWorkers {
@@ -147,7 +147,7 @@ func (tm *TaskManager) StartWorkers() {
 		q := make(chan struct{})
 
 		tm.workerQuit = append(tm.workerQuit, q)
-		go tm.workerLoop(q)
+		go tm.workerLoop(ctx, q)
 	}
 
 	tm.workerMutex.Unlock()
@@ -224,7 +224,7 @@ func (tm *TaskManager) SetMaxWorkers(maxWorkers int) {
 			q := make(chan struct{})
 
 			tm.workerQuit = append(tm.workerQuit, q)
-			go tm.workerLoop(q)
+			go tm.workerLoop(tm.ctx, q)
 		}
 	case maxWorkers < current:
 		for i := current - 1; i >= maxWorkers; i-- {
@@ -354,7 +354,7 @@ func (tm *TaskManager) Stop() {
 //   - It executes the task and sends the result to the results channel.
 //   - If the task execution fails, it retries the task up to max retries with a delay between retries.
 //   - If the task fails with all retries exhausted, it cancels the task and returns an error.
-func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (any, error) {
+func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout time.Duration) (any, error) {
 	// defer tm.wg.Done()
 
 	// get the task
@@ -403,7 +403,7 @@ func (tm *TaskManager) ExecuteTask(id uuid.UUID, timeout time.Duration) (any, er
 
 	// if reservation is okay, execute the task
 	task.setStarted()
-	result, err := task.Execute()
+	result, err := task.Execute(ctx)
 	task.setResult(result)
 
 	// if task execution fails, cancel task
@@ -586,7 +586,7 @@ func (tm *TaskManager) validateTask(task *Task) error {
 }
 
 // workerLoop executes tasks until signalled to stop.
-func (tm *TaskManager) workerLoop(stop chan struct{}) {
+func (tm *TaskManager) workerLoop(ctx context.Context, stop chan struct{}) {
 	defer tm.wg.Done()
 
 	for {
@@ -596,7 +596,7 @@ func (tm *TaskManager) workerLoop(stop chan struct{}) {
 				return
 			}
 
-			_, err := tm.ExecuteTask(task.ID, tm.Timeout)
+			_, err := tm.ExecuteTask(ctx, task.ID, tm.Timeout)
 			if err != nil {
 				tm.ExecuteTaskErrors.Add(err)
 			}

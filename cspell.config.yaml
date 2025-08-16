@@ -20,6 +20,7 @@ words:
   - stdlib
   - stdlib's
   - strconv
+  - workerv
   - Wrapf
 ignoreWords: []
 import: []

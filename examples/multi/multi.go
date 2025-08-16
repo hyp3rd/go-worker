@@ -29,7 +29,7 @@ func main() {
 				Name:        fmt.Sprintf("Some task %d", j),
 				Description: fmt.Sprintf("Here goes the description of the task for task %d", j),
 				Priority:    10 + i,
-				Execute: func() (val any, err error) {
+				Execute: func(ctx context.Context, args ...any) (val any, err error) {
 					emptyFile, err := os.Create(path.Join("examples", "multi", "res", fmt.Sprintf("1st__EmptyFile___%v.txt", j)))
 					if err != nil {
 						log.Fatal(err)
@@ -63,7 +63,7 @@ func main() {
 			id := uuid.New()
 			task := &worker.Task{
 				ID: id,
-				Execute: func() (val any, err error) {
+				Execute: func(ctx context.Context, args ...any) (val any, err error) {
 					emptyFile, err := os.Create(path.Join("examples", "multi", "res", fmt.Sprintf("2nd__EmptyFile___%v.txt", j)))
 					if err != nil {
 						log.Fatal(err)
@@ -95,7 +95,7 @@ func main() {
 		id := uuid.New()
 		task := &worker.Task{
 			ID: id,
-			Execute: func() (val any, err error) {
+			Execute: func(ctx context.Context, args ...any) (val any, err error) {
 				emptyFile, err := os.Create(path.Join("examples", "multi", "res", fmt.Sprintf("3nd__EmptyFile___%v.txt", j)))
 				if err != nil {
 					log.Fatal(err)
@@ -126,7 +126,7 @@ func main() {
 		id := uuid.New()
 		task := &worker.Task{
 			ID: id,
-			Execute: func() (val any, err error) {
+			Execute: func(ctx context.Context, args ...any) (val any, err error) {
 				emptyFile, err := os.Create(path.Join("examples", "wrong-path", "res", fmt.Sprintf("4nd__EmptyFile___%v.txt", j)))
 				if err != nil {
 					log.Println(err)

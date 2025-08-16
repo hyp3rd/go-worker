@@ -14,7 +14,7 @@ func TestTask_IsValid(t *testing.T) {
 	task := &worker.Task{
 		ID:      uuid.New(),
 		Ctx:     context.Background(),
-		Execute: func() (interface{}, error) { return nil, nil },
+		Execute: func(ctx context.Context, args ...any) (any, error) { return nil, nil },
 	}
 	if err := task.IsValid(); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -24,7 +24,7 @@ func TestTask_IsValid(t *testing.T) {
 	task = &worker.Task{
 		ID:      uuid.Nil,
 		Ctx:     context.Background(),
-		Execute: func() (interface{}, error) { return nil, nil },
+		Execute: func(ctx context.Context, args ...any) (any, error) { return nil, nil },
 	}
 	if err := task.IsValid(); err != worker.ErrInvalidTaskID {
 		t.Fatalf("expected ErrInvalidTaskID, got %v", err)
@@ -34,7 +34,7 @@ func TestTask_IsValid(t *testing.T) {
 	task = &worker.Task{
 		ID:      uuid.New(),
 		Ctx:     nil,
-		Execute: func() (interface{}, error) { return nil, nil },
+		Execute: func(ctx context.Context, args ...any) (any, error) { return nil, nil },
 	}
 	if err := task.IsValid(); err != worker.ErrInvalidTaskContext {
 		t.Fatalf("expected ErrInvalidTaskContext, got %v", err)

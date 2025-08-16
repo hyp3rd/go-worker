@@ -41,7 +41,7 @@ func main() {
 	task := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Execute: func() (val any, err error) {
+		Execute: func(ctx context.Context, args ...any) (val any, err error) {
 			return func(a int, b int) (val any, err error) {
 				return a + b, err
 			}(2, 5)
@@ -58,7 +58,7 @@ func main() {
 	task2 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 5,
-		Execute: func() (val any, err error) {
+		Execute: func(ctx context.Context, args ...any) (val any, err error) {
 			time.Sleep(time.Second * 2)
 
 			return "Hello, World from Task 2!", err
@@ -69,7 +69,7 @@ func main() {
 	task3 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 90,
-		Execute: func() (val any, err error) {
+		Execute: func(ctx context.Context, args ...any) (val any, err error) {
 			// Simulate a long running task
 			time.Sleep(3 * time.Second)
 
@@ -80,7 +80,7 @@ func main() {
 	task4 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 150,
-		Execute: func() (val any, err error) {
+		Execute: func(ctx context.Context, args ...any) (val any, err error) {
 			// Simulate a long running task
 			time.Sleep(1 * time.Second)
 
