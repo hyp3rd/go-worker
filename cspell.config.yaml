@@ -5,6 +5,7 @@ dictionaryDefinitions: []
 dictionaries: []
 words:
   - Atoi
+  - Codacy
   - containedctx
   - cyclop
   - errcheck
