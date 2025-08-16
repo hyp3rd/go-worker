@@ -1,16 +1,17 @@
 package main
 
 import (
-	"context"
-	"log"
-	"net"
-	"time"
+        "context"
+        "log"
+        "net"
+        "time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+        "google.golang.org/grpc"
+        "google.golang.org/grpc/credentials/insecure"
+        "google.golang.org/protobuf/types/known/durationpb"
 
-	worker "github.com/hyp3rd/go-worker"
-	workerpb "github.com/hyp3rd/go-worker/pkg/worker/v1"
+        worker "github.com/hyp3rd/go-worker"
+        workerpb "github.com/hyp3rd/go-worker/pkg/worker/v1"
 )
 
 func main() {
@@ -56,8 +57,16 @@ func main() {
 	defer cancel()
 
 	_, err = client.RegisterTasks(cctx, &workerpb.RegisterTasksRequest{
-		Tasks: []*workerpb.Task{{Name: "demo", Payload: "hello"}},
-	})
+                Tasks: []*workerpb.Task{
+                        {
+                                Name:        "demo",
+                                Description: "demo task",
+                                Priority:    1,
+                                Retries:     0,
+                                RetryDelay:  durationpb.New(time.Second),
+                        },
+                },
+        })
 	if err != nil {
 		log.Printf("register: %v", err)
 
