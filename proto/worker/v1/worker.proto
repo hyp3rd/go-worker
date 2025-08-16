@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package worker.v1;
+
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/hyp3rd/go-worker/gen/worker/v1;workerv1";
+
+message TaskInput {
+  string name = 1;
+  string description = 2;
+  int32 priority = 3;
+  int32 retries = 4;
+  google.protobuf.Duration retry_delay = 5;
+}
+
+message RegisterTasksRequest {
+  repeated TaskInput tasks = 1;
+}
+
+message RegisterTasksResponse {
+  bool ok = 1;
+}
+
+message StreamResultsRequest {}
+
+message TaskResult {
+  string name = 1;
+  string description = 2;
+  int32 priority = 3;
+  string result = 4;
+  string error = 5;
+}
+
+service WorkerService {
+  rpc RegisterTasks(RegisterTasksRequest) returns (RegisterTasksResponse);
+  rpc StreamResults(StreamResultsRequest) returns (stream TaskResult);
+}
