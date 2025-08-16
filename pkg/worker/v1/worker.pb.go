@@ -13,6 +13,7 @@ import (
 
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+        durationpb "google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -23,12 +24,16 @@ const (
 )
 
 type Task struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Payload       string                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+        state         protoimpl.MessageState `protogen:"open.v1"`
+        Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+        Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+        Priority      int32                  `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
+        Retries       int32                  `protobuf:"varint,4,opt,name=retries,proto3" json:"retries,omitempty"`
+        RetryDelay    *durationpb.Duration   `protobuf:"bytes,5,opt,name=retry_delay,json=retryDelay,proto3" json:"retry_delay,omitempty"`
+        unknownFields protoimpl.UnknownFields
+        sizeCache     protoimpl.SizeCache
 }
+
 
 func (x *Task) Reset() {
 	*x = Task{}
@@ -61,17 +66,38 @@ func (*Task) Descriptor() ([]byte, []int) {
 }
 
 func (x *Task) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
+        if x != nil {
+                return x.Name
+        }
+        return ""
 }
 
-func (x *Task) GetPayload() string {
-	if x != nil {
-		return x.Payload
-	}
-	return ""
+func (x *Task) GetDescription() string {
+        if x != nil {
+                return x.Description
+        }
+        return ""
+}
+
+func (x *Task) GetPriority() int32 {
+        if x != nil {
+                return x.Priority
+        }
+        return 0
+}
+
+func (x *Task) GetRetries() int32 {
+        if x != nil {
+                return x.Retries
+        }
+        return 0
+}
+
+func (x *Task) GetRetryDelay() *durationpb.Duration {
+        if x != nil {
+                return x.RetryDelay
+        }
+        return nil
 }
 
 type RegisterTasksRequest struct {
