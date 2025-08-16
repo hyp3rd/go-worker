@@ -91,6 +91,7 @@ linters:
       # List of functions to exclude from checking, where each entry is a single function to exclude.
       # See https://github.com/kisielk/errcheck#excluding-functions for details.
       exclude-functions:
+        - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
     funlen:
@@ -104,11 +105,15 @@ linters:
       # Default: 1
       tab-width: 1
 
+    mnd:
+      ignored-numbers:
+        - "2"
+
     ireturn:
       # ireturn does not allow using `allow` and `reject` settings at the same time.
       # Both settings are lists of the keywords and regular expressions matched to interface or package names.
       # keywords:
-      # - `empty` for `interface{}`
+      # - `empty` for `any`
       # - `error` for errors
       # - `stdlib` for standard library
       # - `anon` for anonymous interfaces
@@ -211,7 +216,7 @@ formatters:
   #   sections:
   #     - standard # Standard section: captures all standard packages.
   #     - default # Default section: contains all imports that could not be matched to another section type.
-  #     - prefix(dev.azure.com/INGCDaaS/IngOne/_git/P31347-Core.git) # Custom section: groups all imports with the specified Prefix.
+  #     - prefix(github.com/hyp3rd/go-worker) # Custom section: groups all imports with the specified Prefix.
   #   # Checks that no inline comments are present.
   #   # Default: false
   #   no-inline-comments: false
@@ -230,13 +235,13 @@ formatters:
     # A comma-separated list of prefixes, which, if set, checks import paths
     # with the given prefixes are grouped after 3rd-party packages.
     # Default: ""
-    local-prefixes: dev.azure.com/INGCDaaS/IngOne/_git/P31347-Core.git
+    local-prefixes: github.com/hyp3rd/go-worker
 
   gofmt:
   gofumpt:
     # Module path which contains the source code being formatted.
     # Default: ""
-    module-path: dev.azure.com/INGCDaaS/IngOne/_git/P31347-Core.git
+    module-path: github.com/hyp3rd/go-worker
     # Choose whether to use the extra rules.
     # Default: false
     extra-rules: true

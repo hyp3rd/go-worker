@@ -42,7 +42,7 @@ task := worker.Task{
     Name:        "Some task",
     Description: "Here goes the description of the task",
     Priority:    10,
-    Fn: func() (interface{}, error) {
+    Fn: func() (any, error) {
         emptyFile, err := os.Create(path.Join("examples", "test", "res", fmt.Sprintf("1st__EmptyFile___%v.txt", j)))
         if err != nil {
             log.Fatal(err)
@@ -58,7 +58,7 @@ task := worker.Task{
 task2 := worker.Task{
     ID:       uuid.New(),
     Priority: 10,
-    Fn:       func() (val interface{}, err error){ return "Hello, World!", err },
+    Fn:       func() (val any, err error){ return "Hello, World!", err },
 }
 
 tm.RegisterTasks(context.Background(), task, task2)
@@ -144,8 +144,8 @@ func main() {
     task := worker.Task{
         ID:       uuid.New(),
         Priority: 1,
-        Fn: func() (val interface{}, err error) {
-            return func(a int, b int) (val interface{}, err error) {
+        Fn: func() (val any, err error) {
+            return func(a int, b int) (val any, err error) {
                 return a + b, err
             }(2, 5)
         },
@@ -155,13 +155,13 @@ func main() {
     task1 := worker.Task{
         ID:       uuid.New(),
         Priority: 10,
-        // Fn:       func() (val interface{}, err error) { return "Hello, World from Task 1!", err },
+        // Fn:       func() (val any, err error) { return "Hello, World from Task 1!", err },
     }
 
     task2 := worker.Task{
         ID:       uuid.New(),
         Priority: 5,
-        Fn: func() (val interface{}, err error) {
+        Fn: func() (val any, err error) {
             time.Sleep(time.Second * 2)
             return "Hello, World from Task 2!", err
         },
@@ -170,7 +170,7 @@ func main() {
     task3 := worker.Task{
         ID:       uuid.New(),
         Priority: 90,
-        Fn: func() (val interface{}, err error) {
+        Fn: func() (val any, err error) {
             // Simulate a long running task
             // time.Sleep(3 * time.Second)
             return "Hello, World from Task 3!", err
@@ -180,7 +180,7 @@ func main() {
     task4 := worker.Task{
         ID:       uuid.New(),
         Priority: 150,
-        Fn: func() (val interface{}, err error) {
+        Fn: func() (val any, err error) {
             // Simulate a long running task
             time.Sleep(1 * time.Second)
             return "Hello, World from Task 4!", err

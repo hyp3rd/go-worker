@@ -7,8 +7,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service is an interface for a task manager
+// Service is an interface for a task manager.
 type Service interface {
+	workerOperations
+	taskOperations
+}
+
+type workerOperations interface {
 	// RegisterTask registers a new task to the worker
 	RegisterTask(ctx context.Context, task *Task) error
 	// RegisterTasks registers multiple tasks to the worker
@@ -21,6 +26,9 @@ type Service interface {
 	Wait(timeout time.Duration)
 	// Stop the task manage
 	Stop()
+}
+
+type taskOperations interface {
 	// CancelAll cancels all tasks
 	CancelAll()
 	// CancelTask cancels a task by its ID
@@ -29,7 +37,7 @@ type Service interface {
 	GetActiveTasks() int
 	// StreamResults streams the `Result` channel
 	StreamResults() <-chan Result
-	// GetResults retruns the `Result` channel
+	// GetResults returns the `Result` channel
 	GetResults() []Result
 	// GetCancelledTasks gets the cancelled tasks channel
 	GetCancelledTasks() <-chan *Task
@@ -38,7 +46,7 @@ type Service interface {
 	// GetTasks gets all tasks
 	GetTasks() []*Task
 	// ExecuteTask executes a task given its ID and returns the result
-	ExecuteTask(id uuid.UUID, timeout time.Duration) (interface{}, error)
+	ExecuteTask(id uuid.UUID, timeout time.Duration) (any, error)
 }
 
 // Middleware describes a generic middleware.
@@ -49,5 +57,6 @@ func RegisterMiddleware[T any](svc T, mw ...Middleware[T]) T {
 	for _, m := range mw {
 		svc = m(svc)
 	}
+
 	return svc
 }

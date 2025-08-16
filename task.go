@@ -2,40 +2,39 @@ package worker
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyp3rd/ewrap"
 )
 
-// Errors returned by the TaskManager
+// Errors returned by the TaskManager.
 var (
-	// ErrInvalidTaskID is returned when a task has an invalid ID
-	ErrInvalidTaskID = errors.New("invalid task id")
-	// ErrInvalidTaskFunc is returned when a task has an invalid function
-	ErrInvalidTaskFunc = errors.New("invalid task function")
-	// ErrInvalidTaskContext is returned when a task has an invalid context
-	ErrInvalidTaskContext = errors.New("invalid task context")
-	// ErrTaskNotFound is returned when a task is not found
-	ErrTaskNotFound = errors.New("task not found")
-	// ErrTaskTimeout is returned when a task times out
-	ErrTaskTimeout = errors.New("task timeout")
-	// ErrTaskCancelled is returned when a task is cancelled
-	ErrTaskCancelled = errors.New("task cancelled")
-	// ErrTaskAlreadyStarted is returned when a task is already started
-	ErrTaskAlreadyStarted = errors.New("task already started")
-	// ErrTaskCompleted is returned when a task is already completed
-	ErrTaskCompleted = errors.New("task completed")
+	// ErrInvalidTaskID is returned when a task has an invalid ID.
+	ErrInvalidTaskID = ewrap.New("invalid task id")
+	// ErrInvalidTaskFunc is returned when a task has an invalid function.
+	ErrInvalidTaskFunc = ewrap.New("invalid task function")
+	// ErrInvalidTaskContext is returned when a task has an invalid context.
+	ErrInvalidTaskContext = ewrap.New("invalid task context")
+	// ErrTaskNotFound is returned when a task is not found.
+	ErrTaskNotFound = ewrap.New("task not found")
+	// ErrTaskTimeout is returned when a task times out.
+	ErrTaskTimeout = ewrap.New("task timeout")
+	// ErrTaskCancelled is returned when a task is cancelled.
+	ErrTaskCancelled = ewrap.New("task cancelled")
+	// ErrTaskAlreadyStarted is returned when a task is already started.
+	ErrTaskAlreadyStarted = ewrap.New("task already started")
+	// ErrTaskCompleted is returned when a task is already completed.
+	ErrTaskCompleted = ewrap.New("task completed")
 )
 
 type (
 	// TaskStatus is a value used to represent the task status.
 	TaskStatus uint8
 
-	// TaskFunc signature of `Task` function
-	TaskFunc func() (interface{}, error)
+	// TaskFunc signature of `Task` function.
+	TaskFunc func() (any, error)
 )
 
 // CancelReason values
@@ -52,7 +51,7 @@ const (
 	ContextDeadlineReached = TaskStatus(1)
 	// RateLimited means the number of concurrent tasks per second exceeded the maximum allowed.
 	RateLimited = TaskStatus(2)
-	// Cancelled means `CancelTask` was invked and the `Task` was cancelled.
+	// Cancelled means `CancelTask` was invoked and the `Task` was cancelled.
 	Cancelled = TaskStatus(3)
 	// Failed means the `Task` failed.
 	Failed = TaskStatus(4)
@@ -64,6 +63,10 @@ const (
 	Invalid = TaskStatus(7)
 	// Completed means the `Task` is completed.
 	Completed = TaskStatus(8)
+)
+
+const (
+	waitForTaskCancelled = 100 * time.Millisecond
 )
 
 // String returns the string representation of the task status.
@@ -83,12 +86,16 @@ func (ts TaskStatus) String() string {
 		return "Running"
 	case Invalid:
 		return "Invalid"
+	case Completed:
+		return "Completed"
 	default:
 		return "Unknown"
 	}
 }
 
-// Task represents a function that can be executed by the task manager
+// Task represents a function that can be executed by the task manager.
+//
+//nolint:containedctx
 type Task struct {
 	ID          uuid.UUID          `json:"id"`          // ID is the id of the task
 	Name        string             `json:"name"`        // Name is the name of the task
@@ -108,7 +115,7 @@ type Task struct {
 	index       int                `json:"-"`           // index is the index of the task in the task manager
 }
 
-// NewTask creates a new task with the provided function and context
+// NewTask creates a new task with the provided function and context.
 func NewTask(ctx context.Context, fn TaskFunc) (*Task, error) {
 	task := &Task{
 		ID:         uuid.New(),
@@ -118,92 +125,50 @@ func NewTask(ctx context.Context, fn TaskFunc) (*Task, error) {
 		RetryDelay: 0,
 	}
 
-	if err := task.IsValid(); err != nil {
+	err := task.IsValid()
+	if err != nil {
 		// prevent the task from being rescheduled
 		task.Status = Invalid
 		task.setCancelled()
+
 		return nil, err
 	}
 
 	return task, nil
 }
 
-// IsValid returns an error if the task is invalid
+// IsValid returns an error if the task is invalid.
 func (task *Task) IsValid() (err error) {
 	if task.ID == uuid.Nil {
 		err = ErrInvalidTaskID
 		task.Error.Store(err.Error())
+
 		return
 	}
+
 	if task.Ctx == nil {
 		err = ErrInvalidTaskContext
 		task.Error.Store(err.Error())
+
 		return
 	}
+
 	if task.Execute == nil {
 		err = ErrInvalidTaskFunc
 		task.Error.Store(err.Error())
+
 		return
 	}
+
 	return
 }
 
-// setStarted handles the start of a task by setting the start time
-func (task *Task) setStarted() {
-	task.Started.Store(time.Now().UnixNano())
-	task.Status = Running
-}
-
-// setCompleted handles the finish of a task by setting the finish time
-func (task *Task) setCompleted() {
-	task.Completed.Store(time.Now().UnixNano())
-	task.Status = Completed
-}
-
-// setCancelled handles the cancellation of a task by setting the cancellation time
-func (task *Task) setCancelled() {
-	task.Cancelled.Store(time.Now().UnixNano())
-	task.Status = Cancelled
-}
-
-// setQueued handles the queuing of a task by setting the status to queued
-func (task *Task) setQueued() {
-	task.Status = Queued
-}
-
-// setRateLimited handles the rate limiting of a task by setting the status to rate limited
-func (task *Task) setRateLimited() {
-	task.Status = RateLimited
-}
-
-// setFailed handles the failure of a task by setting the status to failed
-func (task *Task) setFailed(err interface{}) {
-	if err != nil {
-		task.Error.Store(err)
-	}
-	task.Status = Failed
-}
-
-// setError handles the error of a task by setting the error
-func (task *Task) setError(err error) {
-	if err != nil {
-		task.Error.Store(err.Error())
-	}
-}
-
-// setResult handles the result of a task by setting the result
-func (task *Task) setResult(result interface{}) {
-	if result != nil {
-		task.Result.Store(result)
-	}
-}
-
-// WaitCancelled waits for the task to be cancelled
+// WaitCancelled waits for the task to be cancelled.
 func (task *Task) WaitCancelled() {
 	select {
 	case <-task.Ctx.Done():
 		return
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(waitForTaskCancelled):
 		task.WaitCancelled()
 	}
 }
@@ -213,23 +178,73 @@ func (task *Task) CancelledChan() <-chan struct{} {
 	return task.Ctx.Done()
 }
 
-// ShouldSchedule returns an error if the task should not be scheduled
+// ShouldSchedule returns an error if the task should not be scheduled.
 func (task *Task) ShouldSchedule() error {
-
 	// check if the task has been cancelled
 	if task.Cancelled.Load() > 0 && task.Status != Cancelled {
-		return fmt.Errorf("%w: Task ID %s is already cancelled", ErrTaskCancelled, task.ID)
+		return ewrap.Wrapf(ErrTaskCancelled, "Task ID %s is already cancelled", task.ID)
 	}
 
 	// check if the task has started
 	if task.Started.Load() > 0 {
-		return fmt.Errorf("%w: Task ID %s has already started", ErrTaskAlreadyStarted, task.ID)
+		return ewrap.Wrapf(ErrTaskAlreadyStarted, "Task ID %s has already started", task.ID)
 	}
 
 	// check if the task has completed
 	if task.Completed.Load() > 0 {
-		return fmt.Errorf("%w: Task ID %s has already completed", ErrTaskCompleted, task.ID)
+		return ewrap.Wrapf(ErrTaskCompleted, "Task ID %s has already completed", task.ID)
 	}
 
 	return nil
+}
+
+// setStarted handles the start of a task by setting the start time.
+func (task *Task) setStarted() {
+	task.Started.Store(time.Now().UnixNano())
+	task.Status = Running
+}
+
+// setCompleted handles the finish of a task by setting the finish time.
+func (task *Task) setCompleted() {
+	task.Completed.Store(time.Now().UnixNano())
+	task.Status = Completed
+}
+
+// setCancelled handles the cancellation of a task by setting the cancellation time.
+func (task *Task) setCancelled() {
+	task.Cancelled.Store(time.Now().UnixNano())
+	task.Status = Cancelled
+}
+
+// setQueued handles the queuing of a task by setting the status to queued.
+func (task *Task) setQueued() {
+	task.Status = Queued
+}
+
+// setRateLimited handles the rate limiting of a task by setting the status to rate limited.
+func (task *Task) setRateLimited() {
+	task.Status = RateLimited
+}
+
+// setFailed handles the failure of a task by setting the status to failed.
+func (task *Task) setFailed(err any) {
+	if err != nil {
+		task.Error.Store(err)
+	}
+
+	task.Status = Failed
+}
+
+// setError handles the error of a task by setting the error.
+func (task *Task) setError(err error) {
+	if err != nil {
+		task.Error.Store(err.Error())
+	}
+}
+
+// setResult handles the result of a task by setting the result.
+func (task *Task) setResult(result any) {
+	if result != nil {
+		task.Result.Store(result)
+	}
 }

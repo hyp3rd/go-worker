@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
 	worker "github.com/hyp3rd/go-worker"
 )
 

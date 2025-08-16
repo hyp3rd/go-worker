@@ -4,44 +4,62 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/hyp3rd/go-worker"
 	"github.com/hyp3rd/go-worker/middleware"
 )
 
+const (
+	taskTimeout    = 5 * time.Second
+	maxWorkers     = 4
+	maxTasks       = 10
+	tasksPerSecond = 5
+	timeout        = 30 * time.Second
+	retryDelay     = 30 * time.Second
+	maxRetries     = 3
+)
+
 func main() {
-	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
+	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, timeout, retryDelay, maxRetries)
 	// Example of using zap logger from uber
 	logger := log.Default()
 
 	// apply middleware in the same order as you want to execute them
-        srv := worker.RegisterMiddleware[worker.Service](tm,
-                // middleware.YourMiddleware,
-                func(next worker.Service) worker.Service {
-                        return middleware.NewLoggerMiddleware(next, logger)
-                },
-        )
+	srv := worker.RegisterMiddleware[worker.Service](tm,
+		// middleware.YourMiddleware,
+		func(next worker.Service) worker.Service {
+			return middleware.NewLoggerMiddleware(next, logger)
+		},
+	)
 
 	task := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Execute:  func() (val interface{}, err error) { return "Hello, World from Task!", err },
+		Execute:  func() (val any, err error) { return "Hello, World from Task!", err },
 	}
 
-	res, err := srv.ExecuteTask(task.ID, time.Second*5)
+	res, err := srv.ExecuteTask(task.ID, taskTimeout)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprint(os.Stderr, err)
 	} else {
-		fmt.Println(res)
+		fmt.Fprint(os.Stdout, res)
 	}
 
-	srv.RegisterTask(context.TODO(), task)
-	res, err = srv.ExecuteTask(task.ID, time.Second*5)
+	err = srv.RegisterTask(context.TODO(), task)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprint(os.Stderr, err)
+
+		return
+	}
+
+	res, err = srv.ExecuteTask(task.ID, taskTimeout)
+	if err != nil {
+		fmt.Fprint(os.Stderr, err)
 	} else {
-		fmt.Println(res)
+		fmt.Fprintln(os.Stdout, res)
 	}
 }

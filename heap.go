@@ -12,6 +12,7 @@ func newPriorityQueue[T any](less func(a, b T) bool, setIndex func(T, int)) *pri
 	return &priorityQueue[T]{items: []T{}, less: less, setIndex: setIndex}
 }
 
+// Len returns the number of items in the queue.
 func (pq priorityQueue[T]) Len() int { return len(pq.items) }
 
 func (pq *priorityQueue[T]) Push(x T) {
@@ -20,36 +21,47 @@ func (pq *priorityQueue[T]) Push(x T) {
 	pq.up(pq.Len() - 1)
 }
 
+// Pop removes and returns the highest priority item from the queue.
 func (pq *priorityQueue[T]) Pop() (T, bool) {
 	var zero T
-	n := pq.Len()
-	if n == 0 {
+
+	length := pq.Len()
+	if length == 0 {
 		return zero, false
 	}
-	pq.swap(0, n-1)
-	item := pq.items[n-1]
-	pq.items = pq.items[:n-1]
+
+	pq.swap(0, length-1)
+	item := pq.items[length-1]
+	pq.items = pq.items[:length-1]
 	pq.down(0)
 	pq.setIndex(item, -1)
+
 	return item, true
 }
 
+// Remove removes the item at the specified index from the queue.
 func (pq *priorityQueue[T]) Remove(i int) (T, bool) {
 	var zero T
-	n := pq.Len() - 1
-	if i < 0 || i > n {
+
+	length := pq.Len() - 1
+	if i < 0 || i > length {
 		return zero, false
 	}
-	if i != n {
-		pq.swap(i, n)
+
+	if i != length {
+		pq.swap(i, length)
 	}
-	item := pq.items[n]
-	pq.items = pq.items[:n]
-	if i != n {
+
+	item := pq.items[length]
+
+	pq.items = pq.items[:length]
+	if i != length {
 		pq.down(i)
 		pq.up(i)
 	}
+
 	pq.setIndex(item, -1)
+
 	return item, true
 }
 
@@ -69,27 +81,33 @@ func (pq *priorityQueue[T]) up(j int) {
 		if i == j || !pq.lessIndex(j, i) {
 			break
 		}
+
 		pq.swap(i, j)
 		j = i
 	}
 }
 
 func (pq *priorityQueue[T]) down(i0 int) {
-	n := pq.Len()
+	length := pq.Len()
+
 	i := i0
 	for {
-		l := 2*i + 1
-		if l >= n {
+		left := 2*i + 1
+		if left >= length {
 			break
 		}
-		j := l
-		r := l + 1
-		if r < n && pq.lessIndex(r, l) {
-			j = r
+
+		j := left
+
+		right := left + 1
+		if right < length && pq.lessIndex(right, left) {
+			j = right
 		}
+
 		if !pq.lessIndex(j, i) {
 			break
 		}
+
 		pq.swap(i, j)
 		i = j
 	}
@@ -97,10 +115,11 @@ func (pq *priorityQueue[T]) down(i0 int) {
 
 // newTaskHeap returns a priority queue for *Task items ordered by priority.
 func newTaskHeap() *priorityQueue[*Task] {
-	return newPriorityQueue[*Task](func(a, b *Task) bool {
+	return newPriorityQueue(func(a, b *Task) bool {
 		if a.Priority != b.Priority {
 			return a.Priority < b.Priority
 		}
+
 		return a.ID.String() < b.ID.String()
 	}, func(t *Task, i int) {
 		t.index = i

@@ -1,0 +1,25 @@
+---
+version: "0.2"
+ignorePaths: []
+dictionaryDefinitions: []
+dictionaries: []
+words:
+  - Atoi
+  - containedctx
+  - cyclop
+  - errcheck
+  - ewrap
+  - Fprint
+  - Fprintf
+  - Fprintln
+  - funlen
+  - gocognit
+  - ireturn
+  - Newf
+  - nolint
+  - stdlib
+  - stdlib's
+  - strconv
+  - Wrapf
+ignoreWords: []
+import: []
