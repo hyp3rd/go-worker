@@ -21,7 +21,7 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := &worker.Task{
 		ID:       uuid.New(),
-		Execute:  func() (val interface{}, err error) { return nil, err },
+		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return nil, err },
 		Priority: 10,
 	}
 
@@ -45,7 +45,7 @@ func TestTaskManager_Start(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := &worker.Task{
 		ID:       uuid.New(),
-		Execute:  func() (val interface{}, err error) { return "task", err },
+		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return "task", err },
 		Priority: 10,
 	}
 	if err := tm.RegisterTask(context.TODO(), task); err != nil {
@@ -62,7 +62,7 @@ func TestTaskManager_StreamResults(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := &worker.Task{
 		ID:       uuid.New(),
-		Execute:  func() (val interface{}, err error) { return "task", err },
+		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return "task", err },
 		Priority: 10,
 	}
 	if err := tm.RegisterTask(context.TODO(), task); err != nil {
@@ -79,7 +79,7 @@ func TestTaskManager_GetTask(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := &worker.Task{
 		ID:       uuid.New(),
-		Execute:  func() (val interface{}, err error) { return "task", err },
+		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return "task", err },
 		Priority: 10,
 	}
 	if err := tm.RegisterTask(context.TODO(), task); err != nil {
@@ -99,14 +99,14 @@ func TestTaskManager_ExecuteTask(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), 4, 10, 5, time.Second*30, time.Second*30, 3)
 	task := &worker.Task{
 		ID:       uuid.New(),
-		Execute:  func() (val interface{}, err error) { return "task", err },
+		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return "task", err },
 		Priority: 10,
 	}
 	if err := tm.RegisterTask(context.TODO(), task); err != nil {
 		t.Fatalf("RegisterTask returned error: %v", err)
 	}
 
-	res, err := tm.ExecuteTask(task.ID, time.Second*10)
+	res, err := tm.ExecuteTask(context.TODO(), task.ID, time.Second*10)
 	if err != nil {
 		t.Fatalf("Task execution failed")
 	}

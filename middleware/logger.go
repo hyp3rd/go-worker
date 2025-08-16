@@ -78,7 +78,7 @@ func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...*worker.
 }
 
 // Start the task manager.
-func (mw *loggerMiddleware) StartWorkers() {
+func (mw *loggerMiddleware) StartWorkers(ctx context.Context) {
 	defer func(begin time.Time) {
 		// var numCPU = runtime.GOMAXPROCS(0)
 		numCPU := runtime.NumCPU()
@@ -86,7 +86,7 @@ func (mw *loggerMiddleware) StartWorkers() {
 		mw.logger.Printf("`StartWorkers` took: %s", time.Since(begin))
 	}(time.Now())
 
-	mw.next.StartWorkers()
+	mw.next.StartWorkers(ctx)
 }
 
 // SetMaxWorkers adjusts the worker pool size.
@@ -159,7 +159,7 @@ func (mw *loggerMiddleware) GetTasks() []*worker.Task {
 }
 
 // ExecuteTask executes a task given its ID and returns the result.
-func (mw *loggerMiddleware) ExecuteTask(id uuid.UUID, timeout time.Duration) (res any, err error) {
+func (mw *loggerMiddleware) ExecuteTask(ctx context.Context, id uuid.UUID, timeout time.Duration) (res any, err error) {
 	defer func(begin time.Time) {
 		if err != nil {
 			mw.logger.Printf("error while executing task ID %v - %v", id, err)
@@ -170,5 +170,5 @@ func (mw *loggerMiddleware) ExecuteTask(id uuid.UUID, timeout time.Duration) (re
 
 	mw.logger.Printf("executing task ID %v", id)
 
-	return mw.next.ExecuteTask(id, timeout)
+	return mw.next.ExecuteTask(ctx, id, timeout)
 }

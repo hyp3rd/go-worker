@@ -34,7 +34,7 @@ type (
 	TaskStatus uint8
 
 	// TaskFunc signature of `Task` function.
-	TaskFunc func() (any, error)
+	TaskFunc func(ctx context.Context, args ...any) (any, error)
 )
 
 // CancelReason values

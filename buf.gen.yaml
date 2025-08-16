@@ -1,0 +1,28 @@
+---
+version: v2
+clean: true
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      path: api
+      value: buf.build/hyp3rd/go-worker/pkg
+  disable:
+    - module: buf.build/googleapis/googleapis
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: pkg/
+    opt:
+      - paths=source_relative
+
+  - remote: buf.build/grpc/go
+    out: pkg/
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=false
+
+inputs:
+  - directory: .
+    exclude_paths:
+      - .trunk/
+      - .git/

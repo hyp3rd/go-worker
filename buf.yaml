@@ -1,0 +1,17 @@
+---
+# For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
+version: v2
+name: buf.build/hyp3rd/go-worker
+deps:
+  - buf.build/googleapis/googleapis
+lint:
+  use:
+    - STANDARD
+    - PACKAGE_VERSION_SUFFIX
+    - ENUM_ZERO_VALUE_SUFFIX
+    - SERVICE_SUFFIX
+  ignore:
+    - .trunk
+breaking:
+  use:
+    - FILE

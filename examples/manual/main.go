@@ -24,7 +24,7 @@ const (
 )
 
 func main() {
-	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, timeout, retryDelay, maxRetries)
+	tm := worker.NewTaskManager(context.Background(), maxWorkers, maxTasks, tasksPerSecond, timeout, retryDelay, maxRetries)
 	// Example of using zap logger from uber
 	logger := log.Default()
 
@@ -39,24 +39,24 @@ func main() {
 	task := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
-		Execute:  func() (val any, err error) { return "Hello, World from Task!", err },
+		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return "Hello, World from Task!", err },
 	}
 
-	res, err := srv.ExecuteTask(task.ID, taskTimeout)
+	res, err := srv.ExecuteTask(context.Background(), task.ID, taskTimeout)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 	} else {
 		fmt.Fprint(os.Stdout, res)
 	}
 
-	err = srv.RegisterTask(context.TODO(), task)
+	err = srv.RegisterTask(context.Background(), task)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 
 		return
 	}
 
-	res, err = srv.ExecuteTask(task.ID, taskTimeout)
+	res, err = srv.ExecuteTask(context.Background(), task.ID, taskTimeout)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 	} else {

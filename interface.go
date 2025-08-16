@@ -19,7 +19,7 @@ type workerOperations interface {
 	// RegisterTasks registers multiple tasks to the worker
 	RegisterTasks(ctx context.Context, tasks ...*Task)
 	// StartWorkers starts the task manager's workers
-	StartWorkers()
+	StartWorkers(ctx context.Context)
 	// SetMaxWorkers adjusts the worker pool size
 	SetMaxWorkers(n int)
 	// Wait for all tasks to finish
@@ -46,7 +46,7 @@ type taskOperations interface {
 	// GetTasks gets all tasks
 	GetTasks() []*Task
 	// ExecuteTask executes a task given its ID and returns the result
-	ExecuteTask(id uuid.UUID, timeout time.Duration) (any, error)
+	ExecuteTask(ctx context.Context, id uuid.UUID, timeout time.Duration) (any, error)
 }
 
 // Middleware describes a generic middleware.
