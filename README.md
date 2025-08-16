@@ -14,7 +14,33 @@ Each `Task` represents a function scheduled by priority.
 - Rate limiting: You can rate limit the tasks schedule by setting a maximum number of jobs per second.
 - Cancellation: You can cancel Tasks before or while they are running.
 
-## API
+## Architecture
+
+```mermaid
+flowchart LR
+    Client[Client code] -->|register tasks| TaskManager
+    TaskManager --> Queue[Priority Queue]
+    Queue -->|dispatch| Worker1[Worker]
+    Queue -->|dispatch| WorkerN[Worker]
+    Worker1 --> Results[Results Channel]
+    WorkerN --> Results
+```
+
+## API Usage Examples
+
+### Quick Start
+
+```go
+tm := worker.NewTaskManager(2, 10, 5, time.Second, time.Second, 3)
+defer tm.Close()
+
+task := worker.Task{ID: uuid.New(), Priority: 1, Fn: func() (any, error) { return "hello", nil }}
+tm.RegisterTask(context.Background(), task)
+
+for res := range tm.GetResults() {
+    fmt.Println(res)
+}
+```
 
 ### Initialization
 
@@ -204,6 +230,26 @@ func main() {
     }
 }
 ```
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/). Release notes are available in [CHANGELOG.md](CHANGELOG.md).
+
+## Contribution Guidelines
+
+We welcome contributions! Fork the repository, create a feature branch, run the linters and tests, then open a pull request.
+
+### Feature Requests
+
+To propose new ideas, open an issue using the *Feature request* template.
+
+### Newcomer-Friendly Issues
+
+Issues labeled `good first issue` or `help wanted` are ideal starting points for new contributors.
+
+## Release Notes
+
+See [CHANGELOG.md](CHANGELOG.md) for the history of released versions.
 
 ## Conclusion
 
