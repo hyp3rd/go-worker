@@ -1,7 +1,9 @@
 ---
 # For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
 version: v2
-name: buf.build/hyp3rd/go-worker
+modules:
+  - path: proto
+    name: buf.build/hyp3rd/go-worker
 deps:
   - buf.build/googleapis/googleapis
 lint:

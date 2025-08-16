@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package worker.v1;
+
+option go_package = "github.com/hyp3rd/go-worker/pkg/worker/v1;workerpb";
+
+message Task {
+  string name = 1;
+  string payload = 2;
+}
+
+message RegisterTasksRequest {
+  repeated Task tasks = 1;
+}
+
+message RegisterTasksResponse {
+  repeated string ids = 1;
+}
+
+message StreamResultsRequest {}
+
+message StreamResultsResponse {
+  string id = 1;
+  string output = 2;
+  string error = 3;
+}
+
+service WorkerService {
+  rpc RegisterTasks(RegisterTasksRequest) returns (RegisterTasksResponse);
+  rpc StreamResults(StreamResultsRequest) returns (stream StreamResultsResponse);
+}
