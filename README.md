@@ -32,7 +32,46 @@ flowchart LR
 The service allows clients to register tasks, stream results, cancel running
 tasks and query their status.
 
-### Example
+### Handlers and Payloads
+
+The server registers handlers keyed by name. Each handler consists of a `Make` function that constructs the expected payload type, and a `Fn` function that executes the task logic using the unpacked payload.
+
+Clients send a `Task` message containing a `name` and a serialized `payload` using `google.protobuf.Any`. The server automatically unpacks the `Any` payload into the correct type based on the registered handler and passes it to the corresponding function.
+
+Here is an example of registering a handler and sending a task with a payload:
+
+```go
+// Server-side handler registration
+tm.RegisterHandler("create_user", worker.Handler{
+    Make: func() any { return &workerpb.CreateUserPayload{} },
+    Fn: func(ctx context.Context, payload any) (any, error) {
+        p := payload.(*workerpb.CreateUserPayload)
+        // Handle user creation logic here
+        return &workerpb.CreateUserResponse{UserId: "1234"}, nil
+    },
+})
+
+// Client-side task creation with payload
+payload, err := anypb.New(&workerpb.CreateUserPayload{
+    Username: "newuser",
+    Email:    "newuser@example.com",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+task := &workerpb.Task{
+    Name:    "create_user",
+    Payload: payload,
+}
+_, err = client.RegisterTasks(ctx, &workerpb.RegisterTasksRequest{
+    Tasks: []*workerpb.Task{task},
+})
+```
+
+**Note on deadlines:** When the client uses a stream context with a deadline, exceeding the deadline will terminate the stream but **does not cancel the tasks running on the server**. To properly handle cancellation, use separate contexts for the task execution or use the `close_on_completion` flag (if implemented) to close the stream once tasks complete.
+
+### API Example
 
 ```go
 tm := worker.NewTaskManagerWithDefaults(context.Background())
@@ -44,9 +83,18 @@ workerpb.RegisterWorkerServiceServer(gs, srv)
 
 client := workerpb.NewWorkerServiceClient(conn)
 
-// register a task
+// register a task with payload
+payload, err := anypb.New(&workerpb.DemoPayload{Message: "hello world"})
+if err != nil {
+    log.Fatal(err)
+}
 _, _ = client.RegisterTasks(ctx, &workerpb.RegisterTasksRequest{
-    Tasks: []*workerpb.Task{{Name: "demo", Description: "demo task"}},
+    Tasks: []*workerpb.Task{
+        {
+            Name:    "demo",
+            Payload: payload,
+        },
+    },
 })
 
 // cancel by id

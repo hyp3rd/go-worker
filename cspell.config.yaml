@@ -4,10 +4,12 @@ ignorePaths: []
 dictionaryDefinitions: []
 dictionaries: []
 words:
+  - anypb
   - Atoi
   - Codacy
   - containedctx
   - cyclop
+  - durationpb
   - errcheck
   - ewrap
   - Fprint
@@ -20,6 +22,8 @@ words:
   - nolint
   - protogen
   - protoimpl
+  - protoreflect
+  - sarif
   - stdlib
   - stdlib's
   - strconv

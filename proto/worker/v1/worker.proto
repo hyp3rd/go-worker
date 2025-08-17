@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package worker.v1;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 
 option go_package = "github.com/hyp3rd/go-worker/pkg/worker/v1;workerpb";
@@ -12,6 +13,7 @@ message Task {
   int32 priority = 3;
   int32 retries = 4;
   google.protobuf.Duration retry_delay = 5;
+  google.protobuf.Any payload = 6;
 }
 
 message RegisterTasksRequest {
@@ -22,7 +24,10 @@ message RegisterTasksResponse {
   repeated string ids = 1;
 }
 
-message StreamResultsRequest {}
+message StreamResultsRequest {
+  repeated string ids = 1; // only these
+  bool close_on_completion = 2; // server ends stream when all are terminal
+}
 
 message StreamResultsResponse {
   string id = 1;
@@ -46,6 +51,11 @@ message GetTaskResponse {
   string status = 3;
   string output = 4;
   string error = 5;
+}
+
+message CreateUserPayload {
+  string name = 1;
+  string email = 2;
 }
 
 service WorkerService {
