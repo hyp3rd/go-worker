@@ -13,7 +13,12 @@ message Task {
   int32 priority = 3;
   int32 retries = 4;
   google.protobuf.Duration retry_delay = 5;
-  google.protobuf.Any payload = 6;
+
+  google.protobuf.Any payload = 6; // the typed input for `name`
+  // Generic envelope bits useful for most handlers:
+  string correlation_id = 7; // trace across systems
+  string idempotency_key = 8; // dedupe on the server/handler
+  map<string, string> metadata = 9; // free-form tags
 }
 
 message RegisterTasksRequest {
@@ -51,11 +56,6 @@ message GetTaskResponse {
   string status = 3;
   string output = 4;
   string error = 5;
-}
-
-message CreateUserPayload {
-  string name = 1;
-  string email = 2;
 }
 
 service WorkerService {

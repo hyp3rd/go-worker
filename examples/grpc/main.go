@@ -7,8 +7,11 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -28,22 +31,22 @@ const (
 
 func handlers() map[string]worker.HandlerSpec {
 	handlers := map[string]worker.HandlerSpec{
-		"create_user": {
-			Make: func() protoreflect.ProtoMessage { return &workerpb.CreateUserPayload{} },
+		"send_email": {
+			Make: func() protoreflect.ProtoMessage { return &workerpb.SendEmailPayload{} },
 			Fn: func(ctx context.Context, p protoreflect.ProtoMessage) (any, error) {
-				in, ok := p.(*workerpb.CreateUserPayload)
+				in, ok := p.(*workerpb.SendEmailPayload)
 				if !ok {
 					return nil, status.Errorf(codes.InvalidArgument, "invalid payload type")
 				}
 				// do work...
-				return fmt.Sprintf("created %s with email %s", in.GetName(), in.GetEmail()), nil
+				return fmt.Sprintf("email sent to %s with subject %s", in.GetTo(), in.GetSubject()), nil
 			},
 		},
 		// Other Tasks:
-		// "send_email": {
-		// 	Make: func() protoreflect.ProtoMessage { return &workerpb.SendEmailPayload{} },
+		// "backup_cloud_sql": {
+		// 	Make: func() protoreflect.ProtoMessage { return &workerpb.BackupCloudSQLPayload{} },
 		// 	Fn: func(ctx context.Context, p protoreflect.ProtoMessage) (any, error) {
-		// 		in := p.(*workerpb.SendEmailPayload)
+		// 		in := p.(*workerpb.BackupCloudSQLPayload)
 		// 		// do work...
 		// 		return "ok", nil
 		// 	},
@@ -90,6 +93,44 @@ func initComponents() (*worker.TaskManager, *grpc.Server, workerpb.WorkerService
 	return tm, server, client
 }
 
+func buildTasks() []*workerpb.Task {
+	tasks := []*workerpb.Task{}
+	for i := range 3 {
+		p := &workerpb.SendEmailPayload{
+			To:      fmt.Sprintf("user-%d@example.com", i),
+			Subject: fmt.Sprintf("Hello User %d", i),
+			Body:    fmt.Sprintf("This is a test email for user %d", i),
+		}
+
+		anyP, err := anypb.New(p)
+		if err != nil {
+			log.Println(err)
+
+			return nil
+		}
+
+		// trace/idempotency IDs
+		corrID := uuid.NewString()
+		idemKey := fmt.Sprintf("send_email:%d", i)
+		meta := map[string]string{"source": "examples/grpc", "campaign": "welcome", "attempt": strconv.Itoa(i)}
+
+		tasks = append(tasks, &workerpb.Task{
+			Name:       "send_email",
+			Priority:   1,
+			Retries:    1,
+			RetryDelay: durationpb.New(time.Second),
+			Payload:    anyP,
+
+			// Generic envelope fields
+			CorrelationId:  corrID,
+			IdempotencyKey: idemKey,
+			Metadata:       meta,
+		})
+	}
+
+	return tasks
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -112,27 +153,11 @@ func main() {
 	// }
 
 	// 1) Build the tasks
-	tasks := []*workerpb.Task{}
-	for i := range 3 {
-		p := &workerpb.CreateUserPayload{
-			Name:  fmt.Sprintf("user-%d", i),
-			Email: fmt.Sprintf("user-%d@example.com", i),
-		}
+	tasks := buildTasks()
+	if len(tasks) == 0 {
+		fmt.Fprintln(os.Stderr, "Failed to build tasks")
 
-		anyP, err := anypb.New(p)
-		if err != nil {
-			log.Println(err)
-
-			return
-		}
-
-		tasks = append(tasks, &workerpb.Task{
-			Name:       "create_user",
-			Priority:   1,
-			Retries:    1,
-			RetryDelay: durationpb.New(time.Second),
-			Payload:    anyP,
-		})
+		return
 	}
 
 	ctxWithCancel, cancel := context.WithTimeout(context.Background(), timeout)

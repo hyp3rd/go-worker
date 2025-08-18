@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package worker.v1;
+
+option go_package = "github.com/hyp3rd/go-worker/pkg/worker/v1;workerpb";
+
+// Example Payload
+message SendEmailPayload {
+  string to = 1;
+  string subject = 2;
+  string body = 3;
+}

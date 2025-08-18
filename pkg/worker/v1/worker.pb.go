@@ -24,15 +24,19 @@ const (
 )
 
 type Task struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Priority      int32                  `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
-	Retries       int32                  `protobuf:"varint,4,opt,name=retries,proto3" json:"retries,omitempty"`
-	RetryDelay    *durationpb.Duration   `protobuf:"bytes,5,opt,name=retry_delay,json=retryDelay,proto3" json:"retry_delay,omitempty"`
-	Payload       *anypb.Any             `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Priority    int32                  `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
+	Retries     int32                  `protobuf:"varint,4,opt,name=retries,proto3" json:"retries,omitempty"`
+	RetryDelay  *durationpb.Duration   `protobuf:"bytes,5,opt,name=retry_delay,json=retryDelay,proto3" json:"retry_delay,omitempty"`
+	Payload     *anypb.Any             `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"` // the typed input for `name`
+	// Generic envelope bits useful for most handlers:
+	CorrelationId  string            `protobuf:"bytes,7,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`                                            // trace across systems
+	IdempotencyKey string            `protobuf:"bytes,8,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`                                         // dedupe on the server/handler
+	Metadata       map[string]string `protobuf:"bytes,9,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // free-form tags
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Task) Reset() {
@@ -103,6 +107,27 @@ func (x *Task) GetRetryDelay() *durationpb.Duration {
 func (x *Task) GetPayload() *anypb.Any {
 	if x != nil {
 		return x.Payload
+	}
+	return nil
+}
+
+func (x *Task) GetCorrelationId() string {
+	if x != nil {
+		return x.CorrelationId
+	}
+	return ""
+}
+
+func (x *Task) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *Task) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
 	}
 	return nil
 }
@@ -507,63 +532,11 @@ func (x *GetTaskResponse) GetError() string {
 	return ""
 }
 
-type CreateUserPayload struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateUserPayload) Reset() {
-	*x = CreateUserPayload{}
-	mi := &file_worker_v1_worker_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateUserPayload) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateUserPayload) ProtoMessage() {}
-
-func (x *CreateUserPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_worker_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateUserPayload.ProtoReflect.Descriptor instead.
-func (*CreateUserPayload) Descriptor() ([]byte, []int) {
-	return file_worker_v1_worker_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *CreateUserPayload) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *CreateUserPayload) GetEmail() string {
-	if x != nil {
-		return x.Email
-	}
-	return ""
-}
-
 var File_worker_v1_worker_proto protoreflect.FileDescriptor
 
 const file_worker_v1_worker_proto_rawDesc = "" +
 	"\n" +
-	"\x16worker/v1/worker.proto\x12\tworker.v1\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\"\xde\x01\n" +
+	"\x16worker/v1/worker.proto\x12\tworker.v1\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa6\x03\n" +
 	"\x04Task\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
@@ -571,7 +544,13 @@ const file_worker_v1_worker_proto_rawDesc = "" +
 	"\aretries\x18\x04 \x01(\x05R\aretries\x12:\n" +
 	"\vretry_delay\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\n" +
 	"retryDelay\x12.\n" +
-	"\apayload\x18\x06 \x01(\v2\x14.google.protobuf.AnyR\apayload\"=\n" +
+	"\apayload\x18\x06 \x01(\v2\x14.google.protobuf.AnyR\apayload\x12%\n" +
+	"\x0ecorrelation_id\x18\a \x01(\tR\rcorrelationId\x12'\n" +
+	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x129\n" +
+	"\bmetadata\x18\t \x03(\v2\x1d.worker.v1.Task.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"=\n" +
 	"\x14RegisterTasksRequest\x12%\n" +
 	"\x05tasks\x18\x01 \x03(\v2\x0f.worker.v1.TaskR\x05tasks\")\n" +
 	"\x15RegisterTasksResponse\x12\x10\n" +
@@ -593,10 +572,7 @@ const file_worker_v1_worker_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
 	"\x06status\x18\x03 \x01(\tR\x06status\x12\x16\n" +
 	"\x06output\x18\x04 \x01(\tR\x06output\x12\x14\n" +
-	"\x05error\x18\x05 \x01(\tR\x05error\"=\n" +
-	"\x11CreateUserPayload\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05email\x18\x02 \x01(\tR\x05email2\xc6\x02\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error2\xc6\x02\n" +
 	"\rWorkerService\x12R\n" +
 	"\rRegisterTasks\x12\x1f.worker.v1.RegisterTasksRequest\x1a .worker.v1.RegisterTasksResponse\x12T\n" +
 	"\rStreamResults\x12\x1f.worker.v1.StreamResultsRequest\x1a .worker.v1.StreamResultsResponse0\x01\x12I\n" +
@@ -629,27 +605,28 @@ var file_worker_v1_worker_proto_goTypes = []any{
 	(*CancelTaskResponse)(nil),    // 6: worker.v1.CancelTaskResponse
 	(*GetTaskRequest)(nil),        // 7: worker.v1.GetTaskRequest
 	(*GetTaskResponse)(nil),       // 8: worker.v1.GetTaskResponse
-	(*CreateUserPayload)(nil),     // 9: worker.v1.CreateUserPayload
+	nil,                           // 9: worker.v1.Task.MetadataEntry
 	(*durationpb.Duration)(nil),   // 10: google.protobuf.Duration
 	(*anypb.Any)(nil),             // 11: google.protobuf.Any
 }
 var file_worker_v1_worker_proto_depIdxs = []int32{
 	10, // 0: worker.v1.Task.retry_delay:type_name -> google.protobuf.Duration
 	11, // 1: worker.v1.Task.payload:type_name -> google.protobuf.Any
-	0,  // 2: worker.v1.RegisterTasksRequest.tasks:type_name -> worker.v1.Task
-	1,  // 3: worker.v1.WorkerService.RegisterTasks:input_type -> worker.v1.RegisterTasksRequest
-	3,  // 4: worker.v1.WorkerService.StreamResults:input_type -> worker.v1.StreamResultsRequest
-	5,  // 5: worker.v1.WorkerService.CancelTask:input_type -> worker.v1.CancelTaskRequest
-	7,  // 6: worker.v1.WorkerService.GetTask:input_type -> worker.v1.GetTaskRequest
-	2,  // 7: worker.v1.WorkerService.RegisterTasks:output_type -> worker.v1.RegisterTasksResponse
-	4,  // 8: worker.v1.WorkerService.StreamResults:output_type -> worker.v1.StreamResultsResponse
-	6,  // 9: worker.v1.WorkerService.CancelTask:output_type -> worker.v1.CancelTaskResponse
-	8,  // 10: worker.v1.WorkerService.GetTask:output_type -> worker.v1.GetTaskResponse
-	7,  // [7:11] is the sub-list for method output_type
-	3,  // [3:7] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	9,  // 2: worker.v1.Task.metadata:type_name -> worker.v1.Task.MetadataEntry
+	0,  // 3: worker.v1.RegisterTasksRequest.tasks:type_name -> worker.v1.Task
+	1,  // 4: worker.v1.WorkerService.RegisterTasks:input_type -> worker.v1.RegisterTasksRequest
+	3,  // 5: worker.v1.WorkerService.StreamResults:input_type -> worker.v1.StreamResultsRequest
+	5,  // 6: worker.v1.WorkerService.CancelTask:input_type -> worker.v1.CancelTaskRequest
+	7,  // 7: worker.v1.WorkerService.GetTask:input_type -> worker.v1.GetTaskRequest
+	2,  // 8: worker.v1.WorkerService.RegisterTasks:output_type -> worker.v1.RegisterTasksResponse
+	4,  // 9: worker.v1.WorkerService.StreamResults:output_type -> worker.v1.StreamResultsResponse
+	6,  // 10: worker.v1.WorkerService.CancelTask:output_type -> worker.v1.CancelTaskResponse
+	8,  // 11: worker.v1.WorkerService.GetTask:output_type -> worker.v1.GetTaskResponse
+	8,  // [8:12] is the sub-list for method output_type
+	4,  // [4:8] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_worker_v1_worker_proto_init() }

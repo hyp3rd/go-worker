@@ -9,6 +9,7 @@ words:
   - Codacy
   - containedctx
   - cyclop
+  - dedupe
   - durationpb
   - errcheck
   - ewrap
@@ -20,6 +21,7 @@ words:
   - ireturn
   - Newf
   - nolint
+  - Println
   - protogen
   - protoimpl
   - protoreflect

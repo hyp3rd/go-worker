@@ -71,7 +71,7 @@ _, err = client.RegisterTasks(ctx, &workerpb.RegisterTasksRequest{
 
 **Note on deadlines:** When the client uses a stream context with a deadline, exceeding the deadline will terminate the stream but **does not cancel the tasks running on the server**. To properly handle cancellation, use separate contexts for the task execution or use the `close_on_completion` flag (if implemented) to close the stream once tasks complete.
 
-### API Example
+## API Example
 
 ```go
 tm := worker.NewTaskManagerWithDefaults(context.Background())
@@ -83,16 +83,27 @@ workerpb.RegisterWorkerServiceServer(gs, srv)
 
 client := workerpb.NewWorkerServiceClient(conn)
 
+import (
+    "github.com/google/uuid"
+)
+
 // register a task with payload
-payload, err := anypb.New(&workerpb.DemoPayload{Message: "hello world"})
+payload, err := anypb.New(&workerpb.CreateUserPayload{
+    Username: "newuser",
+    Email:    "newuser@example.com",
+})
 if err != nil {
     log.Fatal(err)
 }
+
 _, _ = client.RegisterTasks(ctx, &workerpb.RegisterTasksRequest{
     Tasks: []*workerpb.Task{
         {
-            Name:    "demo",
-            Payload: payload,
+            Name:           "create_user",
+            Payload:        payload,
+            CorrelationId:  uuid.NewString(),
+            IdempotencyKey: "create_user:newuser@example.com",
+            Metadata:       map[string]string{"source": "api_example", "role": "admin"},
         },
     },
 })
