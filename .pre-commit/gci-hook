@@ -15,7 +15,15 @@ ensure_go_module_initialized() {
 # Constants
 # #######################################
 GO_BIN_PATH="$(go env GOPATH)/bin"
-GOFILES_NOVENDOR=$(find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./.git/*")
+GOFILES=$(find . -type f -name '*.go' -not -path "./pkg/api/*" -not -path "./vendor/*" -not -path "./.gocache/*" -not -path "./.git/*")
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+
+if [[ -f "${ROOT_DIR}/.project-settings.env" ]]; then
+	# shellcheck disable=SC1090
+	source "${ROOT_DIR}/.project-settings.env"
+fi
+
+GCI_PREFIX="${GCI_PREFIX:-github.com/hyp3rd/starter}"
 
 # #######################################
 # Install dependencies to run the pre-commit hook
@@ -52,8 +60,8 @@ hook() {
 
 	echo "Running gci..."
 
-	for file in ${GOFILES_NOVENDOR}; do
-		"${GO_BIN_PATH}"/gci write -s standard -s default -s blank -s dot -s "prefix(github.com/hyp3rd/go-worker)" -s localmodule --skip-vendor --skip-generated "${file}" || exit 1
+	for file in ${GOFILES}; do
+		"${GO_BIN_PATH}"/gci write -s standard -s default -s blank -s dot -s "prefix(${GCI_PREFIX})" -s localmodule --skip-vendor --skip-generated "${file}" || exit 1
 	done
 
 	popd >/dev/null || exit

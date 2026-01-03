@@ -612,6 +612,7 @@ var (
 		(*anypb.Any)(nil),             // 11: google.protobuf.Any
 	}
 )
+
 var file_worker_v1_worker_proto_depIdxs = []int32{
 	10, // 0: worker.v1.Task.retry_delay:type_name -> google.protobuf.Duration
 	11, // 1: worker.v1.Task.payload:type_name -> google.protobuf.Any

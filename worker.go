@@ -84,7 +84,13 @@ func NewTaskManagerWithDefaults(ctx context.Context) *TaskManager {
 //   - `timeout` is the default timeout for tasks, defaults to 5 minute
 //   - `retryDelay` is the default delay between retries, defaults to 1 second
 //   - `maxRetries` is the default maximum number of retries, defaults to 3
-func NewTaskManager(ctx context.Context, maxWorkers int, maxTasks int, tasksPerSecond float64, timeout time.Duration, retryDelay time.Duration, maxRetries int) *TaskManager {
+func NewTaskManager(
+	ctx context.Context,
+	maxWorkers, maxTasks int,
+	tasksPerSecond float64,
+	timeout, retryDelay time.Duration,
+	maxRetries int,
+) *TaskManager {
 	// avoid values that would lock the program
 	maxWorkers = int(math.Max(float64(runtime.NumCPU()), float64(maxWorkers)))
 	maxTasks = int(math.Max(DefaultMaxTasks, float64(maxTasks)))
@@ -138,6 +144,8 @@ func (tm *TaskManager) IsEmpty() bool {
 }
 
 // StartWorkers starts the task manager and its goroutines.
+//
+//nolint:revive
 func (tm *TaskManager) StartWorkers(ctx context.Context) {
 	tm.workerMutex.Lock()
 
@@ -153,11 +161,8 @@ func (tm *TaskManager) StartWorkers(ctx context.Context) {
 	tm.workerMutex.Unlock()
 
 	// start the scheduler
-	tm.wg.Add(1)
 
-	go func() {
-		defer tm.wg.Done()
-
+	tm.wg.Go(func() {
 		ticker := time.NewTicker(1 * time.Second)
 
 		for {
@@ -177,13 +182,10 @@ func (tm *TaskManager) StartWorkers(ctx context.Context) {
 				tm.mutex.Unlock()
 			}
 		}
-	}()
+	})
 	// Start the task re-scheduler
-	tm.wg.Add(1)
 
-	go func() {
-		defer tm.wg.Done()
-
+	tm.wg.Go(func() {
 		for {
 			select {
 			case <-tm.quit:
@@ -202,7 +204,7 @@ func (tm *TaskManager) StartWorkers(ctx context.Context) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // SetMaxWorkers adjusts the number of worker goroutines.
@@ -231,6 +233,8 @@ func (tm *TaskManager) SetMaxWorkers(maxWorkers int) {
 			close(tm.workerQuit[i])
 			tm.workerQuit = tm.workerQuit[:i]
 		}
+	default:
+		// no change
 	}
 
 	tm.MaxWorkers = maxWorkers
@@ -263,7 +267,7 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task *Task) error {
 	// Check if context is done before waiting on the limiter
 	err = ctx.Err()
 	if err != nil {
-		tm.cancelTask(task, Cancelled, false)
+		tm.execCancelTask(task, Cancelled, false)
 
 		return ewrap.Wrapf(err, "failed to get context for task %v", task.ID)
 	}
@@ -271,7 +275,7 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task *Task) error {
 	err = tm.limiter.Wait(ctx)
 	if err != nil {
 		// the task has been cancelled at this time
-		tm.cancelTask(task, RateLimited, !errors.Is(err, context.Canceled))
+		tm.execCancelTask(task, RateLimited, !errors.Is(err, context.Canceled))
 
 		return ewrap.Wrapf(err, "failed to wait for limiter for task %v", task.ID)
 	}
@@ -355,8 +359,6 @@ func (tm *TaskManager) Stop() {
 //   - If the task execution fails, it retries the task up to max retries with a delay between retries.
 //   - If the task fails with all retries exhausted, it cancels the task and returns an error.
 func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout time.Duration) (any, error) {
-	// defer tm.wg.Done()
-
 	// get the task
 	task, err := tm.GetTask(id)
 	if err != nil {
@@ -377,13 +379,18 @@ func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout ti
 		return nil, err
 	}
 
+	var taskTimeout time.Duration
+	if timeout > 0 {
+		taskTimeout = timeout
+	} else {
+		taskTimeout = tm.Timeout
+	}
 	// create a new context for this task
-	taskCtx, cancel := context.WithTimeout(task.Ctx, tm.Timeout)
+	taskCtx, cancel := context.WithTimeout(task.Ctx, taskTimeout)
 	defer cancel()
 
 	// reserve a token from the limiter
 	reserveToken := tm.limiter.Reserve()
-
 	// if reservation is not okay, wait and retry
 	if !reserveToken.OK() {
 		task.setRateLimited()
@@ -391,11 +398,11 @@ func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout ti
 		select {
 		case <-time.After(reserveToken.Delay()):
 		case <-tm.quit:
-			tm.cancelTask(task, Cancelled, false)
+			tm.execCancelTask(task, Cancelled, false)
 
 			return nil, ErrTaskCancelled
 		case <-taskCtx.Done():
-			tm.cancelTask(task, Cancelled, false)
+			tm.execCancelTask(task, Cancelled, false)
 
 			return nil, ErrTaskCancelled
 		}
@@ -409,7 +416,7 @@ func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout ti
 	// if task execution fails, cancel task
 	if err != nil {
 		task.setError(err)
-		tm.cancelTask(task, Failed, false)
+		tm.execCancelTask(task, Failed, false)
 
 		return nil, err
 	}
@@ -429,7 +436,7 @@ func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout ti
 
 // CancelAll cancels all tasks.
 func (tm *TaskManager) CancelAll() {
-	tm.Registry.Range(func(key, value any) bool {
+	tm.Registry.Range(func(_, value any) bool {
 		task, ok := value.(*Task)
 		if !ok {
 			return true
@@ -444,7 +451,7 @@ func (tm *TaskManager) CancelAll() {
 			return true
 		}
 		// cancel the task
-		tm.cancelTask(task, Cancelled, true)
+		tm.execCancelTask(task, Cancelled, true)
 
 		return true
 	})
@@ -462,7 +469,7 @@ func (tm *TaskManager) CancelTask(id uuid.UUID) {
 	}
 
 	// cancel the task
-	tm.cancelTask(task, Cancelled, true)
+	tm.execCancelTask(task, Cancelled, true)
 }
 
 // GetCancelledTasks gets the cancelled tasks channel
@@ -545,7 +552,7 @@ func (tm *TaskManager) GetTask(id uuid.UUID) (*Task, error) {
 // GetTasks gets all tasks.
 func (tm *TaskManager) GetTasks() []*Task {
 	tasks := make([]*Task, 0, tm.MaxTasks)
-	tm.Registry.Range(func(key, value any) bool {
+	tm.Registry.Range(func(_, value any) bool {
 		task, ok := value.(*Task)
 		if !ok {
 			return false
@@ -630,8 +637,8 @@ func (tm *TaskManager) retryTask(task *Task) {
 	}
 }
 
-// cancelTask cancels a task.
-func (tm *TaskManager) cancelTask(task *Task, status TaskStatus, notifyWG bool) {
+// execCancelTask cancels a task.
+func (tm *TaskManager) execCancelTask(task *Task, status TaskStatus, notifyWG bool) {
 	tm.mutex.Lock()
 	defer tm.mutex.Unlock()
 
@@ -651,7 +658,7 @@ func (tm *TaskManager) cancelTask(task *Task, status TaskStatus, notifyWG bool) 
 	// update the task in the registry
 	tm.Registry.Store(task.ID, task)
 
-	//nolint:exhaustive // we handle here only cancelled or failed cases.
+	//nolint:revive,exhaustive // we handle here only cancelled or failed cases.
 	switch status {
 	case Cancelled:
 		tm.metrics.cancelled.Add(1)

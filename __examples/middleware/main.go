@@ -42,7 +42,7 @@ func main() {
 		ID:       uuid.New(),
 		Priority: 1,
 		Execute: func(ctx context.Context, args ...any) (val any, err error) {
-			return func(a int, b int) (val any, err error) {
+			return func(a, b int) (val any, err error) {
 				return a + b, err
 			}(2, 5)
 		},
