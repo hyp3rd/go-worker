@@ -95,6 +95,7 @@ func initComponents() (*worker.TaskManager, *grpc.Server, workerpb.WorkerService
 
 func buildTasks() []*workerpb.Task {
 	tasks := []*workerpb.Task{}
+
 	for i := range 3 {
 		p := &workerpb.SendEmailPayload{
 			To:      fmt.Sprintf("user-%d@example.com", i),

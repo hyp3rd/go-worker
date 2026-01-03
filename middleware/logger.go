@@ -77,7 +77,7 @@ func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...*worker.
 	mw.next.RegisterTasks(ctx, tasks...)
 }
 
-// Start the task manager.
+// StartWorkers starts the task manager.
 func (mw *loggerMiddleware) StartWorkers(ctx context.Context) {
 	defer func(begin time.Time) {
 		// var numCPU = runtime.GOMAXPROCS(0)

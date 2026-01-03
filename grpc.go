@@ -88,7 +88,7 @@ func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTa
 
 // StreamResults streams task results back to the client.
 //
-//nolint:cyclop
+//nolint:cyclop,revive
 func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream workerpb.WorkerService_StreamResultsServer) error {
 	ctx := stream.Context()
 
@@ -157,6 +157,8 @@ func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream wo
 				if req.GetCloseOnCompletion() && remaining == 0 {
 					return nil // clean EOF on client
 				}
+			default:
+				// not done yet
 			}
 		}
 	}
@@ -165,7 +167,7 @@ func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream wo
 }
 
 // CancelTask cancels an active task by its ID.
-func (s *GRPCServer) CancelTask(ctx context.Context, req *workerpb.CancelTaskRequest) (*workerpb.CancelTaskResponse, error) {
+func (s *GRPCServer) CancelTask(_ context.Context, req *workerpb.CancelTaskRequest) (*workerpb.CancelTaskResponse, error) {
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("parse id: %w", err)
@@ -177,7 +179,7 @@ func (s *GRPCServer) CancelTask(ctx context.Context, req *workerpb.CancelTaskReq
 }
 
 // GetTask returns information about a task by its ID.
-func (s *GRPCServer) GetTask(ctx context.Context, req *workerpb.GetTaskRequest) (*workerpb.GetTaskResponse, error) {
+func (s *GRPCServer) GetTask(_ context.Context, req *workerpb.GetTaskRequest) (*workerpb.GetTaskResponse, error) {
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("parse id: %w", err)

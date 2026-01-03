@@ -112,7 +112,7 @@ type Task struct {
 	Cancelled   atomic.Int64       `json:"cancelled"`   // Cancelled is the time the task was cancelled
 	Retries     int                `json:"retries"`     // Retries is the maximum number of retries for failed tasks
 	RetryDelay  time.Duration      `json:"retry_delay"` // RetryDelay is the time delay between retries for failed tasks
-	index       int                `json:"-"`           // index is the index of the task in the task manager
+	index       int                // index is the index of the task in the task manager
 }
 
 // NewTask creates a new task with the provided function and context.
@@ -143,24 +143,24 @@ func (task *Task) IsValid() (err error) {
 		err = ErrInvalidTaskID
 		task.Error.Store(err.Error())
 
-		return
+		return err
 	}
 
 	if task.Ctx == nil {
 		err = ErrInvalidTaskContext
 		task.Error.Store(err.Error())
 
-		return
+		return err
 	}
 
 	if task.Execute == nil {
 		err = ErrInvalidTaskFunc
 		task.Error.Store(err.Error())
 
-		return
+		return err
 	}
 
-	return
+	return err
 }
 
 // WaitCancelled waits for the task to be cancelled.

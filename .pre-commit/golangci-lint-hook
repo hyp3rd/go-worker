@@ -16,15 +16,21 @@ ensure_go_module_initialized() {
 # #######################################
 GO_BIN_PATH="$(go env GOPATH)/bin"
 GOLANGCI_LINT_INSTALL_URL="https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh"
-GOLANGCI_LINT_VERSION="v2.4.0"
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+
+if [[ -f "${ROOT_DIR}/.project-settings.env" ]]; then
+	# shellcheck disable=SC1090
+	source "${ROOT_DIR}/.project-settings.env"
+fi
+GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-v2.7.2}"
 
 # #######################################
 # Install dependencies to run the pre-commit hook
 # #######################################
 install_dependencies() {
 	# check if golangci-lint is installed or not
-
-	if ! "${GO_BIN_PATH}"/golangci-lint --version 2>/dev/null; then
+	if ! command -v golangci-lint >/dev/null 2>&1; then
 		echo "installing golangci-lint ${GOLANGCI_LINT_VERSION}..."
 
 		# binary will be $(go env GOPATH)/bin/golangci-lint
@@ -33,6 +39,9 @@ install_dependencies() {
 		echo "Installed golangci-lint ${GOLANGCI_LINT_VERSION}"
 
 		"$(go env GOPATH)"/bin/golangci-lint --version
+
+		# export the golangci-lint path to the PATH variable
+		export PATH="${GO_BIN_PATH}:${PATH}"
 	else
 		echo "golangci-lint is already installed"
 	fi
@@ -52,7 +61,7 @@ hook() {
 	pushd "${root_dir}" || exit
 
 	echo "Running golangci-lint..."
-	"${GO_BIN_PATH}"/golangci-lint run ./... || exit 1
+	golangci-lint run --build-tags test ./... || exit 1
 
 	popd >/dev/null || exit
 }
