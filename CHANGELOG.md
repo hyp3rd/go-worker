@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [v0.1.1] - 2025-08-18
 
-### Added
+### Added (v0.1.1)
 
 - docs: expand README with architecture and community guidance by @hyp3rd in <https://github.com/hyp3rd/go-worker/pull/9>
 - feat(api): introduce proto tooling and update Task/Worker interfaces for context support by @hyp3rd in <https://github.com/hyp3rd/go-worker/pull/11>
@@ -24,6 +24,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ## [v0.1.0] - 2025-08-16
 
-### Added
+### Added (v0.1.0)
 
 - Initial release of go-worker with prioritized concurrent task execution.
