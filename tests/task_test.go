@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,14 +10,19 @@ import (
 	worker "github.com/hyp3rd/go-worker"
 )
 
+const testOutput = "out"
+
 func TestTask_IsValid(t *testing.T) {
+	t.Parallel()
 	// valid task
 	task := &worker.Task{
 		ID:      uuid.New(),
 		Ctx:     context.Background(),
-		Execute: func(ctx context.Context, args ...any) (any, error) { return nil, nil },
+		Execute: func(_ context.Context, _ ...any) (any, error) { return testOutput, nil },
 	}
-	if err := task.IsValid(); err != nil {
+
+	err := task.IsValid()
+	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
@@ -24,9 +30,11 @@ func TestTask_IsValid(t *testing.T) {
 	task = &worker.Task{
 		ID:      uuid.Nil,
 		Ctx:     context.Background(),
-		Execute: func(ctx context.Context, args ...any) (any, error) { return nil, nil },
+		Execute: func(_ context.Context, _ ...any) (any, error) { return testOutput, nil },
 	}
-	if err := task.IsValid(); err != worker.ErrInvalidTaskID {
+
+	err = task.IsValid()
+	if !errors.Is(err, worker.ErrInvalidTaskID) {
 		t.Fatalf("expected ErrInvalidTaskID, got %v", err)
 	}
 
@@ -34,9 +42,11 @@ func TestTask_IsValid(t *testing.T) {
 	task = &worker.Task{
 		ID:      uuid.New(),
 		Ctx:     nil,
-		Execute: func(ctx context.Context, args ...any) (any, error) { return nil, nil },
+		Execute: func(_ context.Context, _ ...any) (any, error) { return testOutput, nil },
 	}
-	if err := task.IsValid(); err != worker.ErrInvalidTaskContext {
+
+	err = task.IsValid()
+	if !errors.Is(err, worker.ErrInvalidTaskContext) {
 		t.Fatalf("expected ErrInvalidTaskContext, got %v", err)
 	}
 
@@ -46,7 +56,9 @@ func TestTask_IsValid(t *testing.T) {
 		Ctx:     context.Background(),
 		Execute: nil,
 	}
-	if err := task.IsValid(); err != worker.ErrInvalidTaskFunc {
+
+	err = task.IsValid()
+	if !errors.Is(err, worker.ErrInvalidTaskFunc) {
 		t.Fatalf("expected ErrInvalidTaskFunc, got %v", err)
 	}
 }

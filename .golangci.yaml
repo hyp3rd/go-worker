@@ -14,7 +14,7 @@ run:
   issues-exit-code: 2
   # Include test files or not.
   # Default: true
-  tests: false
+  tests: true
   # List of build tags, all linters use it.
   # Default: []
   # build-tags:
@@ -42,7 +42,7 @@ run:
   # Define the Go version limit.
   # Mainly related to generics support since go1.18.
   # Default: use Go version from the go.mod file, fallback on the env var `GOVERSION`, fallback on 1.17
-  go: "1.25.5"
+  go: "1.25.6"
 
 linters:
   # Enable specific linter
@@ -61,6 +61,7 @@ linters:
     - recvcheck
     - tagliatelle
     - tagalign
+    - testpackage
     - wsl
   exclusions:
     paths:
