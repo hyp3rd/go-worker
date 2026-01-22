@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -75,10 +76,12 @@ func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTa
 		tasks = append(tasks, task)
 	}
 
-	s.svc.RegisterTasks(ctx, tasks...)
+	err := s.svc.RegisterTasks(ctx, tasks...)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "register tasks: %v", err)
+	}
 
 	ids := make([]string, len(tasks))
-
 	for i, task := range tasks {
 		ids[i] = task.ID.String()
 	}
@@ -86,34 +89,88 @@ func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTa
 	return &workerpb.RegisterTasksResponse{Ids: ids}, nil
 }
 
-// StreamResults streams task results back to the client.
-//
-//nolint:cyclop,revive
-func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream workerpb.WorkerService_StreamResultsServer) error {
-	ctx := stream.Context()
+func streamContextErr(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		// client went away; stop streaming (tasks continue)
+		return ewrap.Wrap(status.FromContextError(ctx.Err()).Err(), "client went away; stop streaming")
+	default:
+		return nil
+	}
+}
 
-	target := map[string]struct{}{}
-	for _, id := range req.GetIds() {
+func buildTargetSet(ids []string) (map[string]struct{}, int) {
+	target := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
 		target[id] = struct{}{}
 	}
 
-	remaining := len(target)
-	isTarget := func(id string) bool {
-		if len(target) == 0 {
-			return true
-		} // firehose mode
+	return target, len(target)
+}
 
-		_, ok := target[id]
-
-		return ok
+func shouldStreamResult(target map[string]struct{}, id string) bool {
+	if len(target) == 0 {
+		return true
 	}
 
-	for res := range s.svc.StreamResults() {
-		select {
-		case <-ctx.Done():
-			// client went away; stop streaming (tasks continue)
-			return ewrap.Wrap(status.FromContextError(ctx.Err()).Err(), "client went away; stop streaming")
-		default:
+	_, ok := target[id]
+
+	return ok
+}
+
+func makeStreamResponse(id string, res Result) *workerpb.StreamResultsResponse {
+	out := &workerpb.StreamResultsResponse{Id: id}
+
+	if res.Result != nil {
+		out.Output = fmt.Sprint(res.Result)
+	}
+
+	if res.Error != nil {
+		out.Error = res.Error.Error()
+	}
+
+	return out
+}
+
+func shouldCloseStream(
+	req *workerpb.StreamResultsRequest,
+	target map[string]struct{},
+	remaining *int,
+	id string,
+	taskStatus TaskStatus,
+) bool {
+	if len(target) == 0 {
+		return false
+	}
+
+	if !isTerminalStatus(taskStatus) {
+		return false
+	}
+
+	if _, ok := target[id]; ok {
+		delete(target, id)
+
+		*remaining--
+	}
+
+	return req.GetCloseOnCompletion() && *remaining == 0
+}
+
+// StreamResults streams task results back to the client.
+//
+//nolint:revive
+func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream workerpb.WorkerService_StreamResultsServer) error {
+	ctx := stream.Context()
+
+	ch, unsubscribe := s.svc.SubscribeResults(DefaultMaxTasks)
+	defer unsubscribe()
+
+	target, remaining := buildTargetSet(req.GetIds())
+
+	for res := range ch {
+		err := streamContextErr(ctx)
+		if err != nil {
+			return err
 		}
 
 		if res.Task == nil {
@@ -121,45 +178,18 @@ func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream wo
 		}
 
 		id := res.Task.ID.String()
-
-		if !isTarget(id) {
+		if !shouldStreamResult(target, id) {
 			continue
 		}
 
-		out := &workerpb.StreamResultsResponse{
-			Id: id,
-		}
-
-		if res.Result != nil {
-			out.Output = fmt.Sprint(res.Result)
-		}
-
-		if res.Error != nil {
-			out.Error = res.Error.Error()
-		}
-
-		err := stream.Send(out)
+		err = stream.Send(makeStreamResponse(id, res))
 		if err != nil {
 			return ewrap.Wrap(err, "failed to send stream response")
 		}
 
-		// If we’re tracking a specific set, check for terminal state.
-		if len(target) > 0 {
-			//nolint:exhaustive
-			switch res.Task.Status {
-			case Completed, Cancelled, Failed:
-				if _, ok := target[id]; ok {
-					delete(target, id)
-
-					remaining--
-				}
-
-				if req.GetCloseOnCompletion() && remaining == 0 {
-					return nil // clean EOF on client
-				}
-			default:
-				// not done yet
-			}
+		status := res.Task.Status()
+		if shouldCloseStream(req, target, &remaining, id, status) {
+			return nil
 		}
 	}
 
@@ -170,10 +200,17 @@ func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream wo
 func (s *GRPCServer) CancelTask(_ context.Context, req *workerpb.CancelTaskRequest) (*workerpb.CancelTaskResponse, error) {
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
-		return nil, fmt.Errorf("parse id: %w", err)
+		return nil, ewrap.Wrap(err, "parse id")
 	}
 
-	s.svc.CancelTask(id)
+	err = s.svc.CancelTask(id)
+	if err != nil {
+		if errors.Is(err, ErrTaskNotFound) {
+			return nil, status.Errorf(codes.NotFound, "task %s not found", id)
+		}
+
+		return nil, status.Errorf(codes.Internal, "cancel task: %v", err)
+	}
 
 	return &workerpb.CancelTaskResponse{}, nil
 }
@@ -182,25 +219,30 @@ func (s *GRPCServer) CancelTask(_ context.Context, req *workerpb.CancelTaskReque
 func (s *GRPCServer) GetTask(_ context.Context, req *workerpb.GetTaskRequest) (*workerpb.GetTaskResponse, error) {
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
-		return nil, fmt.Errorf("parse id: %w", err)
+		return nil, ewrap.Wrap(err, "parse id")
 	}
 
 	task, err := s.svc.GetTask(id)
 	if err != nil {
-		return nil, fmt.Errorf("get task: %w", err)
+		if errors.Is(err, ErrTaskNotFound) {
+			return nil, status.Errorf(codes.NotFound, "task %s not found", id)
+		}
+
+		return nil, status.Errorf(codes.Internal, "get task: %v", err)
 	}
 
 	resp := &workerpb.GetTaskResponse{
 		Id:     task.ID.String(),
 		Name:   task.Name,
-		Status: task.Status.String(),
+		Status: task.Status().String(),
 	}
 
-	if v := task.Result.Load(); v != nil {
+	if v := task.Result(); v != nil {
 		resp.Output = fmt.Sprint(v)
 	}
 
-	if v := task.Error.Load(); v != nil {
+	v := task.Error()
+	if v != nil {
 		resp.Error = fmt.Sprint(v)
 	}
 

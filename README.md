@@ -2,17 +2,24 @@
 
 [![Go](https://github.com/hyp3rd/go-worker/actions/workflows/go.yml/badge.svg)](https://github.com/hyp3rd/go-worker/actions/workflows/go.yml) [![CodeQL](https://github.com/hyp3rd/go-worker/actions/workflows/codeql.yml/badge.svg)](https://github.com/hyp3rd/go-worker/actions/workflows/codeql.yml) [![Go Report Card](https://goreportcard.com/badge/github.com/hyp3rd/go-worker)](https://goreportcard.com/report/github.com/hyp3rd/go-worker) [![Go Reference](https://pkg.go.dev/badge/github.com/hyp3rd/go-worker.svg)](https://pkg.go.dev/github.com/hyp3rd/go-worker) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-`go-worker` provides a simple way to manage and execute tasks concurrently and prioritized, leveraging a `TaskManager` that spawns a pool of `workers`.
-Each `Task` represents a function scheduled by priority.
+`go-worker` provides a simple way to manage and execute prioritized tasks concurrently, backed by a `TaskManager` with a worker pool and a priority queue.
+
+## Breaking changes (January 2026)
+
+- `Stop()` removed. Use `StopGraceful(ctx)` or `StopNow()`.
+- Local result streaming uses `SubscribeResults(buffer)`; `GetResults()`/`StreamResults()` are removed.
+- `RegisterTasks` now returns an error.
+- `Task.Execute` replaces `Fn` in examples.
+- `NewGRPCServer` requires a handler map.
 
 ## Features
 
-- Task prioritization: You can register tasks with a priority level influencing the execution order.
-- Concurrent execution: Tasks are executed concurrently by a pool of workers.
-- Middleware: You can apply middleware to the `TaskManager` to add additional functionality.
-- Results: You can access the results of the tasks via the `Results` channel.
-- Rate limiting: You can rate limit the tasks schedule by setting a maximum number of jobs per second.
-- Cancellation: You can cancel Tasks before or while they are running.
+- Task prioritization: tasks are scheduled by priority.
+- Concurrent execution: tasks run in a worker pool with strict rate limiting.
+- Middleware: wrap the `TaskManager` for logging/metrics, etc.
+- Results: fan-out subscriptions via `SubscribeResults`.
+- Cancellation: cancel tasks before or during execution.
+- Retries: exponential backoff with capped delays.
 
 ## Architecture
 
@@ -22,7 +29,7 @@ flowchart LR
     TaskManager --> Queue[Priority Queue]
     Queue -->|dispatch| Worker1[Worker]
     Queue -->|dispatch| WorkerN[Worker]
-    Worker1 --> Results[Results Channel]
+    Worker1 --> Results[Result Broadcaster]
     WorkerN --> Results
 ```
 
@@ -38,54 +45,43 @@ The server registers handlers keyed by name. Each handler consists of a `Make` f
 
 Clients send a `Task` message containing a `name` and a serialized `payload` using `google.protobuf.Any`. The server automatically unpacks the `Any` payload into the correct type based on the registered handler and passes it to the corresponding function.
 
-Here is an example of registering a handler and sending a task with a payload:
-
 ```go
-// Server-side handler registration
-tm.RegisterHandler("create_user", worker.Handler{
-    Make: func() any { return &workerpb.CreateUserPayload{} },
-    Fn: func(ctx context.Context, payload any) (any, error) {
-        p := payload.(*workerpb.CreateUserPayload)
-        // Handle user creation logic here
-        return &workerpb.CreateUserResponse{UserId: "1234"}, nil
+handlers := map[string]worker.HandlerSpec{
+    "create_user": {
+        Make: func() protoreflect.ProtoMessage { return &workerpb.CreateUserPayload{} },
+        Fn: func(ctx context.Context, payload protoreflect.ProtoMessage) (any, error) {
+            p := payload.(*workerpb.CreateUserPayload)
+            return &workerpb.CreateUserResponse{UserId: "1234"}, nil
+        },
     },
-})
-
-// Client-side task creation with payload
-payload, err := anypb.New(&workerpb.CreateUserPayload{
-    Username: "newuser",
-    Email:    "newuser@example.com",
-})
-if err != nil {
-    log.Fatal(err)
 }
 
-task := &workerpb.Task{
-    Name:    "create_user",
-    Payload: payload,
-}
-_, err = client.RegisterTasks(ctx, &workerpb.RegisterTasksRequest{
-    Tasks: []*workerpb.Task{task},
-})
+srv := worker.NewGRPCServer(tm, handlers)
 ```
 
-**Note on deadlines:** When the client uses a stream context with a deadline, exceeding the deadline will terminate the stream but **does not cancel the tasks running on the server**. To properly handle cancellation, use separate contexts for the task execution or use the `close_on_completion` flag (if implemented) to close the stream once tasks complete.
+**Note on deadlines:** When the client uses a stream context with a deadline, exceeding the deadline will terminate the stream but **does not cancel the tasks running on the server**. To properly handle cancellation, use separate contexts for task execution or cancel tasks explicitly.
 
-## API Example
+## API Example (gRPC)
 
 ```go
 tm := worker.NewTaskManagerWithDefaults(context.Background())
-srv := worker.NewGRPCServer(tm)
+handlers := map[string]worker.HandlerSpec{
+    "create_user": {
+        Make: func() protoreflect.ProtoMessage { return &workerpb.CreateUserPayload{} },
+        Fn: func(ctx context.Context, payload protoreflect.ProtoMessage) (any, error) {
+            p := payload.(*workerpb.CreateUserPayload)
+            return &workerpb.CreateUserResponse{UserId: "1234"}, nil
+        },
+    },
+}
+
+srv := worker.NewGRPCServer(tm, handlers)
 
 gs := grpc.NewServer()
 workerpb.RegisterWorkerServiceServer(gs, srv)
 // listen and serve ...
 
 client := workerpb.NewWorkerServiceClient(conn)
-
-import (
-    "github.com/google/uuid"
-)
 
 // register a task with payload
 payload, err := anypb.New(&workerpb.CreateUserPayload{
@@ -121,30 +117,39 @@ fmt.Println(res.Status)
 ### Quick Start
 
 ```go
-tm := worker.NewTaskManager(2, 10, 5, time.Second, time.Second, 3)
-defer tm.Close()
+tm := worker.NewTaskManager(2, 10, 5, 30*time.Second, time.Second, 3)
 
-task := worker.Task{ID: uuid.New(), Priority: 1, Fn: func() (any, error) { return "hello", nil }}
-tm.RegisterTask(context.Background(), task)
-
-for res := range tm.GetResults() {
-    fmt.Println(res)
+task := &worker.Task{
+    ID:       uuid.New(),
+    Priority: 1,
+    Ctx:      context.Background(),
+    Execute:  func(ctx context.Context, _ ...any) (any, error) { return "hello", nil },
 }
+
+if err := tm.RegisterTask(context.Background(), task); err != nil {
+    log.Fatal(err)
+}
+
+results, cancel := tm.SubscribeResults(1)
+res := <-results
+cancel()
+
+fmt.Println(res.Result)
 ```
 
 ### Initialization
 
 Create a new `TaskManager` by calling the `NewTaskManager()` function with the following parameters:
 
-- `maxWorkers` is the number of workers to start. If 0 is specified, it will default to the number of available CPUs
-- `maxTasks` is the maximum number of tasks that can be executed at once, defaults to 10
-- `tasksPerSecond` is the rate limit of tasks that can be executed per second, defaults to 1
-- `timeout` is the default timeout for tasks, defaults to 5 minute
+- `maxWorkers` is the number of workers to start. If <= 0, it will default to the number of available CPUs
+- `maxTasks` is the maximum number of queued tasks and rate limiter burst size, defaults to 10
+- `tasksPerSecond` is the rate limit of tasks that can be executed per second. If <= 0, rate limiting is disabled
+- `timeout` is the default timeout for tasks, defaults to 5 minutes
 - `retryDelay` is the default delay between retries, defaults to 1 second
-- `maxRetries` is the default maximum number of retries, defaults to 3
+- `maxRetries` is the default maximum number of retries, defaults to 3 (0 disables retries)
 
 ```go
-tm := worker.NewTaskManager(4, 10, 5, time.Second*30, time.Second*30, 3)
+tm := worker.NewTaskManager(4, 10, 5, 30*time.Second, 1*time.Second, 3)
 ```
 
 ### Registering Tasks
@@ -153,50 +158,62 @@ Register new tasks by calling the `RegisterTasks()` method of the `TaskManager` 
 
 ```go
 id := uuid.New()
-task := worker.Task{
+
+task := &worker.Task{
     ID:          id,
     Name:        "Some task",
     Description: "Here goes the description of the task",
     Priority:    10,
-    Fn: func() (any, error) {
-        emptyFile, err := os.Create(path.Join("examples", "test", "res", fmt.Sprintf("1st__EmptyFile___%v.txt", j)))
-        if err != nil {
-            log.Fatal(err)
-        }
-        emptyFile.Close()
+    Ctx:         context.Background(),
+    Execute: func(ctx context.Context, _ ...any) (any, error) {
         time.Sleep(time.Second)
-        return fmt.Sprintf("** task number %v with id %s executed", j, id), err
+        return fmt.Sprintf("task %s executed", id), nil
     },
-    Retries:    10,
-    RetryDelay: 3,
+    Retries:    3,
+    RetryDelay: 2 * time.Second,
 }
 
-task2 := worker.Task{
+task2 := &worker.Task{
     ID:       uuid.New(),
     Priority: 10,
-    Fn:       func() (val any, err error){ return "Hello, World!", err },
+    Ctx:      context.Background(),
+    Execute:  func(ctx context.Context, _ ...any) (any, error) { return "Hello, World!", nil },
 }
 
-tm.RegisterTasks(context.Background(), task, task2)
+if err := tm.RegisterTasks(context.Background(), task, task2); err != nil {
+    log.Fatal(err)
+}
 ```
 
 ### Stopping the Task Manager
 
-You can stop the task manager and its goroutines by calling the Stop() method of the TaskManager struct.
+Use `StopGraceful` to stop accepting new tasks and wait for completion, or `StopNow` to cancel tasks immediately.
 
 ```go
-tm.Stop()
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+_ = tm.StopGraceful(ctx)
+// or
+// tm.StopNow()
 ```
 
 ### Results
 
-The results of the tasks can be accessed via the Results channel of the `TaskManager`, calling the `GetResults()` method.
+Subscribe to results with a dedicated channel per subscriber.
 
 ```go
-for result := range tm.GetResults() {
-   // Do something with the result
-}
+results, cancel := tm.SubscribeResults(10)
 
+ctx, cancelWait := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancelWait()
+
+_ = tm.Wait(ctx)
+cancel()
+
+for res := range results {
+    fmt.Println(res)
+}
 ```
 
 ### Cancellation
@@ -204,13 +221,13 @@ for result := range tm.GetResults() {
 You can cancel a `Task` by calling the `CancelTask()` method of the `TaskManager` struct and passing in the task ID as a parameter.
 
 ```go
-tm.CancelTask(task.ID)
+_ = tm.CancelTask(task.ID)
 ```
 
-You can cancel all tasks by calling the `CancelAllTasks()` method of the `TaskManager` struct.
+You can cancel all tasks by calling the `CancelAll()` method of the `TaskManager` struct.
 
 ```go
-tm.CancelAllTasks()
+tm.CancelAll()
 ```
 
 ### Middleware
@@ -218,8 +235,7 @@ tm.CancelAllTasks()
 You can apply middleware to the `TaskManager` by calling the `RegisterMiddleware()` function and passing in the `TaskManager` and the middleware functions.
 
 ```go
-tm = worker.RegisterMiddleware(tm,
-    //middleware.YourMiddleware,
+srv := worker.RegisterMiddleware[worker.Service](tm,
     func(next worker.Service) worker.Service {
         return middleware.NewLoggerMiddleware(next, logger)
     },
@@ -242,81 +258,34 @@ import (
 )
 
 func main() {
-    tm := worker.NewTaskManager(4, 10, 5, time.Second*3, time.Second*30, 3)
+    tm := worker.NewTaskManager(4, 10, 5, 3*time.Second, 30*time.Second, 3)
 
-    defer tm.Close()
-
-    var srv worker.Service = tm
-    // apply middleware in the same order as you want to execute them
-    srv = worker.RegisterMiddleware(tm,
-        // middleware.YourMiddleware,
+    var srv worker.Service = worker.RegisterMiddleware[worker.Service](tm,
         func(next worker.Service) worker.Service {
             return middleware.NewLoggerMiddleware(next, middleware.DefaultLogger())
         },
     )
 
-    defer srv.Close()
-
-    task := worker.Task{
+    task := &worker.Task{
         ID:       uuid.New(),
         Priority: 1,
-        Fn: func() (val any, err error) {
-            return func(a int, b int) (val any, err error) {
-                return a + b, err
-            }(2, 5)
+        Ctx:      context.Background(),
+        Execute: func(ctx context.Context, _ ...any) (any, error) {
+            return 2 + 5, nil
         },
     }
 
-    // Invalid task, it doesn't have a function
-    task1 := worker.Task{
-        ID:       uuid.New(),
-        Priority: 10,
-        // Fn:       func() (val any, err error) { return "Hello, World from Task 1!", err },
-    }
+    _ = srv.RegisterTasks(context.Background(), task)
 
-    task2 := worker.Task{
-        ID:       uuid.New(),
-        Priority: 5,
-        Fn: func() (val any, err error) {
-            time.Sleep(time.Second * 2)
-            return "Hello, World from Task 2!", err
-        },
-    }
+    results, cancel := srv.SubscribeResults(10)
+    defer cancel()
 
-    task3 := worker.Task{
-        ID:       uuid.New(),
-        Priority: 90,
-        Fn: func() (val any, err error) {
-            // Simulate a long running task
-            // time.Sleep(3 * time.Second)
-            return "Hello, World from Task 3!", err
-        },
-    }
+    ctx, cancelWait := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancelWait()
+    _ = srv.Wait(ctx)
 
-    task4 := worker.Task{
-        ID:       uuid.New(),
-        Priority: 150,
-        Fn: func() (val any, err error) {
-            // Simulate a long running task
-            time.Sleep(1 * time.Second)
-            return "Hello, World from Task 4!", err
-        },
-    }
-
-    srv.RegisterTasks(context.Background(), task, task1, task2, task3)
-
-    srv.CancelTask(task3.ID)
-
-    srv.RegisterTask(context.Background(), task4)
-
-    // Print results
-    for result := range srv.GetResults() {
-        fmt.Println(result)
-    }
-
-    tasks := srv.GetTasks()
-    for _, task := range tasks {
-        fmt.Println(task)
+    for res := range results {
+        fmt.Println(res)
     }
 }
 ```
@@ -340,10 +309,6 @@ Issues labeled `good first issue` or `help wanted` are ideal starting points for
 ## Release Notes
 
 See [CHANGELOG.md](CHANGELOG.md) for the history of released versions.
-
-## Conclusion
-
-The worker package provides an efficient way to manage and execute tasks concurrently and with prioritization. The package is highly configurable and can be used in various scenarios.
 
 ## License
 

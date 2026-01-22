@@ -25,12 +25,11 @@ const (
 
 func main() {
 	tm := worker.NewTaskManager(context.Background(), maxWorkers, maxTasks, tasksPerSecond, timeout, retryDelay, maxRetries)
-	// Example of using zap logger from uber
+	// Example of using stdlib logger
 	logger := log.Default()
 
 	// apply middleware in the same order as you want to execute them
 	srv := worker.RegisterMiddleware[worker.Service](tm,
-		// middleware.YourMiddleware,
 		func(next worker.Service) worker.Service {
 			return middleware.NewLoggerMiddleware(next, logger)
 		},
@@ -39,27 +38,20 @@ func main() {
 	task := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
+		Ctx:      context.Background(),
 		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return "Hello, World from Task!", err },
+	}
+
+	if err := srv.RegisterTask(context.Background(), task); err != nil {
+		fmt.Fprint(os.Stderr, err)
+		return
 	}
 
 	res, err := srv.ExecuteTask(context.Background(), task.ID, taskTimeout)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
-	} else {
-		fmt.Fprint(os.Stdout, res)
-	}
-
-	err = srv.RegisterTask(context.Background(), task)
-	if err != nil {
-		fmt.Fprint(os.Stderr, err)
-
 		return
 	}
 
-	res, err = srv.ExecuteTask(context.Background(), task.ID, taskTimeout)
-	if err != nil {
-		fmt.Fprint(os.Stderr, err)
-	} else {
-		fmt.Fprintln(os.Stdout, res)
-	}
+	fmt.Fprintln(os.Stdout, res)
 }

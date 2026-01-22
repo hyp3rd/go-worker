@@ -36,6 +36,7 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 		ID:       uuid.New(),
 		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return nil, err },
 		Priority: 10,
+		Ctx:      context.Background(),
 	}
 
 	err := tm.RegisterTask(context.TODO(), task)
@@ -57,28 +58,6 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 	}
 }
 
-func TestTaskManager_Start(t *testing.T) {
-	t.Parallel()
-
-	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
-
-	task := &worker.Task{
-		ID:       uuid.New(),
-		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return taskName, err },
-		Priority: 10,
-	}
-
-	err := tm.RegisterTask(context.TODO(), task)
-	if err != nil {
-		t.Fatalf(errMsgFailedRegisterTask, err)
-	}
-
-	res := <-tm.StreamResults()
-	if res.Task == nil {
-		t.Fatal("Task result was not added to the results channel")
-	}
-}
-
 func TestTaskManager_StreamResults(t *testing.T) {
 	t.Parallel()
 
@@ -88,6 +67,7 @@ func TestTaskManager_StreamResults(t *testing.T) {
 		ID:       uuid.New(),
 		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return taskName, err },
 		Priority: 10,
+		Ctx:      context.Background(),
 	}
 
 	err := tm.RegisterTask(context.TODO(), task)
@@ -95,8 +75,11 @@ func TestTaskManager_StreamResults(t *testing.T) {
 		t.Fatalf(errMsgFailedRegisterTask, err)
 	}
 
-	results := <-tm.StreamResults()
-	if results.Task == nil {
+	results, cancel := tm.SubscribeResults(1)
+	defer cancel()
+
+	res := <-results
+	if res.Task == nil {
 		t.Fatal("results channel is nil")
 	}
 }
@@ -110,6 +93,7 @@ func TestTaskManager_GetTask(t *testing.T) {
 		ID:       uuid.New(),
 		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return taskName, err },
 		Priority: 10,
+		Ctx:      context.Background(),
 	}
 
 	err := tm.RegisterTask(context.TODO(), task)
@@ -136,6 +120,7 @@ func TestTaskManager_ExecuteTask(t *testing.T) {
 		ID:       uuid.New(),
 		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return taskName, err },
 		Priority: 10,
+		Ctx:      context.Background(),
 	}
 
 	err := tm.RegisterTask(context.TODO(), task)
