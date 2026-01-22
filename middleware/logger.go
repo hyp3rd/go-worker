@@ -15,7 +15,6 @@ import (
 // Logger describes a logging interface allowing to implement different external, or custom logger.
 type Logger interface {
 	Printf(format string, v ...any)
-	// Errorf(format string, v ...any)
 }
 
 // this is a safeguard, breaking on compile time in case
@@ -23,8 +22,7 @@ type Logger interface {
 // see https://golang.org/doc/faq#guarantee_satisfies_interface
 var _ Logger = &log.Logger{}
 
-// DefaultLogger returns a `Logger` implementation
-// backed by stdlib's log.
+// DefaultLogger returns a `Logger` implementation backed by stdlib's log.
 func DefaultLogger() *log.Logger {
 	return log.New(os.Stdout, "", log.LstdFlags)
 }
@@ -44,14 +42,14 @@ func NewLoggerMiddleware(next worker.Service, logger Logger) worker.Service {
 // RegisterTask registers a new task to the worker.
 func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task *worker.Task) error {
 	defer func(begin time.Time) {
-		if task.Error.Load() != nil {
-			mw.logger.Printf("error while registering task ID %v - %v", task.ID, task.Error.Load())
+		err := task.Error()
+		if err != nil {
+			mw.logger.Printf("error while registering task ID %v - %v", task.ID, err)
 
 			return
 		}
 
 		mw.logger.Printf("registering task ID %v with priority: %v", task.ID, task.Priority)
-
 		mw.logger.Printf("`RegisterTask` took: %s", time.Since(begin))
 	}(time.Now())
 
@@ -59,11 +57,12 @@ func (mw *loggerMiddleware) RegisterTask(ctx context.Context, task *worker.Task)
 }
 
 // RegisterTasks registers multiple tasks to the worker.
-func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...*worker.Task) {
+func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...*worker.Task) error {
 	defer func(begin time.Time) {
 		for _, task := range tasks {
-			if task.Error.Load() != nil {
-				mw.logger.Printf("error while registering task ID %v - %v", task.ID, task.Error.Load())
+			err := task.Error()
+			if err != nil {
+				mw.logger.Printf("error while registering task ID %v - %v", task.ID, err)
 
 				continue
 			}
@@ -74,13 +73,12 @@ func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...*worker.
 		mw.logger.Printf("`RegisterTasks` took: %s", time.Since(begin))
 	}(time.Now())
 
-	mw.next.RegisterTasks(ctx, tasks...)
+	return mw.next.RegisterTasks(ctx, tasks...)
 }
 
 // StartWorkers starts the task manager.
 func (mw *loggerMiddleware) StartWorkers(ctx context.Context) {
 	defer func(begin time.Time) {
-		// var numCPU = runtime.GOMAXPROCS(0)
 		numCPU := runtime.NumCPU()
 		mw.logger.Printf("the task manager is running on %v CPUs", numCPU)
 		mw.logger.Printf("`StartWorkers` took: %s", time.Since(begin))
@@ -94,18 +92,27 @@ func (mw *loggerMiddleware) SetMaxWorkers(n int) {
 	mw.next.SetMaxWorkers(n)
 }
 
-// Stop the task manage.
-func (mw *loggerMiddleware) Stop() {
-	defer func(begin time.Time) {
-		mw.logger.Printf("`Stop` took: %s", time.Since(begin))
-	}(time.Now())
-
-	mw.next.Stop()
+// Wait for the task manager to finish all tasks.
+func (mw *loggerMiddleware) Wait(ctx context.Context) error {
+	return mw.next.Wait(ctx)
 }
 
-// Wait for the task manager to finish all tasks.
-func (mw *loggerMiddleware) Wait(timeout time.Duration) {
-	mw.next.Wait(timeout)
+// StopGraceful stops the task manager after all tasks finish.
+func (mw *loggerMiddleware) StopGraceful(ctx context.Context) error {
+	defer func(begin time.Time) {
+		mw.logger.Printf("`StopGraceful` took: %s", time.Since(begin))
+	}(time.Now())
+
+	return mw.next.StopGraceful(ctx)
+}
+
+// StopNow stops the task manager immediately.
+func (mw *loggerMiddleware) StopNow() {
+	defer func(begin time.Time) {
+		mw.logger.Printf("`StopNow` took: %s", time.Since(begin))
+	}(time.Now())
+
+	mw.next.StopNow()
 }
 
 // CancelAll cancels all tasks.
@@ -118,14 +125,14 @@ func (mw *loggerMiddleware) CancelAll() {
 }
 
 // CancelTask cancels a task by its ID.
-func (mw *loggerMiddleware) CancelTask(id uuid.UUID) {
+func (mw *loggerMiddleware) CancelTask(id uuid.UUID) error {
 	defer func(begin time.Time) {
 		mw.logger.Printf("`CancelTask` took: %s", time.Since(begin))
 	}(time.Now())
 
 	mw.logger.Printf("cancelling task ID %v", id)
 
-	mw.next.CancelTask(id)
+	return mw.next.CancelTask(id)
 }
 
 // GetActiveTasks gets the number of active tasks.
@@ -133,19 +140,9 @@ func (mw *loggerMiddleware) GetActiveTasks() int {
 	return mw.next.GetActiveTasks()
 }
 
-// StreamResults streams the results channel.
-func (mw *loggerMiddleware) StreamResults() <-chan worker.Result {
-	return mw.next.StreamResults()
-}
-
-// GetResults returns the results channel.
-func (mw *loggerMiddleware) GetResults() []worker.Result {
-	return mw.next.GetResults()
-}
-
-// GetCancelledTasks streams the cancelled tasks channel.
-func (mw *loggerMiddleware) GetCancelledTasks() <-chan *worker.Task {
-	return mw.next.GetCancelledTasks()
+// SubscribeResults streams the results channel.
+func (mw *loggerMiddleware) SubscribeResults(buffer int) (<-chan worker.Result, func()) {
+	return mw.next.SubscribeResults(buffer)
 }
 
 // GetTask gets a task by its ID.
@@ -171,4 +168,14 @@ func (mw *loggerMiddleware) ExecuteTask(ctx context.Context, id uuid.UUID, timeo
 	mw.logger.Printf("executing task ID %v", id)
 
 	return mw.next.ExecuteTask(ctx, id, timeout)
+}
+
+// GetMetrics returns a snapshot of metrics.
+func (mw *loggerMiddleware) GetMetrics() worker.MetricsSnapshot {
+	return mw.next.GetMetrics()
+}
+
+// SetRetentionPolicy configures task registry retention.
+func (mw *loggerMiddleware) SetRetentionPolicy(policy worker.RetentionPolicy) {
+	mw.next.SetRetentionPolicy(policy)
 }

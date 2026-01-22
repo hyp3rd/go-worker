@@ -11,42 +11,52 @@ import (
 type Service interface {
 	workerOperations
 	taskOperations
+	metricsOperations
+	retentionOperations
 }
 
 type workerOperations interface {
-	// RegisterTask registers a new task to the worker
+	// RegisterTask registers a new task to the worker.
 	RegisterTask(ctx context.Context, task *Task) error
-	// RegisterTasks registers multiple tasks to the worker
-	RegisterTasks(ctx context.Context, tasks ...*Task)
-	// StartWorkers starts the task manager's workers
+	// RegisterTasks registers multiple tasks to the worker.
+	RegisterTasks(ctx context.Context, tasks ...*Task) error
+	// StartWorkers starts the task manager's workers (idempotent).
 	StartWorkers(ctx context.Context)
-	// SetMaxWorkers adjusts the worker pool size
+	// SetMaxWorkers adjusts the worker pool size.
 	SetMaxWorkers(n int)
-	// Wait for all tasks to finish
-	Wait(timeout time.Duration)
-	// Stop the task manage
-	Stop()
+	// Wait waits for all tasks to finish or context cancellation.
+	Wait(ctx context.Context) error
+	// StopGraceful stops accepting new tasks and waits for completion.
+	StopGraceful(ctx context.Context) error
+	// StopNow cancels running tasks and stops workers immediately.
+	StopNow()
 }
 
 type taskOperations interface {
-	// CancelAll cancels all tasks
+	// CancelAll cancels all tasks.
 	CancelAll()
-	// CancelTask cancels a task by its ID
-	CancelTask(id uuid.UUID)
-	// GetActiveTasks returns the number of active tasks
+	// CancelTask cancels a task by its ID.
+	CancelTask(id uuid.UUID) error
+	// GetActiveTasks returns the number of running tasks.
 	GetActiveTasks() int
-	// StreamResults streams the `Result` channel
-	StreamResults() <-chan Result
-	// GetResults returns the `Result` channel
-	GetResults() []Result
-	// GetCancelledTasks gets the cancelled tasks channel
-	GetCancelledTasks() <-chan *Task
-	// GetTask gets a task by its ID
+	// SubscribeResults returns a results channel and unsubscribe function.
+	SubscribeResults(buffer int) (<-chan Result, func())
+	// GetTask gets a task by its ID.
 	GetTask(id uuid.UUID) (task *Task, err error)
-	// GetTasks gets all tasks
+	// GetTasks gets all tasks.
 	GetTasks() []*Task
-	// ExecuteTask executes a task given its ID and returns the result
+	// ExecuteTask executes a task given its ID and returns the result.
 	ExecuteTask(ctx context.Context, id uuid.UUID, timeout time.Duration) (any, error)
+}
+
+type metricsOperations interface {
+	// GetMetrics returns a snapshot of task metrics.
+	GetMetrics() MetricsSnapshot
+}
+
+type retentionOperations interface {
+	// SetRetentionPolicy configures task registry retention.
+	SetRetentionPolicy(policy RetentionPolicy)
 }
 
 // Middleware describes a generic middleware.

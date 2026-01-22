@@ -25,22 +25,18 @@ const (
 func main() {
 	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, interval, interval, maxRetries)
 
-	// defer tm.Stop()
-
 	var srv worker.Service = tm
 	// apply middleware in the same order as you want to execute them
 	srv = worker.RegisterMiddleware(srv,
-		// middleware.YourMiddleware,
 		func(next worker.Service) worker.Service {
 			return middleware.NewLoggerMiddleware(next, middleware.DefaultLogger())
 		},
 	)
 
-	// defer srv.Stop()
-
 	task := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 1,
+		Ctx:      context.Background(),
 		Execute: func(ctx context.Context, args ...any) (val any, err error) {
 			return func(a, b int) (val any, err error) {
 				return a + b, err
@@ -52,7 +48,7 @@ func main() {
 	task1 := &worker.Task{
 		ID:       uuid.New(),
 		Priority: 10,
-		// Execute:       func() (val any, err error) { return "Hello, World from Task 1!", err },
+		Ctx:      context.Background(),
 	}
 
 	task2 := &worker.Task{
@@ -75,6 +71,7 @@ func main() {
 
 			return "Hello, World from Task 3!", err
 		},
+		Ctx: context.Background(),
 	}
 
 	task4 := &worker.Task{
@@ -86,30 +83,45 @@ func main() {
 
 			return "Hello, World from Task 4!", err
 		},
+		Ctx: context.Background(),
 	}
 
-	srv.RegisterTasks(context.TODO(), task, task1, task2, task3)
-	srv.CancelTask(task3.ID)
+	if err := srv.RegisterTasks(context.TODO(), task, task1, task2, task3); err != nil {
+		log.Println("register tasks error", err)
+	}
 
-	err := srv.RegisterTask(context.TODO(), task4)
-	if err != nil {
+	_ = srv.CancelTask(task3.ID)
+
+	if err := srv.RegisterTask(context.TODO(), task4); err != nil {
 		log.Println("unable to register task", err)
 	}
 
 	tasks := srv.GetTasks()
 	for _, task := range tasks {
-		fmt.Fprintln(os.Stdout, task.Result)
+		fmt.Fprintln(os.Stdout, task.Result())
 	}
 
 	fmt.Fprintln(os.Stdout, "printing cancelled tasks")
 
-	// get the cancelled tasks
-	cancelledTasks := tm.GetCancelledTasks()
+	results, cancel := srv.SubscribeResults(10)
+	defer cancel()
 
-	select {
-	case task := <-cancelledTasks:
-		fmt.Fprintf(os.Stdout, "Task %s was cancelled\n", task.ID.String())
-	default:
-		fmt.Fprintln(os.Stdout, "No tasks have been cancelled yet")
+	ctx, cancelWait := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancelWait()
+	_ = srv.Wait(ctx)
+
+	for {
+		select {
+		case res, ok := <-results:
+			if !ok {
+				return
+			}
+			if res.Task != nil && res.Task.Status() == worker.Cancelled {
+				fmt.Fprintf(os.Stdout, "Task %s was cancelled\n", res.Task.ID.String())
+			}
+		default:
+			fmt.Fprintln(os.Stdout, "No tasks have been cancelled yet")
+			return
+		}
 	}
 }

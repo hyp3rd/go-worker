@@ -44,7 +44,7 @@ func main() {
 				},
 				Ctx:        context.TODO(),
 				Retries:    5,
-				RetryDelay: 1,
+				RetryDelay: time.Second,
 			}
 
 			// register the task
@@ -76,9 +76,9 @@ func main() {
 					// time.Sleep(time.Millisecond * 100)
 					return fmt.Sprintf("**** task number %v with id %s executed", j, id), err
 				},
-				// Ctx:        context.TODO(),
+				Ctx:        context.TODO(),
 				Retries:    5,
-				RetryDelay: 1,
+				RetryDelay: time.Second,
 			}
 
 			// register the task
@@ -110,7 +110,7 @@ func main() {
 			},
 			Ctx:        context.TODO(),
 			Retries:    5,
-			RetryDelay: 1,
+			RetryDelay: time.Second,
 		}
 
 		// register the task
@@ -152,8 +152,23 @@ func main() {
 		}
 	}
 
-	// wait for the tasks to finish and print the results
-	for id, result := range tm.GetResults() {
-		fmt.Fprintln(os.Stdout, id, result.String())
+	results, cancel := tm.SubscribeResults(100)
+	defer cancel()
+
+	ctx, cancelWait := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancelWait()
+
+	_ = tm.Wait(ctx)
+
+	for {
+		select {
+		case res, ok := <-results:
+			if !ok {
+				return
+			}
+			fmt.Fprintln(os.Stdout, res.String())
+		default:
+			return
+		}
 	}
 }

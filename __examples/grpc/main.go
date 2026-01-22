@@ -138,7 +138,7 @@ func main() {
 	tm, server, client := initComponents()
 
 	defer server.GracefulStop()
-	defer tm.Stop()
+	defer tm.StopNow()
 
 	// client := workerpb.NewWorkerServiceClient(conn)
 	// 1) Build the typed payload
