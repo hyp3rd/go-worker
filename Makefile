@@ -1,9 +1,9 @@
 include .project-settings.env
 
-GOLANGCI_LINT_VERSION ?= v2.7.2
-BUF_VERSION ?= v1.62.1
-GO_VERSION ?= 1.25.5
-GCI_PREFIX ?= github.com/hyp3rd/starter
+GOLANGCI_LINT_VERSION ?= v2.8.0
+BUF_VERSION ?= v1.64.0
+GO_VERSION ?= 1.25.6
+GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true
 
 GOFILES = $(shell find . -type f -name '*.go' -not -path "./pkg/api/*" -not -path "./vendor/*" -not -path "./.gocache/*" -not -path "./.git/*")
@@ -22,13 +22,6 @@ bench:
 update-deps:
 	go get -v -u ./...
 	go mod tidy
-
-run:
-	go run ./cmd/app
-
-run-container:
-	docker compose down -v
-	COMPOSE_BAKE=true docker compose up --build
 
 init:
 	./setup-project.sh --module $(shell grep "^module " go.mod | awk '{print $$2}')
@@ -200,8 +193,9 @@ help:
 	@echo "  sec\t\t\t\tRun security analysis (govulncheck, gosec)"
 	@echo
 	@echo "  update-deps\t\t\tUpdate all dependencies and tidy go.mod"
-	@echo "  run\t\t\t\tRun the sample application"
-	@echo "  run-container\t\t\tRun the sample application via docker compose"
+	@echo "  update-toolchain\t\tUpdate all development tools to their latest versions"
+	@echo "  bench\t\t\t\tRun benchmarks"
+	@echo "  proto\t\t\t\tRun all protobuf related tasks (update, lint, generate, format)"
 	@echo
 	@echo
 	@echo "For more information, see the project README."
