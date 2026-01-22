@@ -19,6 +19,8 @@ const (
 	errMsgFailedRegisterTask = "RegisterTask returned error: %v"
 	retentionPollInterval    = 10 * time.Millisecond
 	retentionTimeout         = time.Second
+	metricsWaitTimeout       = time.Second
+	metricsTaskSleep         = 10 * time.Millisecond
 )
 
 func TestTaskManager_NewTaskManager(t *testing.T) {
@@ -183,4 +185,46 @@ func TestTaskManager_RetentionMaxEntries(t *testing.T) {
 	}
 
 	t.Fatalf("expected registry retention to prune to 1 entry, got %d", len(tm.GetTasks()))
+}
+
+func TestTaskManager_MetricsLatency(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+	task := &worker.Task{
+		ID: uuid.New(),
+		Execute: func(_ context.Context, _ ...any) (any, error) {
+			time.Sleep(metricsTaskSleep)
+
+			return taskName, nil
+		},
+		Priority: 10,
+		Ctx:      context.Background(),
+	}
+
+	err := tm.RegisterTask(context.TODO(), task)
+	if err != nil {
+		t.Fatalf(errMsgFailedRegisterTask, err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), metricsWaitTimeout)
+	defer cancel()
+
+	err = tm.Wait(waitCtx)
+	if err != nil {
+		t.Fatalf("Wait returned error: %v", err)
+	}
+
+	metrics := tm.GetMetrics()
+	if metrics.TaskLatencyCount != 1 {
+		t.Fatalf("expected latency count 1, got %d", metrics.TaskLatencyCount)
+	}
+
+	if metrics.TaskLatencyMax <= 0 {
+		t.Fatalf("expected positive latency max, got %v", metrics.TaskLatencyMax)
+	}
+
+	if metrics.QueueDepth != 0 {
+		t.Fatalf("expected queue depth 0, got %d", metrics.QueueDepth)
+	}
 }

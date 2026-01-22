@@ -243,6 +243,32 @@ func (task *Task) ShouldSchedule() error {
 	return nil
 }
 
+func (task *Task) latency() (time.Duration, bool) {
+	task.mu.Lock()
+	defer task.mu.Unlock()
+
+	if task.started.IsZero() {
+		return 0, false
+	}
+
+	if !isTerminalStatus(task.status) {
+		return 0, false
+	}
+
+	var end time.Time
+	if task.status == Cancelled {
+		end = task.cancelled
+	} else {
+		end = task.completed
+	}
+
+	if end.IsZero() || end.Before(task.started) {
+		return 0, false
+	}
+
+	return end.Sub(task.started), true
+}
+
 func (task *Task) terminalAt() (time.Time, bool) {
 	task.mu.Lock()
 	defer task.mu.Unlock()

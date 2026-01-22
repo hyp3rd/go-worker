@@ -75,8 +75,6 @@ func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTa
 }
 
 // StreamResults streams task results back to the client.
-//
-//nolint:revive
 func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream workerpb.WorkerService_StreamResultsServer) error {
 	ctx := stream.Context()
 
@@ -105,8 +103,8 @@ func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream wo
 			return ewrap.Wrap(err, "failed to send stream response")
 		}
 
-		status := res.Task.Status()
-		if shouldCloseStream(req, target, &remaining, id, status) {
+		taskStatus := res.Task.Status()
+		if shouldCloseStream(req, target, &remaining, id, taskStatus) {
 			return nil
 		}
 	}

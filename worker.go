@@ -418,6 +418,13 @@ func (tm *TaskManager) GetTasks() []*Task {
 	return tasks
 }
 
+func (tm *TaskManager) queueDepth() int {
+	tm.queueMu.Lock()
+	defer tm.queueMu.Unlock()
+
+	return tm.scheduler.Len()
+}
+
 func (tm *TaskManager) spawnWorker(ctx context.Context) {
 	q := make(chan struct{})
 	tm.workerQuit = append(tm.workerQuit, q)
@@ -782,8 +789,36 @@ func (tm *TaskManager) finishTask(task *Task, status TaskStatus, result any, err
 	task.doneOnce.Do(func() {
 		tm.wg.Done()
 		tm.incrementMetric(status)
+		tm.recordLatency(task)
 
 		tm.results.Publish(Result{Task: task, Result: result, Error: err})
 		tm.maybePruneRegistry()
 	})
+}
+
+func (tm *TaskManager) recordLatency(task *Task) {
+	if task == nil {
+		return
+	}
+
+	latency, ok := task.latency()
+	if !ok {
+		return
+	}
+
+	latencyNs := latency.Nanoseconds()
+
+	tm.metrics.latencyCount.Add(1)
+	tm.metrics.latencyTotalNs.Add(latencyNs)
+
+	for {
+		current := tm.metrics.latencyMaxNs.Load()
+		if latencyNs <= current {
+			return
+		}
+
+		if tm.metrics.latencyMaxNs.CompareAndSwap(current, latencyNs) {
+			return
+		}
+	}
 }
