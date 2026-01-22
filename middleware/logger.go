@@ -174,3 +174,8 @@ func (mw *loggerMiddleware) ExecuteTask(ctx context.Context, id uuid.UUID, timeo
 func (mw *loggerMiddleware) GetMetrics() worker.MetricsSnapshot {
 	return mw.next.GetMetrics()
 }
+
+// SetRetentionPolicy configures task registry retention.
+func (mw *loggerMiddleware) SetRetentionPolicy(policy worker.RetentionPolicy) {
+	mw.next.SetRetentionPolicy(policy)
+}

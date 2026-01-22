@@ -63,6 +63,12 @@ type TaskManager struct {
 
 	metrics taskMetrics
 	results *resultBroadcaster
+
+	retentionMu        sync.RWMutex
+	retention          retentionConfig
+	retentionLastCheck atomic.Int64
+	retentionPrune     atomic.Bool
+	retentionOnce      sync.Once
 }
 
 // NewTaskManagerWithDefaults creates a new task manager with default values.
@@ -778,5 +784,6 @@ func (tm *TaskManager) finishTask(task *Task, status TaskStatus, result any, err
 		tm.incrementMetric(status)
 
 		tm.results.Publish(Result{Task: task, Result: result, Error: err})
+		tm.maybePruneRegistry()
 	})
 }

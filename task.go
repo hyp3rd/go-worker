@@ -83,13 +83,14 @@ func (ts TaskStatus) String() string {
 }
 
 func isTerminalStatus(status TaskStatus) bool {
-	//nolint:exhaustive
 	switch status {
 	case Cancelled, Failed, Completed, Invalid, ContextDeadlineReached:
 		return true
-	default:
+	case RateLimited, Queued, Running:
 		return false
 	}
+
+	return false
 }
 
 // Task represents a function that can be executed by the task manager.
@@ -240,6 +241,21 @@ func (task *Task) ShouldSchedule() error {
 	}
 
 	return nil
+}
+
+func (task *Task) terminalAt() (time.Time, bool) {
+	task.mu.Lock()
+	defer task.mu.Unlock()
+
+	if !isTerminalStatus(task.status) {
+		return time.Time{}, false
+	}
+
+	if task.status == Cancelled {
+		return task.cancelled, true
+	}
+
+	return task.completed, true
 }
 
 func (task *Task) setStatusLocked(status TaskStatus) {

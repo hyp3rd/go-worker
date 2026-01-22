@@ -117,7 +117,7 @@ fmt.Println(res.Status)
 ### Quick Start
 
 ```go
-tm := worker.NewTaskManager(2, 10, 5, 30*time.Second, time.Second, 3)
+tm := worker.NewTaskManager(context.Background(), 2, 10, 5, 30*time.Second, time.Second, 3)
 
 task := &worker.Task{
     ID:       uuid.New(),
@@ -141,6 +141,7 @@ fmt.Println(res.Result)
 
 Create a new `TaskManager` by calling the `NewTaskManager()` function with the following parameters:
 
+- `ctx` is the base context for the task manager (used for shutdown and derived task contexts)
 - `maxWorkers` is the number of workers to start. If <= 0, it will default to the number of available CPUs
 - `maxTasks` is the maximum number of queued tasks and rate limiter burst size, defaults to 10
 - `tasksPerSecond` is the rate limit of tasks that can be executed per second. If <= 0, rate limiting is disabled
@@ -149,7 +150,16 @@ Create a new `TaskManager` by calling the `NewTaskManager()` function with the f
 - `maxRetries` is the default maximum number of retries, defaults to 3 (0 disables retries)
 
 ```go
-tm := worker.NewTaskManager(4, 10, 5, 30*time.Second, 1*time.Second, 3)
+tm := worker.NewTaskManager(context.Background(), 4, 10, 5, 30*time.Second, 1*time.Second, 3)
+```
+
+Optional retention can be configured to prevent unbounded task registry growth:
+
+```go
+tm.SetRetentionPolicy(worker.RetentionPolicy{
+    TTL:        24 * time.Hour,
+    MaxEntries: 100000,
+})
 ```
 
 ### Registering Tasks
@@ -258,7 +268,7 @@ import (
 )
 
 func main() {
-    tm := worker.NewTaskManager(4, 10, 5, 3*time.Second, 30*time.Second, 3)
+    tm := worker.NewTaskManager(context.Background(), 4, 10, 5, 3*time.Second, 30*time.Second, 3)
 
     var srv worker.Service = worker.RegisterMiddleware[worker.Service](tm,
         func(next worker.Service) worker.Service {

@@ -12,6 +12,7 @@ type Service interface {
 	workerOperations
 	taskOperations
 	metricsOperations
+	retentionOperations
 }
 
 type workerOperations interface {
@@ -51,6 +52,11 @@ type taskOperations interface {
 type metricsOperations interface {
 	// GetMetrics returns a snapshot of task metrics.
 	GetMetrics() MetricsSnapshot
+}
+
+type retentionOperations interface {
+	// SetRetentionPolicy configures task registry retention.
+	SetRetentionPolicy(policy RetentionPolicy)
 }
 
 // Middleware describes a generic middleware.

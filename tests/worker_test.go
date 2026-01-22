@@ -17,6 +17,8 @@ const (
 	maxRetries               = 3
 	taskName                 = "task"
 	errMsgFailedRegisterTask = "RegisterTask returned error: %v"
+	retentionPollInterval    = 10 * time.Millisecond
+	retentionTimeout         = time.Second
 )
 
 func TestTaskManager_NewTaskManager(t *testing.T) {
@@ -136,4 +138,49 @@ func TestTaskManager_ExecuteTask(t *testing.T) {
 	if res == nil {
 		t.Fatal("Task result is nil")
 	}
+}
+
+func TestTaskManager_RetentionMaxEntries(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+	tm.SetRetentionPolicy(worker.RetentionPolicy{MaxEntries: 1})
+
+	taskA := &worker.Task{
+		ID:       uuid.New(),
+		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return taskName, err },
+		Priority: 10,
+		Ctx:      context.Background(),
+	}
+
+	taskB := &worker.Task{
+		ID:       uuid.New(),
+		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return taskName, err },
+		Priority: 10,
+		Ctx:      context.Background(),
+	}
+
+	err := tm.RegisterTasks(context.TODO(), taskA, taskB)
+	if err != nil {
+		t.Fatalf(errMsgFailedRegisterTask, err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), retentionTimeout)
+	defer cancel()
+
+	err = tm.Wait(waitCtx)
+	if err != nil {
+		t.Fatalf("Wait returned error: %v", err)
+	}
+
+	deadline := time.Now().Add(retentionTimeout)
+	for time.Now().Before(deadline) {
+		if len(tm.GetTasks()) <= 1 {
+			return
+		}
+
+		time.Sleep(retentionPollInterval)
+	}
+
+	t.Fatalf("expected registry retention to prune to 1 entry, got %d", len(tm.GetTasks()))
 }
