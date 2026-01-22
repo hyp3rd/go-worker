@@ -25,8 +25,8 @@ jobs:
           set -euo pipefail
           ref="${GITHUB_REF_NAME}"
           safe_ref="${ref//\//-}"
-          archive="go-again-${safe_ref}.tar.gz"
-          git archive --format=tar.gz --prefix="go-again-${safe_ref}/" -o "${archive}" "${ref}"
+          archive="go-worker-${safe_ref}.tar.gz"
+          git archive --format=tar.gz --prefix="go-worker-${safe_ref}/" -o "${archive}" "${ref}"
           echo "archive=${archive}" >> "$GITHUB_OUTPUT"
       - name: Compute subjects
         id: subjects
