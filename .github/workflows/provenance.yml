@@ -1,0 +1,74 @@
+---
+name: provenance
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      base64_subjects: ${{ steps.subjects.outputs.base64 }}
+      archive_name: ${{ steps.archive.outputs.archive }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Create source archive
+        id: archive
+        run: |
+          set -euo pipefail
+          ref="${GITHUB_REF_NAME}"
+          safe_ref="${ref//\//-}"
+          archive="go-again-${safe_ref}.tar.gz"
+          git archive --format=tar.gz --prefix="go-again-${safe_ref}/" -o "${archive}" "${ref}"
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+      - name: Compute subjects
+        id: subjects
+        run: |
+          set -euo pipefail
+          archive="${{ steps.archive.outputs.archive }}"
+          sum=$(sha256sum "${archive}" | awk '{print $1}')
+          printf '%s  %s\n' "$sum" "$archive" | base64 -w0 > subjects.b64
+          echo "base64=$(cat subjects.b64)" >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign source archive
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          set -euo pipefail
+          archive="${{ steps.archive.outputs.archive }}"
+          cosign sign-blob --yes --output-signature "${archive}.sig" --output-certificate "${archive}.pem" "${archive}"
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: source-archive
+          path: |
+            ${{ steps.archive.outputs.archive }}
+            ${{ steps.archive.outputs.archive }}.sig
+            ${{ steps.archive.outputs.archive }}.pem
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.archive.outputs.archive }}
+            ${{ steps.archive.outputs.archive }}.sig
+            ${{ steps.archive.outputs.archive }}.pem
+
+  provenance:
+    needs: [source]
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.source.outputs.base64_subjects }}
+      upload-assets: ${{ github.event_name == 'release' }}
+      upload-tag-name: ${{ github.ref_name }}

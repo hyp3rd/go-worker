@@ -34,7 +34,7 @@ func TestTaskManager_RegisterTask(t *testing.T) {
 	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
 	task := &worker.Task{
 		ID:       uuid.New(),
-		Execute:  func(ctx context.Context, _ ...any) (val any, err error) { return nil, err },
+		Execute:  func(_ context.Context, _ ...any) (val any, err error) { return nil, err },
 		Priority: 10,
 	}
 

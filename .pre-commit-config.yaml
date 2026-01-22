@@ -3,6 +3,7 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      - id: check-merge-conflict
       - id: check-json
       - id: pretty-format-json
         exclude: cspell.json
@@ -14,9 +15,14 @@ repos:
       - id: debug-statements
       - id: check-yaml
         files: .*\.(yaml|yml)$
-        exclude: cspell.config.yaml
+        exclude: mkdocs.yml
         args: [--allow-multiple-documents]
       - id: requirements-txt-fixer
+      - id: no-commit-to-branch
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.38.0
     hooks:
@@ -24,10 +30,6 @@ repos:
         files: \.(yaml|yml)$
         types: [file, yaml]
         entry: yamllint --strict -f parsable
-  - repo: https://github.com/hadolint/hadolint
-    rev: v2.14.0
-    hooks:
-      - id: hadolint-docker
   - repo: https://github.com/streetsidesoftware/cspell-cli
     rev: v9.4.0
     hooks:
@@ -64,4 +66,14 @@ repos:
         name: gci
         language: system
         entry: ./.pre-commit/gci-hook
+        require_serial: true
+      - id: golangci-lint
+        name: golangci-lint
+        language: system
+        entry: ./.pre-commit/golangci-lint-hook
+        require_serial: true
+      - id: unit-test
+        name: unit test
+        language: system
+        entry: ./.pre-commit/unit-test-hook
         require_serial: true

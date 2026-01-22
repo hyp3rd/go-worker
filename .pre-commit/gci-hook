@@ -23,7 +23,7 @@ if [[ -f "${ROOT_DIR}/.project-settings.env" ]]; then
 	source "${ROOT_DIR}/.project-settings.env"
 fi
 
-GCI_PREFIX="${GCI_PREFIX:-github.com/hyp3rd/starter}"
+GCI_PREFIX="${GCI_PREFIX:-github.com/hyp3rd/go-worker}"
 
 # #######################################
 # Install dependencies to run the pre-commit hook
