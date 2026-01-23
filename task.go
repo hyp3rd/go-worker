@@ -30,6 +30,16 @@ var (
 	ErrTaskCompleted = ewrap.New("task completed")
 )
 
+const (
+	retryJitterDivisor  = 5
+	retryJitterShiftA   = 13
+	retryJitterShiftB   = 7
+	retryJitterShiftC   = 17
+	retryJitterMinInt   = -1 << 63
+	retryJitterHalfUUID = 8
+	retryJitterByteBits = 8
+)
+
 type (
 	// TaskStatus is a value used to represent the task status.
 	TaskStatus uint8
@@ -371,6 +381,8 @@ func (task *Task) nextRetryDelay() (time.Duration, bool) {
 		return 0, false
 	}
 
+	attempt := task.retriesRemaining
+
 	task.retriesRemaining--
 	if task.retryBackoff <= 0 {
 		task.retryBackoff = DefaultRetryDelay
@@ -382,7 +394,69 @@ func (task *Task) nextRetryDelay() (time.Duration, bool) {
 
 	task.retryBackoff = next
 
+	delay = retryJitterDelay(delay, task.ID, attempt)
+
 	return delay, true
+}
+
+func retryJitterDelay(delay time.Duration, id uuid.UUID, attempt int) time.Duration {
+	if delay <= 0 {
+		return delay
+	}
+
+	span := delay / retryJitterDivisor
+	if span <= 0 {
+		return delay
+	}
+
+	hash := retryJitterAbs(retryJitterHash(id, attempt))
+	if hash == 0 {
+		return delay
+	}
+
+	spanInt := int64(span)
+	if spanInt <= 0 {
+		return delay
+	}
+
+	offset := time.Duration(hash%spanInt) - span/2
+
+	return delay + offset
+}
+
+func retryJitterHash(id uuid.UUID, attempt int) int64 {
+	left, right := retryJitterUUIDParts(id)
+	mix := left ^ right ^ int64(attempt)
+
+	mix ^= mix << retryJitterShiftA
+	mix ^= mix >> retryJitterShiftB
+	mix ^= mix << retryJitterShiftC
+
+	return mix
+}
+
+func retryJitterAbs(val int64) int64 {
+	if val == retryJitterMinInt {
+		return 0
+	}
+
+	if val < 0 {
+		return -val
+	}
+
+	return val
+}
+
+func retryJitterUUIDParts(id uuid.UUID) (left, right int64) {
+	for i := range retryJitterHalfUUID {
+		left |= int64(id[i]) << (retryJitterByteBits * i)
+	}
+
+	for i := range retryJitterHalfUUID {
+		right |= int64(id[i+retryJitterHalfUUID]) << (retryJitterByteBits * i)
+	}
+
+	return left, right
 }
 
 func (task *Task) initRetryState(defaultDelay time.Duration, maxRetries int) {
