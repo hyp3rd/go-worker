@@ -145,6 +145,11 @@ func (mw *loggerMiddleware) SubscribeResults(buffer int) (<-chan worker.Result, 
 	return mw.next.SubscribeResults(buffer)
 }
 
+// SetResultsDropPolicy configures how full subscriber buffers are handled.
+func (mw *loggerMiddleware) SetResultsDropPolicy(policy worker.ResultDropPolicy) {
+	mw.next.SetResultsDropPolicy(policy)
+}
+
 // GetTask gets a task by its ID.
 func (mw *loggerMiddleware) GetTask(id uuid.UUID) (task *worker.Task, err error) {
 	return mw.next.GetTask(id)

@@ -8,11 +8,12 @@ import (
 // resultBroadcaster fans out results to multiple subscribers.
 type resultBroadcaster struct {
 	input  chan Result
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	subs   map[uint64]chan Result
 	nextID uint64
 	closed atomic.Bool
 	drops  atomic.Int64
+	policy atomic.Uint32
 }
 
 func newResultBroadcaster(buffer int) *resultBroadcaster {
@@ -24,6 +25,7 @@ func newResultBroadcaster(buffer int) *resultBroadcaster {
 		input: make(chan Result, buffer),
 		subs:  make(map[uint64]chan Result),
 	}
+	broadcaster.policy.Store(uint32(DropNewest))
 
 	go broadcaster.loop()
 
@@ -96,16 +98,38 @@ func (b *resultBroadcaster) Drops() int64 {
 	return b.drops.Load()
 }
 
+func (b *resultBroadcaster) SetDropPolicy(policy ResultDropPolicy) {
+	switch policy {
+	case DropNewest, DropOldest:
+	default:
+		policy = DropNewest
+	}
+
+	b.policy.Store(uint32(policy))
+}
+
+func (b *resultBroadcaster) dropPolicy() ResultDropPolicy {
+	policy := b.policy.Load()
+	if policy > uint32(DropOldest) {
+		return DropNewest
+	}
+
+	return ResultDropPolicy(policy)
+}
+
 func (b *resultBroadcaster) loop() {
 	for res := range b.input {
-		subs := b.snapshot()
-		for _, ch := range subs {
-			select {
-			case ch <- res:
-			default:
+		policy := b.dropPolicy()
+
+		b.mu.RLock()
+
+		for _, ch := range b.subs {
+			if !b.deliver(policy, ch, res) {
 				b.drops.Add(1)
 			}
 		}
+
+		b.mu.RUnlock()
 	}
 
 	b.mu.Lock()
@@ -118,14 +142,33 @@ func (b *resultBroadcaster) loop() {
 	b.mu.Unlock()
 }
 
-func (b *resultBroadcaster) snapshot() []chan Result {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+func (*resultBroadcaster) deliver(policy ResultDropPolicy, ch chan Result, res Result) bool {
+	//nolint:exhaustive
+	switch policy {
+	case DropOldest:
+		select {
+		case ch <- res:
+			return true
+		default:
+		}
 
-	subs := make([]chan Result, 0, len(b.subs))
-	for _, ch := range b.subs {
-		subs = append(subs, ch)
+		select {
+		case <-ch:
+		default:
+		}
+
+		select {
+		case ch <- res:
+			return true
+		default:
+			return false
+		}
+	default:
+		select {
+		case ch <- res:
+			return true
+		default:
+			return false
+		}
 	}
-
-	return subs
 }

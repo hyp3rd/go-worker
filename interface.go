@@ -42,6 +42,8 @@ type taskOperations interface {
 	GetActiveTasks() int
 	// SubscribeResults returns a results channel and unsubscribe function.
 	SubscribeResults(buffer int) (<-chan Result, func())
+	// SetResultsDropPolicy configures how full subscriber buffers are handled.
+	SetResultsDropPolicy(policy ResultDropPolicy)
 	// GetTask gets a task by its ID.
 	GetTask(id uuid.UUID) (task *Task, err error)
 	// GetTasks gets all tasks.
