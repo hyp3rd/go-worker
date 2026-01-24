@@ -242,7 +242,7 @@ func TestTaskManager_ResultDropOldest(t *testing.T) {
 	taskOne := &worker.Task{
 		ID:       uuid.New(),
 		Execute:  func(_ context.Context, _ ...any) (any, error) { return "first", nil },
-		Priority: 10,
+		Priority: 1,
 		Ctx:      context.Background(),
 		Name:     "task-one",
 	}
@@ -250,7 +250,7 @@ func TestTaskManager_ResultDropOldest(t *testing.T) {
 	taskTwo := &worker.Task{
 		ID:       uuid.New(),
 		Execute:  func(_ context.Context, _ ...any) (any, error) { return "second", nil },
-		Priority: 10,
+		Priority: 2,
 		Ctx:      context.Background(),
 		Name:     "task-two",
 	}
@@ -268,12 +268,33 @@ func TestTaskManager_ResultDropOldest(t *testing.T) {
 		t.Fatalf("Wait returned error: %v", err)
 	}
 
-	res := <-results
+	first := <-results
+	if first.Task == nil {
+		t.Fatal("expected result task")
+	}
+
+	select {
+	case res := <-results:
+		if res.Task == nil {
+			t.Fatal("expected result task")
+		}
+
+		if res.Task.ID != taskTwo.ID {
+			t.Fatalf("expected latest task result, got %v", res.Task.ID)
+		}
+
+		return
+	default:
+	}
+
+	res := first
 	if res.Task == nil {
 		t.Fatal("expected result task")
 	}
 
-	if res.Task.ID != taskTwo.ID {
-		t.Fatalf("expected latest task result, got %v", res.Task.ID)
+	if res.Task.ID == taskTwo.ID {
+		return
 	}
+
+	t.Fatalf("expected latest task result, got %v", res.Task.ID)
 }

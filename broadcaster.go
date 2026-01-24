@@ -3,14 +3,12 @@ package worker
 import (
 	"sync"
 	"sync/atomic"
-
-	"github.com/hyp3rd/sectools/pkg/converters"
 )
 
 // resultBroadcaster fans out results to multiple subscribers.
 type resultBroadcaster struct {
 	input  chan Result
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	subs   map[uint64]chan Result
 	nextID uint64
 	closed atomic.Bool
@@ -111,8 +109,8 @@ func (b *resultBroadcaster) SetDropPolicy(policy ResultDropPolicy) {
 }
 
 func (b *resultBroadcaster) dropPolicy() ResultDropPolicy {
-	policy, err := converters.ToUint8((b.policy.Load()))
-	if err != nil {
+	policy := b.policy.Load()
+	if policy > uint32(DropOldest) {
 		return DropNewest
 	}
 
@@ -121,14 +119,17 @@ func (b *resultBroadcaster) dropPolicy() ResultDropPolicy {
 
 func (b *resultBroadcaster) loop() {
 	for res := range b.input {
-		subs := b.snapshot()
-
 		policy := b.dropPolicy()
-		for _, ch := range subs {
+
+		b.mu.RLock()
+
+		for _, ch := range b.subs {
 			if !b.deliver(policy, ch, res) {
 				b.drops.Add(1)
 			}
 		}
+
+		b.mu.RUnlock()
 	}
 
 	b.mu.Lock()
@@ -139,18 +140,6 @@ func (b *resultBroadcaster) loop() {
 	}
 
 	b.mu.Unlock()
-}
-
-func (b *resultBroadcaster) snapshot() []chan Result {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	subs := make([]chan Result, 0, len(b.subs))
-	for _, ch := range b.subs {
-		subs = append(subs, ch)
-	}
-
-	return subs
 }
 
 func (*resultBroadcaster) deliver(policy ResultDropPolicy, ch chan Result, res Result) bool {
