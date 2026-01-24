@@ -137,6 +137,14 @@ cancel()
 fmt.Println(res.Result)
 ```
 
+### Result backpressure
+
+By default, full subscriber buffers drop new results. You can change the policy:
+
+```go
+tm.SetResultsDropPolicy(worker.DropOldest)
+```
+
 ### Initialization
 
 Create a new `TaskManager` by calling the `NewTaskManager()` function with the following parameters:
@@ -320,7 +328,7 @@ func main() {
 
 ## Versioning
 
-This project follows [Semantic Versioning](https://semver.org/). Release notes are available in [CHANGELOG.md](CHANGELOG.md).
+This project follows [Semantic Versioning](https://semver.org/).
 
 ## Contribution Guidelines
 
@@ -336,7 +344,7 @@ Issues labeled `good first issue` or `help wanted` are ideal starting points for
 
 ## Release Notes
 
-See [CHANGELOG.md](CHANGELOG.md) for the history of released versions.
+See [CHANGELOG](CHANGELOG.md) for the history of released versions.
 
 ## License
 

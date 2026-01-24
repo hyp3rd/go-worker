@@ -364,6 +364,11 @@ func (tm *TaskManager) SubscribeResults(buffer int) (<-chan Result, func()) {
 	return tm.results.Subscribe(buffer)
 }
 
+// SetResultsDropPolicy configures how full subscriber buffers are handled.
+func (tm *TaskManager) SetResultsDropPolicy(policy ResultDropPolicy) {
+	tm.results.SetDropPolicy(policy)
+}
+
 // ExecuteTask executes a task given its ID and returns the result.
 func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout time.Duration) (any, error) {
 	if ctx == nil {

@@ -21,6 +21,7 @@ const (
 	retentionTimeout         = time.Second
 	metricsWaitTimeout       = time.Second
 	metricsTaskSleep         = 10 * time.Millisecond
+	resultsWaitTimeout       = time.Second
 )
 
 func TestTaskManager_NewTaskManager(t *testing.T) {
@@ -226,5 +227,53 @@ func TestTaskManager_MetricsLatency(t *testing.T) {
 
 	if metrics.QueueDepth != 0 {
 		t.Fatalf("expected queue depth 0, got %d", metrics.QueueDepth)
+	}
+}
+
+func TestTaskManager_ResultDropOldest(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), 1, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+	tm.SetResultsDropPolicy(worker.DropOldest)
+
+	results, cancel := tm.SubscribeResults(1)
+	defer cancel()
+
+	taskOne := &worker.Task{
+		ID:       uuid.New(),
+		Execute:  func(_ context.Context, _ ...any) (any, error) { return "first", nil },
+		Priority: 10,
+		Ctx:      context.Background(),
+		Name:     "task-one",
+	}
+
+	taskTwo := &worker.Task{
+		ID:       uuid.New(),
+		Execute:  func(_ context.Context, _ ...any) (any, error) { return "second", nil },
+		Priority: 10,
+		Ctx:      context.Background(),
+		Name:     "task-two",
+	}
+
+	err := tm.RegisterTasks(context.TODO(), taskOne, taskTwo)
+	if err != nil {
+		t.Fatalf(errMsgFailedRegisterTask, err)
+	}
+
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), resultsWaitTimeout)
+	defer cancelWait()
+
+	err = tm.Wait(waitCtx)
+	if err != nil {
+		t.Fatalf("Wait returned error: %v", err)
+	}
+
+	res := <-results
+	if res.Task == nil {
+		t.Fatal("expected result task")
+	}
+
+	if res.Task.ID != taskTwo.ID {
+		t.Fatalf("expected latest task result, got %v", res.Task.ID)
 	}
 }

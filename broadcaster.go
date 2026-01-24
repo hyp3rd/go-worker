@@ -3,6 +3,8 @@ package worker
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/hyp3rd/sectools/pkg/converters"
 )
 
 // resultBroadcaster fans out results to multiple subscribers.
@@ -13,6 +15,7 @@ type resultBroadcaster struct {
 	nextID uint64
 	closed atomic.Bool
 	drops  atomic.Int64
+	policy atomic.Uint32
 }
 
 func newResultBroadcaster(buffer int) *resultBroadcaster {
@@ -24,6 +27,7 @@ func newResultBroadcaster(buffer int) *resultBroadcaster {
 		input: make(chan Result, buffer),
 		subs:  make(map[uint64]chan Result),
 	}
+	broadcaster.policy.Store(uint32(DropNewest))
 
 	go broadcaster.loop()
 
@@ -96,13 +100,32 @@ func (b *resultBroadcaster) Drops() int64 {
 	return b.drops.Load()
 }
 
+func (b *resultBroadcaster) SetDropPolicy(policy ResultDropPolicy) {
+	switch policy {
+	case DropNewest, DropOldest:
+	default:
+		policy = DropNewest
+	}
+
+	b.policy.Store(uint32(policy))
+}
+
+func (b *resultBroadcaster) dropPolicy() ResultDropPolicy {
+	policy, err := converters.ToUint8((b.policy.Load()))
+	if err != nil {
+		return DropNewest
+	}
+
+	return ResultDropPolicy(policy)
+}
+
 func (b *resultBroadcaster) loop() {
 	for res := range b.input {
 		subs := b.snapshot()
+
+		policy := b.dropPolicy()
 		for _, ch := range subs {
-			select {
-			case ch <- res:
-			default:
+			if !b.deliver(policy, ch, res) {
 				b.drops.Add(1)
 			}
 		}
@@ -128,4 +151,35 @@ func (b *resultBroadcaster) snapshot() []chan Result {
 	}
 
 	return subs
+}
+
+func (*resultBroadcaster) deliver(policy ResultDropPolicy, ch chan Result, res Result) bool {
+	//nolint:exhaustive
+	switch policy {
+	case DropOldest:
+		select {
+		case ch <- res:
+			return true
+		default:
+		}
+
+		select {
+		case <-ch:
+		default:
+		}
+
+		select {
+		case ch <- res:
+			return true
+		default:
+			return false
+		}
+	default:
+		select {
+		case ch <- res:
+			return true
+		default:
+			return false
+		}
+	}
 }
