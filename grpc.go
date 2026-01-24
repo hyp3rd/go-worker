@@ -36,15 +36,39 @@ type GRPCServer struct {
 
 	idempotencyMu sync.Mutex
 	idempotency   map[string]*idempotencyRecord
+
+	auth GRPCAuthFunc
+}
+
+// GRPCAuthFunc authorizes a gRPC request before handling it.
+// Return a gRPC status error to control the response code.
+type GRPCAuthFunc func(ctx context.Context, method string, req any) error
+
+// GRPCServerOption configures the gRPC server.
+type GRPCServerOption func(*GRPCServer)
+
+// WithGRPCAuth installs an authorization hook for gRPC requests.
+func WithGRPCAuth(auth GRPCAuthFunc) GRPCServerOption {
+	return func(s *GRPCServer) {
+		s.auth = auth
+	}
 }
 
 // NewGRPCServer creates a new gRPC server backed by the provided Service.
-func NewGRPCServer(svc Service, handlers map[string]HandlerSpec) *GRPCServer {
-	return &GRPCServer{
+func NewGRPCServer(svc Service, handlers map[string]HandlerSpec, opts ...GRPCServerOption) *GRPCServer {
+	server := &GRPCServer{
 		svc:         svc,
 		handlers:    handlers,
 		idempotency: make(map[string]*idempotencyRecord),
 	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(server)
+		}
+	}
+
+	return server
 }
 
 type idempotencyRecord struct {
@@ -60,6 +84,11 @@ type payloadResult struct {
 
 // RegisterTasks registers one or more tasks with the underlying service.
 func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTasksRequest) (*workerpb.RegisterTasksResponse, error) {
+	err := s.authorize(ctx, workerpb.WorkerService_RegisterTasks_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
 	ids := make([]string, len(req.GetTasks()))
 
 	for i, taskReq := range req.GetTasks() {
@@ -77,6 +106,11 @@ func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTa
 // StreamResults streams task results back to the client.
 func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream workerpb.WorkerService_StreamResultsServer) error {
 	ctx := stream.Context()
+
+	err := s.authorize(ctx, workerpb.WorkerService_StreamResults_FullMethodName, req)
+	if err != nil {
+		return err
+	}
 
 	ch, unsubscribe := s.svc.SubscribeResults(DefaultMaxTasks)
 	defer unsubscribe()
@@ -113,7 +147,12 @@ func (s *GRPCServer) StreamResults(req *workerpb.StreamResultsRequest, stream wo
 }
 
 // CancelTask cancels an active task by its ID.
-func (s *GRPCServer) CancelTask(_ context.Context, req *workerpb.CancelTaskRequest) (*workerpb.CancelTaskResponse, error) {
+func (s *GRPCServer) CancelTask(ctx context.Context, req *workerpb.CancelTaskRequest) (*workerpb.CancelTaskResponse, error) {
+	err := s.authorize(ctx, workerpb.WorkerService_CancelTask_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
 		return nil, ewrap.Wrap(err, "parse id")
@@ -132,7 +171,12 @@ func (s *GRPCServer) CancelTask(_ context.Context, req *workerpb.CancelTaskReque
 }
 
 // GetTask returns information about a task by its ID.
-func (s *GRPCServer) GetTask(_ context.Context, req *workerpb.GetTaskRequest) (*workerpb.GetTaskResponse, error) {
+func (s *GRPCServer) GetTask(ctx context.Context, req *workerpb.GetTaskRequest) (*workerpb.GetTaskResponse, error) {
+	err := s.authorize(ctx, workerpb.WorkerService_GetTask_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
 		return nil, ewrap.Wrap(err, "parse id")
@@ -163,6 +207,27 @@ func (s *GRPCServer) GetTask(_ context.Context, req *workerpb.GetTaskRequest) (*
 	}
 
 	return resp, nil
+}
+
+func (s *GRPCServer) authorize(ctx context.Context, method string, req any) error {
+	if s.auth == nil {
+		return nil
+	}
+
+	if ctx == nil {
+		return ewrap.Wrap(status.Error(codes.Internal, "missing context"), "missing context in authorize", nil)
+	}
+
+	err := s.auth(ctx, method, req)
+	if err == nil {
+		return nil
+	}
+
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+
+	return status.Errorf(codes.PermissionDenied, "unauthorized")
 }
 
 func (s *GRPCServer) registerTaskFromRequest(ctx context.Context, taskReq *workerpb.Task) (string, error) {

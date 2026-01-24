@@ -64,6 +64,7 @@ type TaskManager struct {
 	metrics taskMetrics
 	results *resultBroadcaster
 	hooks   atomic.Pointer[TaskHooks]
+	tracer  atomic.Pointer[tracerHolder]
 
 	retentionMu        sync.RWMutex
 	retention          retentionConfig
@@ -338,8 +339,10 @@ func (tm *TaskManager) CancelTask(id uuid.UUID) error {
 		task.CancelFunc()
 	}
 
-	// If queued, remove and finish immediately.
-	if task.isQueued() {
+	status := task.Status()
+
+	// If queued or in backoff, remove and finish immediately.
+	if status == Queued || status == RateLimited {
 		tm.queueMu.Lock()
 
 		if task.index >= 0 {
@@ -661,6 +664,12 @@ func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Dur
 		err    error
 	)
 
+	execCtx, span := tm.startSpan(execCtx, task)
+
+	defer func() {
+		tm.endSpan(span, err)
+	}()
+
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -765,7 +774,7 @@ func (tm *TaskManager) scheduleRetry(task *Task) bool {
 		return false
 	}
 
-	task.setQueued()
+	task.setRateLimited()
 	tm.metrics.retried.Add(1)
 	tm.hookRetry(task, delay, attempt)
 
@@ -782,7 +791,11 @@ func (tm *TaskManager) scheduleRetry(task *Task) bool {
 			err := tm.enqueue(task)
 			if err != nil {
 				tm.finishTask(task, Failed, nil, err)
+
+				return
 			}
+
+			task.setQueued()
 		case <-tm.ctx.Done():
 			return
 		case <-task.Ctx.Done():

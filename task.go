@@ -304,6 +304,12 @@ func (task *Task) setQueued() {
 	task.mu.Unlock()
 }
 
+func (task *Task) setRateLimited() {
+	task.mu.Lock()
+	task.status = RateLimited
+	task.mu.Unlock()
+}
+
 func (task *Task) markRunning() bool {
 	task.mu.Lock()
 	defer task.mu.Unlock()
