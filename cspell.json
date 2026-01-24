@@ -55,6 +55,7 @@
     "ewrap",
     "excludeonly",
     "exhaustruct",
+    "fanout",
     "Fprintf",
     "Fprintln",
     "funlen",

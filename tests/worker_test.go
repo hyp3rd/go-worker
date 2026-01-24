@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyp3rd/ewrap"
 
 	"github.com/hyp3rd/go-worker"
 )
@@ -14,6 +15,7 @@ const (
 	maxWorkers               = 4
 	maxTasks                 = 10
 	tasksPerSecond           = 5
+	tasksPerSecondHigh       = 1000
 	maxRetries               = 3
 	taskName                 = "task"
 	errMsgFailedRegisterTask = "RegisterTask returned error: %v"
@@ -24,6 +26,9 @@ const (
 	metricsWaitTimeout       = time.Second
 	metricsTaskSleep         = 10 * time.Millisecond
 	resultsWaitTimeout       = time.Second
+	cancelRetryDelay         = 50 * time.Millisecond
+	cancelWaitTimeout        = time.Second
+	fanOutWaitTimeout        = time.Second
 )
 
 func TestTaskManager_NewTaskManager(t *testing.T) {
@@ -311,33 +316,131 @@ func TestTaskManager_ResultDropOldest(t *testing.T) {
 		t.Fatalf(ErrMsgWaitReturnedError, err)
 	}
 
-	first := <-results
-	if first.Task == nil {
-		t.Fatal("expected result task")
+	var lastID uuid.UUID
+
+	deadline := time.After(resultsWaitTimeout)
+
+	for {
+		select {
+		case res := <-results:
+			if res.Task == nil {
+				t.Fatal("expected result task")
+			}
+
+			lastID = res.Task.ID
+			if lastID == taskTwo.ID {
+				return
+			}
+		case <-deadline:
+			if lastID == taskTwo.ID {
+				return
+			}
+
+			t.Fatalf("expected latest task result, got %v", lastID)
+		}
+	}
+}
+
+func TestTaskManager_ResultFanOut(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), 1, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+
+	resultsOne, cancelOne := tm.SubscribeResults(1)
+	defer cancelOne()
+
+	resultsTwo, cancelTwo := tm.SubscribeResults(1)
+	defer cancelTwo()
+
+	task := &worker.Task{
+		ID:       uuid.New(),
+		Execute:  func(_ context.Context, _ ...any) (any, error) { return "fanout", nil },
+		Priority: 1,
+		Ctx:      context.Background(),
+		Name:     "fanout-task",
 	}
 
-	select {
-	case res := <-results:
-		if res.Task == nil {
-			t.Fatal("expected result task")
+	err := tm.RegisterTask(context.TODO(), task)
+	if err != nil {
+		t.Fatalf(errMsgFailedRegisterTask, err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), fanOutWaitTimeout)
+	defer cancel()
+
+	err = tm.Wait(waitCtx)
+	if err != nil {
+		t.Fatalf(ErrMsgWaitReturnedError, err)
+	}
+
+	readResult := func(ch <-chan worker.Result) worker.Result {
+		select {
+		case res := <-ch:
+			return res
+		case <-time.After(fanOutWaitTimeout):
+			t.Fatal("timed out waiting for result")
 		}
 
-		if res.Task.ID != taskTwo.ID {
-			t.Fatalf("expected latest task result, got %v", res.Task.ID)
+		return worker.Result{}
+	}
+
+	resOne := readResult(resultsOne)
+	resTwo := readResult(resultsTwo)
+
+	if resOne.Task == nil || resTwo.Task == nil {
+		t.Fatal("expected results on both subscribers")
+	}
+
+	if resOne.Task.ID != task.ID {
+		t.Fatalf("expected task ID %v on subscriber one, got %v", task.ID, resOne.Task.ID)
+	}
+
+	if resTwo.Task.ID != task.ID {
+		t.Fatalf("expected task ID %v on subscriber two, got %v", task.ID, resTwo.Task.ID)
+	}
+}
+
+func TestTaskManager_CancelBackoffTask(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), 1, maxTasks, tasksPerSecondHigh, time.Second*30, cancelRetryDelay, maxRetries)
+
+	task := &worker.Task{
+		ID:       uuid.New(),
+		Execute:  func(_ context.Context, _ ...any) (any, error) { return nil, ewrap.New("retry") },
+		Priority: 1,
+		Ctx:      context.Background(),
+		Retries:  1,
+	}
+
+	err := tm.RegisterTask(context.TODO(), task)
+	if err != nil {
+		t.Fatalf(errMsgFailedRegisterTask, err)
+	}
+
+	deadline := time.Now().Add(cancelWaitTimeout)
+	for time.Now().Before(deadline) {
+		if task.Status() == worker.RateLimited {
+			break
 		}
 
-		return
-	default:
+		time.Sleep(retentionPollInterval)
 	}
 
-	res := first
-	if res.Task == nil {
-		t.Fatal("expected result task")
+	err = tm.CancelTask(task.ID)
+	if err != nil {
+		t.Fatalf("CancelTask returned error: %v", err)
 	}
 
-	if res.Task.ID == taskTwo.ID {
-		return
+	waitCtx, cancel := context.WithTimeout(context.Background(), cancelWaitTimeout)
+	defer cancel()
+
+	err = tm.Wait(waitCtx)
+	if err != nil {
+		t.Fatalf("Wait returned error: %v", err)
 	}
 
-	t.Fatalf("expected latest task result, got %v", res.Task.ID)
+	if task.Status() != worker.Cancelled {
+		t.Fatalf("expected task status Cancelled, got %v", task.Status())
+	}
 }
