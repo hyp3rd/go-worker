@@ -53,7 +53,7 @@ func TestTaskManager_Hooks(t *testing.T) {
 
 	err = tm.Wait(waitCtx)
 	if err != nil {
-		t.Fatalf("Wait returned error: %v", err)
+		t.Fatalf(ErrMsgWaitReturnedError, err)
 	}
 
 	if queued.Load() != 1 {
@@ -107,7 +107,7 @@ func TestTaskManager_HookRetry(t *testing.T) {
 
 	err = tm.Wait(waitCtx)
 	if err != nil {
-		t.Fatalf("Wait returned error: %v", err)
+		t.Fatalf(ErrMsgWaitReturnedError, err)
 	}
 
 	if retries.Load() != 1 {

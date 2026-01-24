@@ -19,6 +19,8 @@ const (
 	errMsgFailedRegisterTask = "RegisterTask returned error: %v"
 	retentionPollInterval    = 10 * time.Millisecond
 	retentionTimeout         = time.Second
+	retentionTTL             = 50 * time.Millisecond
+	retentionCleanupInterval = 10 * time.Millisecond
 	metricsWaitTimeout       = time.Second
 	metricsTaskSleep         = 10 * time.Millisecond
 	resultsWaitTimeout       = time.Second
@@ -173,7 +175,7 @@ func TestTaskManager_RetentionMaxEntries(t *testing.T) {
 
 	err = tm.Wait(waitCtx)
 	if err != nil {
-		t.Fatalf("Wait returned error: %v", err)
+		t.Fatalf(ErrMsgWaitReturnedError, err)
 	}
 
 	deadline := time.Now().Add(retentionTimeout)
@@ -186,6 +188,47 @@ func TestTaskManager_RetentionMaxEntries(t *testing.T) {
 	}
 
 	t.Fatalf("expected registry retention to prune to 1 entry, got %d", len(tm.GetTasks()))
+}
+
+func TestTaskManager_RetentionTTL(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+	tm.SetRetentionPolicy(worker.RetentionPolicy{
+		TTL:             retentionTTL,
+		CleanupInterval: retentionCleanupInterval,
+	})
+
+	task := &worker.Task{
+		ID:       uuid.New(),
+		Execute:  func(_ context.Context, _ ...any) (any, error) { return taskName, nil },
+		Priority: 10,
+		Ctx:      context.Background(),
+	}
+
+	err := tm.RegisterTask(context.TODO(), task)
+	if err != nil {
+		t.Fatalf(errMsgFailedRegisterTask, err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), retentionTimeout)
+	defer cancel()
+
+	err = tm.Wait(waitCtx)
+	if err != nil {
+		t.Fatalf(ErrMsgWaitReturnedError, err)
+	}
+
+	deadline := time.Now().Add(retentionTimeout)
+	for time.Now().Before(deadline) {
+		if len(tm.GetTasks()) == 0 {
+			return
+		}
+
+		time.Sleep(retentionPollInterval)
+	}
+
+	t.Fatalf("expected registry retention to prune by TTL, got %d entries", len(tm.GetTasks()))
 }
 
 func TestTaskManager_MetricsLatency(t *testing.T) {
@@ -213,7 +256,7 @@ func TestTaskManager_MetricsLatency(t *testing.T) {
 
 	err = tm.Wait(waitCtx)
 	if err != nil {
-		t.Fatalf("Wait returned error: %v", err)
+		t.Fatalf(ErrMsgWaitReturnedError, err)
 	}
 
 	metrics := tm.GetMetrics()
@@ -265,7 +308,7 @@ func TestTaskManager_ResultDropOldest(t *testing.T) {
 
 	err = tm.Wait(waitCtx)
 	if err != nil {
-		t.Fatalf("Wait returned error: %v", err)
+		t.Fatalf(ErrMsgWaitReturnedError, err)
 	}
 
 	first := <-results

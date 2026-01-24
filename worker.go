@@ -308,7 +308,7 @@ func (tm *TaskManager) StopGraceful(ctx context.Context) error {
 
 	tm.StopNow()
 
-	return nil
+	return tm.waitWorkers(ctx)
 }
 
 // StopNow cancels running tasks and stops workers immediately.
@@ -423,6 +423,26 @@ func (tm *TaskManager) GetTasks() []*Task {
 	}
 
 	return tasks
+}
+
+func (tm *TaskManager) waitWorkers(ctx context.Context) error {
+	if ctx == nil {
+		return ErrInvalidTaskContext
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		tm.workerWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ewrap.Wrap(ctx.Err(), ErrMsgContextDone)
+	}
 }
 
 func (tm *TaskManager) queueDepth() int {
