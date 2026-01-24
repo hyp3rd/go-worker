@@ -20,7 +20,7 @@ func TestRetryJitterDelayWithinBounds(t *testing.T) {
 
 	task.initRetryState(retryJitterTestDelay, 1)
 
-	delay, ok := task.nextRetryDelay()
+	delay, _, ok := task.nextRetryDelay()
 	if !ok {
 		t.Fatal("expected retry delay to be available")
 	}

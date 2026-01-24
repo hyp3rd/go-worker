@@ -63,6 +63,7 @@ type TaskManager struct {
 
 	metrics taskMetrics
 	results *resultBroadcaster
+	hooks   atomic.Pointer[TaskHooks]
 
 	retentionMu        sync.RWMutex
 	retention          retentionConfig
@@ -254,6 +255,7 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task *Task) error {
 	tm.wg.Add(1)
 	task.setQueued()
 	tm.metrics.scheduled.Add(1)
+	tm.hookQueued(task)
 
 	return nil
 }
@@ -621,6 +623,8 @@ func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Dur
 		return nil, ErrTaskAlreadyStarted
 	}
 
+	tm.hookStart(task)
+
 	tm.metrics.running.Add(1)
 	defer tm.metrics.running.Add(1 * -1)
 
@@ -731,13 +735,14 @@ func (tm *TaskManager) scheduleRetry(task *Task) bool {
 		return false
 	}
 
-	delay, ok := task.nextRetryDelay()
+	delay, attempt, ok := task.nextRetryDelay()
 	if !ok {
 		return false
 	}
 
 	task.setQueued()
 	tm.metrics.retried.Add(1)
+	tm.hookRetry(task, delay, attempt)
 
 	tm.workerWg.Go(func() {
 		timer := time.NewTimer(delay)
@@ -790,6 +795,7 @@ func (tm *TaskManager) finishTask(task *Task, status TaskStatus, result any, err
 		tm.wg.Done()
 		tm.incrementMetric(status)
 		tm.recordLatency(task)
+		tm.hookFinish(task, status, result, err)
 
 		tm.results.Publish(Result{Task: task, Result: result, Error: err})
 		tm.maybePruneRegistry()

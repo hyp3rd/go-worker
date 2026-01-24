@@ -162,6 +162,24 @@ tm.SetRetentionPolicy(worker.RetentionPolicy{
 })
 ```
 
+Task lifecycle hooks can be configured for structured logging or tracing:
+
+```go
+tm.SetHooks(worker.TaskHooks{
+    OnQueued: func(task *worker.Task) {
+        // log enqueue
+    },
+    OnStart: func(task *worker.Task) {
+        // log start
+    },
+    OnFinish: func(task *worker.Task, status worker.TaskStatus, _ any, err error) {
+        // log completion
+        _ = err
+        _ = status
+    },
+})
+```
+
 ### Registering Tasks
 
 Register new tasks by calling the `RegisterTasks()` method of the `TaskManager` struct and passing in a variadic number of tasks.
