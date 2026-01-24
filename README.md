@@ -59,6 +59,30 @@ handlers := map[string]worker.HandlerSpec{
 srv := worker.NewGRPCServer(tm, handlers)
 ```
 
+### Authorization hook
+
+You can enforce authentication/authorization at the gRPC boundary with `WithGRPCAuth`.
+Return a gRPC status error to control the response code (e.g., `Unauthenticated` or `PermissionDenied`).
+
+```go
+auth := func(ctx context.Context, method string, _ any) error {
+ md, _ := metadata.FromIncomingContext(ctx)
+ values := md.Get("authorization")
+ if len(values) == 0 {
+  return status.Error(codes.Unauthenticated, "missing token")
+ }
+
+ token := strings.TrimSpace(strings.TrimPrefix(values[0], "Bearer "))
+ if token != "expected-token" {
+  return status.Error(codes.Unauthenticated, "missing or invalid token")
+ }
+
+ return nil
+}
+
+srv := worker.NewGRPCServer(tm, handlers, worker.WithGRPCAuth(auth))
+```
+
 **Note on deadlines:** When the client uses a stream context with a deadline, exceeding the deadline will terminate the stream but **does not cancel the tasks running on the server**. To properly handle cancellation, use separate contexts for task execution or cancel tasks explicitly.
 
 ## API Example (gRPC)

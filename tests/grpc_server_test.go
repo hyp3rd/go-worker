@@ -48,3 +48,36 @@ func TestGRPCServer_GetTaskNotFound(t *testing.T) {
 		t.Fatalf("expected NotFound, got %v", status.Code(err))
 	}
 }
+
+func TestGRPCServer_AuthDenied(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+
+	var (
+		gotMethod string
+		gotReq    bool
+	)
+
+	auth := func(_ context.Context, method string, req any) error {
+		gotMethod = method
+		_, gotReq = req.(*workerpb.GetTaskRequest)
+
+		return status.Error(codes.Unauthenticated, "missing token")
+	}
+
+	server := worker.NewGRPCServer(tm, map[string]worker.HandlerSpec{}, worker.WithGRPCAuth(auth))
+
+	_, err := server.GetTask(context.TODO(), &workerpb.GetTaskRequest{Id: uuid.New().String()})
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated, got %v", status.Code(err))
+	}
+
+	if gotMethod != workerpb.WorkerService_GetTask_FullMethodName {
+		t.Fatalf("expected method %s, got %s", workerpb.WorkerService_GetTask_FullMethodName, gotMethod)
+	}
+
+	if !gotReq {
+		t.Fatal("expected auth hook to receive request")
+	}
+}

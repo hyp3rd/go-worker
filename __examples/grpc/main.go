@@ -2,10 +2,17 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net"
 	"os"
 	"strconv"
@@ -14,7 +21,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -56,10 +63,97 @@ func handlers() map[string]worker.HandlerSpec {
 	return handlers
 }
 
+func unaryLogInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	start := time.Now()
+	resp, err := handler(ctx, req)
+	log.Printf("grpc unary %s took %s err=%v", info.FullMethod, time.Since(start), err)
+
+	return resp, err
+}
+
+func streamLogInterceptor(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	start := time.Now()
+	err := handler(srv, stream)
+	log.Printf("grpc stream %s took %s err=%v", info.FullMethod, time.Since(start), err)
+
+	return err
+}
+
+func newTLSConfigs() (*tls.Config, *tls.Config, error) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialLimit)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	now := time.Now()
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			CommonName: "localhost",
+		},
+		NotBefore: now.Add(-time.Minute),
+		NotAfter:  now.Add(24 * time.Hour),
+		KeyUsage:  x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth,
+		},
+		DNSNames:    []string{"localhost"},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cert, err := x509.ParseCertificate(derBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tlsCert := tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  priv,
+		Leaf:        cert,
+	}
+
+	certPool := x509.NewCertPool()
+	certPool.AddCert(cert)
+
+	serverTLS := &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{tlsCert},
+	}
+
+	clientTLS := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: "localhost",
+		RootCAs:    certPool,
+	}
+
+	return serverTLS, clientTLS, nil
+}
+
 func initComponents() (*worker.TaskManager, *grpc.Server, workerpb.WorkerServiceClient) {
 	tm := worker.NewTaskManagerWithDefaults(context.Background())
 
-	server := grpc.NewServer()
+	serverTLS, clientTLS, err := newTLSConfigs()
+	if err != nil {
+		log.Fatalf("tls config: %v", err)
+	}
+
+	server := grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(serverTLS)),
+		grpc.ChainUnaryInterceptor(unaryLogInterceptor),
+		grpc.ChainStreamInterceptor(streamLogInterceptor),
+	)
 	workerpb.RegisterWorkerServiceServer(server, worker.NewGRPCServer(tm, handlers()))
 
 	ctx := context.Background()
@@ -76,7 +170,7 @@ func initComponents() (*worker.TaskManager, *grpc.Server, workerpb.WorkerService
 		}
 	}()
 
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(credentials.NewTLS(clientTLS)))
 	if err != nil {
 		log.Fatalf("dial: %v", err)
 	}
