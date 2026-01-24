@@ -373,15 +373,15 @@ func (task *Task) isQueued() bool {
 	return task.status == Queued
 }
 
-func (task *Task) nextRetryDelay() (time.Duration, bool) {
+func (task *Task) nextRetryDelay() (time.Duration, int, bool) {
 	task.mu.Lock()
 	defer task.mu.Unlock()
 
 	if task.retriesRemaining <= 0 {
-		return 0, false
+		return 0, 0, false
 	}
 
-	attempt := task.retriesRemaining
+	attempt := max(task.Retries-task.retriesRemaining+1, 1)
 
 	task.retriesRemaining--
 	if task.retryBackoff <= 0 {
@@ -396,7 +396,7 @@ func (task *Task) nextRetryDelay() (time.Duration, bool) {
 
 	delay = retryJitterDelay(delay, task.ID, attempt)
 
-	return delay, true
+	return delay, attempt, true
 }
 
 func retryJitterDelay(delay time.Duration, id uuid.UUID, attempt int) time.Duration {

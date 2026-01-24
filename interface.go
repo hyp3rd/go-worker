@@ -13,6 +13,7 @@ type Service interface {
 	taskOperations
 	metricsOperations
 	retentionOperations
+	hooksOperations
 }
 
 type workerOperations interface {
@@ -57,6 +58,11 @@ type metricsOperations interface {
 type retentionOperations interface {
 	// SetRetentionPolicy configures task registry retention.
 	SetRetentionPolicy(policy RetentionPolicy)
+}
+
+type hooksOperations interface {
+	// SetHooks configures task lifecycle hooks.
+	SetHooks(hooks TaskHooks)
 }
 
 // Middleware describes a generic middleware.

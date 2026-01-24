@@ -179,3 +179,8 @@ func (mw *loggerMiddleware) GetMetrics() worker.MetricsSnapshot {
 func (mw *loggerMiddleware) SetRetentionPolicy(policy worker.RetentionPolicy) {
 	mw.next.SetRetentionPolicy(policy)
 }
+
+// SetHooks configures task lifecycle hooks.
+func (mw *loggerMiddleware) SetHooks(hooks worker.TaskHooks) {
+	mw.next.SetHooks(hooks)
+}
