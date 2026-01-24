@@ -188,6 +188,12 @@ tm.SetHooks(worker.TaskHooks{
 })
 ```
 
+Tracing hooks can be configured with a tracer implementation:
+
+```go
+tm.SetTracer(myTracer)
+```
+
 ### Registering Tasks
 
 Register new tasks by calling the `RegisterTasks()` method of the `TaskManager` struct and passing in a variadic number of tasks.

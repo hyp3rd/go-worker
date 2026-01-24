@@ -14,6 +14,7 @@ type Service interface {
 	metricsOperations
 	retentionOperations
 	hooksOperations
+	tracerOperations
 }
 
 type workerOperations interface {
@@ -65,6 +66,11 @@ type retentionOperations interface {
 type hooksOperations interface {
 	// SetHooks configures task lifecycle hooks.
 	SetHooks(hooks TaskHooks)
+}
+
+type tracerOperations interface {
+	// SetTracer configures task tracing.
+	SetTracer(tracer TaskTracer)
 }
 
 // Middleware describes a generic middleware.

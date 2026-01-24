@@ -199,4 +199,4 @@ help:
 	@echo
 	@echo
 	@echo "For more information, see the project README."
-.PHONY: prepare-toolchain prepare-proto-tools prepare-base-tools update-toolchain test bench vet update-deps lint sec help run run-container init proto proto-update proto-lint proto-generate proto-format proto-breaking
+.PHONY: prepare-toolchain prepare-proto-tools prepare-base-tools update-toolchain test bench vet update-deps lint sec help init proto proto-update proto-lint proto-generate proto-format proto-breaking

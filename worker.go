@@ -64,6 +64,7 @@ type TaskManager struct {
 	metrics taskMetrics
 	results *resultBroadcaster
 	hooks   atomic.Pointer[TaskHooks]
+	tracer  atomic.Pointer[tracerHolder]
 
 	retentionMu        sync.RWMutex
 	retention          retentionConfig
@@ -662,6 +663,12 @@ func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Dur
 		result any
 		err    error
 	)
+
+	execCtx, span := tm.startSpan(execCtx, task)
+
+	defer func() {
+		tm.endSpan(span, err)
+	}()
 
 	func() {
 		defer func() {

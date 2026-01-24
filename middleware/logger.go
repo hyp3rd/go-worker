@@ -189,3 +189,8 @@ func (mw *loggerMiddleware) SetRetentionPolicy(policy worker.RetentionPolicy) {
 func (mw *loggerMiddleware) SetHooks(hooks worker.TaskHooks) {
 	mw.next.SetHooks(hooks)
 }
+
+// SetTracer configures task tracing.
+func (mw *loggerMiddleware) SetTracer(tracer worker.TaskTracer) {
+	mw.next.SetTracer(tracer)
+}
