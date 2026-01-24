@@ -8,7 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 
 ### Added
 
-- Placeholder for upcoming changes.
+- gRPC auth hook via `WithGRPCAuth`.
+- Task tracing hooks via `TaskTracer`.
+
+### Changed
+
+- Rate limiter burst now defaults to `min(maxWorkers, maxTasks)` for deterministic throttling.
+- `ExecuteTask` respects the task rate limiter (may wait or return context errors).
+- Breaking: `Stop()` removed; use `StopGraceful(ctx)` or `StopNow()`.
+- Breaking: `SubscribeResults` replaces `GetResults()`/`StreamResults()`.
+- Breaking: `RegisterTasks` now returns an error.
 
 ## [v0.1.1] - 2025-08-18
 

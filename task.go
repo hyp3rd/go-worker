@@ -372,13 +372,6 @@ func (task *Task) isCancelled() bool {
 	return task.status == Cancelled
 }
 
-func (task *Task) isQueued() bool {
-	task.mu.Lock()
-	defer task.mu.Unlock()
-
-	return task.status == Queued
-}
-
 func (task *Task) nextRetryDelay() (time.Duration, int, bool) {
 	task.mu.Lock()
 	defer task.mu.Unlock()

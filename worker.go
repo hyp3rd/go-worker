@@ -91,11 +91,21 @@ func NewTaskManagerWithDefaults(ctx context.Context) *TaskManager {
 	)
 }
 
+func limiterBurst(maxWorkers, maxTasks int) int {
+	burst := min(maxWorkers, maxTasks)
+	if burst <= 0 {
+		return 1
+	}
+
+	return burst
+}
+
 // NewTaskManager creates a new task manager.
 //   - ctx is the context for the task manager
 //   - maxWorkers is the number of workers to start, if <=0, the number of CPUs will be used
 //   - maxTasks is the maximum number of tasks that can be queued at once, defaults to 10
 //   - tasksPerSecond is the rate limit of tasks that can be executed per second; <=0 disables rate limiting
+//     The limiter uses a burst size of min(maxWorkers, maxTasks) for deterministic throttling.
 //   - timeout is the default timeout for tasks, defaults to 5 minutes
 //   - retryDelay is the default delay between retries, defaults to 1 second
 //   - maxRetries is the default maximum number of retries, defaults to 3 (0 disables retries)
@@ -132,11 +142,13 @@ func NewTaskManager(
 		maxRetries = DefaultMaxRetries
 	}
 
+	burst := limiterBurst(maxWorkers, maxTasks)
+
 	var limiter *rate.Limiter
 	if tasksPerSecond <= 0 {
-		limiter = rate.NewLimiter(rate.Inf, maxTasks)
+		limiter = rate.NewLimiter(rate.Inf, burst)
 	} else {
-		limiter = rate.NewLimiter(rate.Limit(tasksPerSecond), maxTasks)
+		limiter = rate.NewLimiter(rate.Limit(tasksPerSecond), burst)
 	}
 
 	tm := &TaskManager{
@@ -388,15 +400,13 @@ func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout ti
 		return nil, err
 	}
 
-	// attempt to remove from queue if still queued
-	if task.isQueued() {
-		tm.queueMu.Lock()
+	removed := tm.removeFromQueue(task)
 
-		if task.index >= 0 {
-			tm.scheduler.Remove(task.index)
-		}
+	err = tm.waitForPermit(ctx)
+	if err != nil {
+		tm.restoreQueued(task, removed)
 
-		tm.queueMu.Unlock()
+		return nil, err
 	}
 
 	return tm.runTask(ctx, task, timeout)
@@ -453,6 +463,59 @@ func (tm *TaskManager) queueDepth() int {
 	defer tm.queueMu.Unlock()
 
 	return tm.scheduler.Len()
+}
+
+func (tm *TaskManager) waitForPermit(ctx context.Context) error {
+	if ctx == nil {
+		return ErrInvalidTaskContext
+	}
+
+	if tm.limiter == nil {
+		return nil
+	}
+
+	err := tm.limiter.Wait(ctx)
+	if err != nil {
+		return ewrap.Wrap(err, ErrMsgContextDone)
+	}
+
+	return nil
+}
+
+func (tm *TaskManager) removeFromQueue(task *Task) bool {
+	if task == nil {
+		return false
+	}
+
+	tm.queueMu.Lock()
+	defer tm.queueMu.Unlock()
+
+	if task.index < 0 {
+		return false
+	}
+
+	tm.scheduler.Remove(task.index)
+
+	return true
+}
+
+func (tm *TaskManager) restoreQueued(task *Task, removed bool) {
+	if !removed || task == nil {
+		return
+	}
+
+	if task.ShouldSchedule() != nil {
+		return
+	}
+
+	err := tm.enqueue(task)
+	if err != nil {
+		tm.finishTask(task, Failed, nil, err)
+
+		return
+	}
+
+	task.setQueued()
 }
 
 func (tm *TaskManager) spawnWorker(ctx context.Context) {
@@ -574,7 +637,7 @@ func (tm *TaskManager) schedulerLoop(ctx context.Context) {
 			continue
 		}
 
-		err := tm.limiter.Wait(ctx)
+		err := tm.waitForPermit(ctx)
 		if err != nil {
 			tm.finishTask(task, Cancelled, nil, err)
 

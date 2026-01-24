@@ -11,6 +11,7 @@
 - `RegisterTasks` now returns an error.
 - `Task.Execute` replaces `Fn` in examples.
 - `NewGRPCServer` requires a handler map.
+- Rate limiting is deterministic: burst is `min(maxWorkers, maxTasks)` and `ExecuteTask` uses the shared limiter.
 
 ## Features
 
@@ -58,6 +59,8 @@ handlers := map[string]worker.HandlerSpec{
 
 srv := worker.NewGRPCServer(tm, handlers)
 ```
+
+For production, configure TLS credentials and interceptors (logging/auth) on the gRPC server; see `__examples/grpc` for a complete setup.
 
 ### Authorization hook
 
@@ -175,8 +178,9 @@ Create a new `TaskManager` by calling the `NewTaskManager()` function with the f
 
 - `ctx` is the base context for the task manager (used for shutdown and derived task contexts)
 - `maxWorkers` is the number of workers to start. If <= 0, it will default to the number of available CPUs
-- `maxTasks` is the maximum number of queued tasks and rate limiter burst size, defaults to 10
+- `maxTasks` is the maximum number of queued tasks, defaults to 10
 - `tasksPerSecond` is the rate limit of tasks that can be executed per second. If <= 0, rate limiting is disabled
+  (the limiter uses a burst size of `min(maxWorkers, maxTasks)` for deterministic throttling)
 - `timeout` is the default timeout for tasks, defaults to 5 minutes
 - `retryDelay` is the default delay between retries, defaults to 1 second
 - `maxRetries` is the default maximum number of retries, defaults to 3 (0 disables retries)
