@@ -198,6 +198,11 @@ tm.SetRetentionPolicy(worker.RetentionPolicy{
 })
 ```
 
+Retention applies only to terminal tasks (completed/failed/cancelled/etc). Running or queued tasks are never evicted.
+Cleanup is best-effort: it runs on task completion and periodically when `TTL > 0`.
+If `CleanupInterval` is unset, the default interval is `clamp(TTL/2, 1s, 1m)`.
+If `MaxEntries` is lower than the number of active tasks, the registry may exceed the limit until tasks finish.
+
 Task lifecycle hooks can be configured for structured logging or tracing:
 
 ```go
