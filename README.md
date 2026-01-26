@@ -198,6 +198,11 @@ tm.SetRetentionPolicy(worker.RetentionPolicy{
 })
 ```
 
+Retention applies only to terminal tasks (completed/failed/cancelled/etc). Running or queued tasks are never evicted.
+Cleanup is best-effort: it runs on task completion and periodically when `TTL > 0`.
+If `CleanupInterval` is unset, the default interval is `clamp(TTL/2, 1s, 1m)`.
+If `MaxEntries` is lower than the number of active tasks, the registry may exceed the limit until tasks finish.
+
 Task lifecycle hooks can be configured for structured logging or tracing:
 
 ```go
@@ -221,6 +226,29 @@ Tracing hooks can be configured with a tracer implementation:
 ```go
 tm.SetTracer(myTracer)
 ```
+
+### OpenTelemetry metrics
+
+To export metrics with OpenTelemetry, configure a meter provider and pass it to the task manager:
+
+```go
+mp := sdkmetric.NewMeterProvider(/* exporter, resources, etc */)
+if err := tm.SetMeterProvider(mp); err != nil {
+    log.Fatal(err)
+}
+```
+
+Emitted metrics:
+
+- `tasks_scheduled_total`
+- `tasks_running`
+- `tasks_completed_total`
+- `tasks_failed_total`
+- `tasks_cancelled_total`
+- `tasks_retried_total`
+- `results_dropped_total`
+- `queue_depth`
+- `task_latency_seconds`
 
 ### Registering Tasks
 

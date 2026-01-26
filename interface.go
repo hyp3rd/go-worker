@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Service is an interface for a task manager.
@@ -56,6 +57,8 @@ type taskOperations interface {
 type metricsOperations interface {
 	// GetMetrics returns a snapshot of task metrics.
 	GetMetrics() MetricsSnapshot
+	// SetMeterProvider enables OpenTelemetry metrics collection.
+	SetMeterProvider(provider metric.MeterProvider, opts ...OTelMetricsOption) error
 }
 
 type retentionOperations interface {

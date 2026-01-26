@@ -23,6 +23,9 @@ const (
 	retentionTimeout         = time.Second
 	retentionTTL             = 50 * time.Millisecond
 	retentionCleanupInterval = 10 * time.Millisecond
+	retentionLoadTasks       = 30
+	retentionLoadMaxEntries  = 5
+	retentionLoadMaxTasks    = 50
 	metricsWaitTimeout       = time.Second
 	metricsTaskSleep         = 10 * time.Millisecond
 	resultsWaitTimeout       = time.Second
@@ -234,6 +237,67 @@ func TestTaskManager_RetentionTTL(t *testing.T) {
 	}
 
 	t.Fatalf("expected registry retention to prune by TTL, got %d entries", len(tm.GetTasks()))
+}
+
+func TestTaskManager_RetentionMaxEntriesUnderLoad(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(
+		context.TODO(),
+		maxWorkers,
+		retentionLoadMaxTasks,
+		tasksPerSecondHigh,
+		time.Second*30,
+		time.Second*30,
+		maxRetries,
+	)
+	tm.SetRetentionPolicy(worker.RetentionPolicy{MaxEntries: retentionLoadMaxEntries})
+
+	tasks := make([]*worker.Task, 0, retentionLoadTasks)
+	for range retentionLoadTasks {
+		tasks = append(tasks, &worker.Task{
+			ID:       uuid.New(),
+			Execute:  func(_ context.Context, _ ...any) (any, error) { return taskName, nil },
+			Priority: 10,
+			Ctx:      context.Background(),
+		})
+	}
+
+	err := tm.RegisterTasks(context.TODO(), tasks...)
+	if err != nil {
+		t.Fatalf(errMsgFailedRegisterTask, err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), retentionTimeout)
+	defer cancel()
+
+	err = tm.Wait(waitCtx)
+	if err != nil {
+		t.Fatalf(ErrMsgWaitReturnedError, err)
+	}
+
+	deadline := time.Now().Add(retentionTimeout)
+	for time.Now().Before(deadline) {
+		remaining := tm.GetTasks()
+		if len(remaining) <= retentionLoadMaxEntries {
+			for _, task := range remaining {
+				status := task.Status()
+				//nolint:exhaustive
+				switch status {
+				case worker.Completed, worker.Failed, worker.Cancelled, worker.Invalid, worker.ContextDeadlineReached:
+					continue
+				default:
+					t.Fatalf("expected terminal task status, got %v", status)
+				}
+			}
+
+			return
+		}
+
+		time.Sleep(retentionPollInterval)
+	}
+
+	t.Fatalf("expected registry retention to prune to %d entries, got %d", retentionLoadMaxEntries, len(tm.GetTasks()))
 }
 
 func TestTaskManager_MetricsLatency(t *testing.T) {

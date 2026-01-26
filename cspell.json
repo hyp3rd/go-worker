@@ -110,6 +110,7 @@
     "pycache",
     "pytest",
     "recvcheck",
+    "sdkmetric",
     "sectools",
     "securego",
     "shellcheck",
