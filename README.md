@@ -230,6 +230,8 @@ Tracing hooks can be configured with a tracer implementation:
 tm.SetTracer(myTracer)
 ```
 
+See `__examples/tracing` for a full example.
+
 ### OpenTelemetry metrics
 
 To export metrics with OpenTelemetry, configure a meter provider and pass it to the task manager:
@@ -250,6 +252,8 @@ if err := tm.SetMeterProvider(mp); err != nil {
     log.Fatal(err)
 }
 ```
+
+See `__examples/otel_metrics` for a complete runnable example.
 
 Emitted metrics:
 
