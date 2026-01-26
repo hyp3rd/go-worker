@@ -227,6 +227,29 @@ Tracing hooks can be configured with a tracer implementation:
 tm.SetTracer(myTracer)
 ```
 
+### OpenTelemetry metrics
+
+To export metrics with OpenTelemetry, configure a meter provider and pass it to the task manager:
+
+```go
+mp := sdkmetric.NewMeterProvider(/* exporter, resources, etc */)
+if err := tm.SetMeterProvider(mp); err != nil {
+    log.Fatal(err)
+}
+```
+
+Emitted metrics:
+
+- `tasks_scheduled_total`
+- `tasks_running`
+- `tasks_completed_total`
+- `tasks_failed_total`
+- `tasks_cancelled_total`
+- `tasks_retried_total`
+- `results_dropped_total`
+- `queue_depth`
+- `task_latency_seconds`
+
 ### Registering Tasks
 
 Register new tasks by calling the `RegisterTasks()` method of the `TaskManager` struct and passing in a variadic number of tasks.

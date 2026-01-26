@@ -65,6 +65,7 @@ type TaskManager struct {
 	results *resultBroadcaster
 	hooks   atomic.Pointer[TaskHooks]
 	tracer  atomic.Pointer[tracerHolder]
+	otel    atomic.Pointer[otelMetrics]
 
 	retentionMu        sync.RWMutex
 	retention          retentionConfig
@@ -921,10 +922,14 @@ func (tm *TaskManager) recordLatency(task *Task) {
 	for {
 		current := tm.metrics.latencyMaxNs.Load()
 		if latencyNs <= current {
+			tm.recordOTelLatency(latency)
+
 			return
 		}
 
 		if tm.metrics.latencyMaxNs.CompareAndSwap(current, latencyNs) {
+			tm.recordOTelLatency(latency)
+
 			return
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 
 	worker "github.com/hyp3rd/go-worker"
 )
@@ -178,6 +179,11 @@ func (mw *loggerMiddleware) ExecuteTask(ctx context.Context, id uuid.UUID, timeo
 // GetMetrics returns a snapshot of metrics.
 func (mw *loggerMiddleware) GetMetrics() worker.MetricsSnapshot {
 	return mw.next.GetMetrics()
+}
+
+// SetMeterProvider enables OpenTelemetry metrics collection.
+func (mw *loggerMiddleware) SetMeterProvider(provider metric.MeterProvider, opts ...worker.OTelMetricsOption) error {
+	return mw.next.SetMeterProvider(provider, opts...)
 }
 
 // SetRetentionPolicy configures task registry retention.
