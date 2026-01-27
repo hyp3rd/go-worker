@@ -7,7 +7,7 @@
 ## Breaking changes (January 2026)
 
 - `Stop()` removed. Use `StopGraceful(ctx)` or `StopNow()`.
-- Local result streaming uses `SubscribeResults(buffer)`; `GetResults()`/`StreamResults()` are removed.
+- Local result streaming uses `SubscribeResults(buffer)`; `GetResults()` is now a compatibility shim and `StreamResults()` is removed.
 - `RegisterTasks` now returns an error.
 - `Task.Execute` replaces `Fn` in examples.
 - `NewGRPCServer` requires a handler map.
@@ -172,6 +172,9 @@ By default, full subscriber buffers drop new results. You can change the policy:
 tm.SetResultsDropPolicy(worker.DropOldest)
 ```
 
+`GetResults()` remains as a compatibility shim and returns a channel with a default buffer.
+Prefer `SubscribeResults(buffer)` so you can control buffering and explicitly unsubscribe.
+
 ### Initialization
 
 Create a new `TaskManager` by calling the `NewTaskManager()` function with the following parameters:
@@ -227,16 +230,30 @@ Tracing hooks can be configured with a tracer implementation:
 tm.SetTracer(myTracer)
 ```
 
+See `__examples/tracing` for a full example.
+
 ### OpenTelemetry metrics
 
 To export metrics with OpenTelemetry, configure a meter provider and pass it to the task manager:
 
 ```go
-mp := sdkmetric.NewMeterProvider(/* exporter, resources, etc */)
+exporter, err := stdoutmetric.New(stdoutmetric.WithPrettyPrint())
+if err != nil {
+    log.Fatal(err)
+}
+
+reader := sdkmetric.NewPeriodicReader(exporter)
+mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+defer func() {
+    _ = mp.Shutdown(context.Background())
+}()
+
 if err := tm.SetMeterProvider(mp); err != nil {
     log.Fatal(err)
 }
 ```
+
+See `__examples/otel_metrics` for a complete runnable example.
 
 Emitted metrics:
 

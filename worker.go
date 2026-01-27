@@ -375,6 +375,22 @@ func (tm *TaskManager) GetActiveTasks() int {
 	return int(tm.metrics.running.Load())
 }
 
+// GetResults returns a results channel (compatibility shim for legacy API).
+// Use SubscribeResults for explicit unsubscription and buffer control.
+func (tm *TaskManager) GetResults() <-chan Result {
+	results, unsubscribe := tm.SubscribeResults(DefaultMaxTasks)
+	if tm.ctx == nil {
+		return results
+	}
+
+	go func() {
+		<-tm.ctx.Done()
+		unsubscribe()
+	}()
+
+	return results
+}
+
 // SubscribeResults returns a results channel and an unsubscribe function.
 func (tm *TaskManager) SubscribeResults(buffer int) (<-chan Result, func()) {
 	return tm.results.Subscribe(buffer)

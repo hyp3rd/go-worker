@@ -42,6 +42,8 @@ type taskOperations interface {
 	CancelTask(id uuid.UUID) error
 	// GetActiveTasks returns the number of running tasks.
 	GetActiveTasks() int
+	// GetResults returns a results channel (compatibility shim for legacy API).
+	GetResults() <-chan Result
 	// SubscribeResults returns a results channel and unsubscribe function.
 	SubscribeResults(buffer int) (<-chan Result, func())
 	// SetResultsDropPolicy configures how full subscriber buffers are handled.

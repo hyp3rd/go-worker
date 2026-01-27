@@ -141,6 +141,11 @@ func (mw *loggerMiddleware) GetActiveTasks() int {
 	return mw.next.GetActiveTasks()
 }
 
+// GetResults returns a results channel (compatibility shim for legacy API).
+func (mw *loggerMiddleware) GetResults() <-chan worker.Result {
+	return mw.next.GetResults()
+}
+
 // SubscribeResults streams the results channel.
 func (mw *loggerMiddleware) SubscribeResults(buffer int) (<-chan worker.Result, func()) {
 	return mw.next.SubscribeResults(buffer)

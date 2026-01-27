@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - gRPC auth hook via `WithGRPCAuth`.
 - Task tracing hooks via `TaskTracer`.
 - OpenTelemetry metrics via `SetMeterProvider`.
+- Compatibility shim `GetResults()` for legacy callers.
 
 ### Changed
 
