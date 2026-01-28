@@ -67,6 +67,14 @@ type TaskManager struct {
 	tracer  atomic.Pointer[tracerHolder]
 	otel    atomic.Pointer[otelMetrics]
 
+	durableBackend      DurableBackend
+	durableHandlers     map[string]DurableHandlerSpec
+	durableCodec        DurableCodec
+	durableLease        time.Duration
+	durablePollInterval time.Duration
+	durableBatchSize    int
+	durableEnabled      bool
+
 	retentionMu        sync.RWMutex
 	retention          retentionConfig
 	retentionLastCheck atomic.Int64
@@ -101,6 +109,23 @@ func limiterBurst(maxWorkers, maxTasks int) int {
 	return burst
 }
 
+// NewTaskManagerWithOptions creates a new task manager using functional options.
+func NewTaskManagerWithOptions(ctx context.Context, opts ...TaskManagerOption) *TaskManager {
+	if ctx == nil {
+		panic("nil context")
+	}
+
+	cfg := defaultTaskManagerConfig()
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+
+	return newTaskManagerFromConfig(ctx, cfg)
+}
+
 // NewTaskManager creates a new task manager.
 //   - ctx is the context for the task manager
 //   - maxWorkers is the number of workers to start, if <=0, the number of CPUs will be used
@@ -117,28 +142,45 @@ func NewTaskManager(
 	timeout, retryDelay time.Duration,
 	maxRetries int,
 ) *TaskManager {
+	cfg := defaultTaskManagerConfig()
+	cfg.maxWorkers = maxWorkers
+	cfg.maxTasks = maxTasks
+	cfg.tasksPerSecond = tasksPerSecond
+	cfg.timeout = timeout
+	cfg.retryDelay = retryDelay
+	cfg.maxRetries = maxRetries
+
+	return newTaskManagerFromConfig(ctx, cfg)
+}
+
+func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskManager {
 	if ctx == nil {
 		panic("nil context")
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 
+	maxWorkers := cfg.maxWorkers
 	if maxWorkers <= 0 {
 		maxWorkers = runtime.NumCPU()
 	}
 
+	maxTasks := cfg.maxTasks
 	if maxTasks <= 0 {
 		maxTasks = DefaultMaxTasks
 	}
 
+	timeout := cfg.timeout
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
 
+	retryDelay := cfg.retryDelay
 	if retryDelay <= 0 {
 		retryDelay = DefaultRetryDelay
 	}
 
+	maxRetries := cfg.maxRetries
 	if maxRetries < 0 {
 		maxRetries = DefaultMaxRetries
 	}
@@ -146,26 +188,38 @@ func NewTaskManager(
 	burst := limiterBurst(maxWorkers, maxTasks)
 
 	var limiter *rate.Limiter
-	if tasksPerSecond <= 0 {
+	if cfg.tasksPerSecond <= 0 {
 		limiter = rate.NewLimiter(rate.Inf, burst)
 	} else {
-		limiter = rate.NewLimiter(rate.Limit(tasksPerSecond), burst)
+		limiter = rate.NewLimiter(rate.Limit(cfg.tasksPerSecond), burst)
+	}
+
+	durableEnabled := cfg.durableBackend != nil
+	if cfg.durableCodec == nil {
+		cfg.durableCodec = ProtoDurableCodec{}
 	}
 
 	tm := &TaskManager{
-		registry:   make(map[uuid.UUID]*Task),
-		scheduler:  newTaskHeap(),
-		jobs:       make(chan *Task, maxWorkers),
-		limiter:    limiter,
-		ctx:        ctx,
-		cancel:     cancel,
-		maxWorkers: maxWorkers,
-		maxTasks:   maxTasks,
-		timeout:    timeout,
-		retryDelay: retryDelay,
-		maxRetries: maxRetries,
-		workerQuit: make([]chan struct{}, 0, maxWorkers),
-		results:    newResultBroadcaster(maxTasks),
+		registry:            make(map[uuid.UUID]*Task),
+		scheduler:           newTaskHeap(),
+		jobs:                make(chan *Task, maxWorkers),
+		limiter:             limiter,
+		ctx:                 ctx,
+		cancel:              cancel,
+		maxWorkers:          maxWorkers,
+		maxTasks:            maxTasks,
+		timeout:             timeout,
+		retryDelay:          retryDelay,
+		maxRetries:          maxRetries,
+		workerQuit:          make([]chan struct{}, 0, maxWorkers),
+		results:             newResultBroadcaster(maxTasks),
+		durableBackend:      cfg.durableBackend,
+		durableHandlers:     cfg.durableHandlers,
+		durableCodec:        cfg.durableCodec,
+		durableLease:        cfg.durableLease,
+		durablePollInterval: cfg.durablePollInterval,
+		durableBatchSize:    cfg.durableBatchSize,
+		durableEnabled:      durableEnabled,
 	}
 
 	tm.queueCond = sync.NewCond(&tm.queueMu)
@@ -208,7 +262,11 @@ func (tm *TaskManager) StartWorkers(ctx context.Context) {
 
 		tm.workerWg.Add(1)
 
-		go tm.schedulerLoop(workerCtx)
+		if tm.durableEnabled {
+			go tm.durableLoop(workerCtx)
+		} else {
+			go tm.schedulerLoop(workerCtx)
+		}
 	})
 }
 
@@ -410,6 +468,10 @@ func (tm *TaskManager) ExecuteTask(ctx context.Context, id uuid.UUID, timeout ti
 		return nil, ErrInvalidTaskContext
 	}
 
+	if tm.durableEnabled {
+		return nil, ewrap.New("ExecuteTask is not supported when durable backend is enabled")
+	}
+
 	err := ctx.Err()
 	if err != nil {
 		return nil, ewrap.Wrap(err, ErrMsgContextDone)
@@ -549,6 +611,10 @@ func (tm *TaskManager) spawnWorker(ctx context.Context) {
 func (tm *TaskManager) validateRegisterArgs(ctx context.Context, task *Task) error {
 	if task == nil {
 		return ewrap.New("task is nil")
+	}
+
+	if tm.durableEnabled {
+		return ewrap.New("durable backend enabled; use RegisterDurableTask")
 	}
 
 	if !tm.accepting.Load() {
@@ -728,6 +794,10 @@ func (tm *TaskManager) workerLoop(ctx context.Context, stop chan struct{}) {
 func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Duration) (any, error) {
 	if task == nil {
 		return nil, ewrap.New("task is nil")
+	}
+
+	if task.durableLease != nil {
+		return tm.runDurableTask(ctx, task, timeout)
 	}
 
 	if !task.markRunning() {
@@ -913,7 +983,10 @@ func (tm *TaskManager) finishTask(task *Task, status TaskStatus, result any, err
 	}
 
 	task.doneOnce.Do(func() {
-		tm.wg.Done()
+		if !task.skipWg {
+			tm.wg.Done()
+		}
+
 		tm.incrementMetric(status)
 		tm.recordLatency(task)
 		tm.hookFinish(task, status, result, err)

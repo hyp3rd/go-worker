@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Compatibility shim `GetResults()` for legacy callers.
 - Retention load and OTel metrics wiring tests.
 - Benchmarks for registration throughput and retention pruning.
+- Durable task APIs with a Redis backend (rueidis).
+- `NewTaskManagerWithOptions` for functional configuration.
 
 ### Changed
 
@@ -24,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Breaking: `Stop()` removed; use `StopGraceful(ctx)` or `StopNow()`.
 - Breaking: `SubscribeResults` replaces `GetResults()`/`StreamResults()` (shim restored for legacy).
 - Breaking: `RegisterTasks` now returns an error.
+- Breaking: `RegisterTask(s)` are disabled when a durable backend is enabled (use `RegisterDurableTask(s)`).
 
 ## [v0.1.1] - 2025-08-18
 

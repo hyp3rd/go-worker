@@ -119,3 +119,32 @@
 - `Stop()` returns within a bounded timeout even with pending tasks.
 - No panics in `GetTask`, middleware logging, or streaming when tasks have no result/error yet.
 - Task execution respects deadlines; canceled tasks do not execute.
+
+## Competitive Landscape & Gaps
+
+### Comparable Go packages
+
+- **Worker pools** (concurrency focus): `ants`, `pond`, `tunny`. These provide fast pool management but lack task lifecycle, retries, hooks, and results fan‑out.
+- **Distributed/durable queues**: `river` (Postgres‑backed) and `gocraft/work` (Redis‑backed). These provide persistence, multi‑node coordination, and UIs, but are heavier and require external infrastructure.
+
+### Gaps vs comparable packages
+
+- **Durability**: no persisted queue, no transactional enqueue, no guaranteed recovery after process restart.
+- **Operational tooling**: no built‑in admin UI, dashboards, or DLQ replay tooling.
+- **Distributed coordination**: no broker/queue backend or multi‑node worker coordination.
+- **Scheduling**: no cron‑like schedules or delayed tasks beyond retries.
+
+### Nice‑to‑have improvements
+
+- **DLQ & replay** for terminal failures.
+- **Queue segmentation** (multiple named queues, weighted priorities).
+- **Typed task payloads** (optional typed registry, stronger compile‑time checks).
+- **More observability knobs** (labels for task name/status; exemplar support).
+- **Operational guidance** (sizing/rate‑limit recommendations, best‑practice defaults).
+
+### Roadmap (future milestones)
+
+1. **Durable backend**: pluggable persistence (Postgres/Redis) with transactional enqueue.
+1. **Operational tooling**: admin UI + CLI for queue inspection, retries, and DLQ.
+1. **Scheduled jobs**: cron/delayed scheduling layer.
+1. **Multi‑node coordination**: optional distributed workers via backend.

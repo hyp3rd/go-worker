@@ -12,6 +12,7 @@ import (
 type Service interface {
 	workerOperations
 	taskOperations
+	durableOperations
 	metricsOperations
 	retentionOperations
 	hooksOperations
@@ -54,6 +55,13 @@ type taskOperations interface {
 	GetTasks() []*Task
 	// ExecuteTask executes a task given its ID and returns the result.
 	ExecuteTask(ctx context.Context, id uuid.UUID, timeout time.Duration) (any, error)
+}
+
+type durableOperations interface {
+	// RegisterDurableTask registers a durable task in the configured backend.
+	RegisterDurableTask(ctx context.Context, task DurableTask) error
+	// RegisterDurableTasks registers multiple durable tasks.
+	RegisterDurableTasks(ctx context.Context, tasks ...DurableTask) error
 }
 
 type metricsOperations interface {

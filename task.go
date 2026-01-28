@@ -132,6 +132,8 @@ type Task struct {
 	retryBackoff     time.Duration
 	index            int
 	doneOnce         sync.Once
+	durableLease     *DurableTaskLease
+	skipWg           bool
 }
 
 // NewTask creates a new task with the provided function and context.

@@ -21,6 +21,7 @@
 - Results: fan-out subscriptions via `SubscribeResults`.
 - Cancellation: cancel tasks before or during execution.
 - Retries: exponential backoff with capped delays.
+- Durability: optional Redis-backed durable task queue.
 
 ## Architecture
 
@@ -190,6 +191,53 @@ Create a new `TaskManager` by calling the `NewTaskManager()` function with the f
 
 ```go
 tm := worker.NewTaskManager(context.Background(), 4, 10, 5, 30*time.Second, 1*time.Second, 3)
+```
+
+### Durable backend (Redis)
+
+Durable tasks use a separate `DurableTask` type and a handler registry keyed by name.
+The default encoding is protobuf via `ProtoDurableCodec`. When a durable backend is enabled,
+`RegisterTask`/`RegisterTasks` are disabled in favor of `RegisterDurableTask(s)`.
+
+```go
+client, err := rueidis.NewClient(rueidis.ClientOption{
+    InitAddress: []string{"127.0.0.1:6379"},
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close()
+
+backend, err := worker.NewRedisDurableBackend(client)
+if err != nil {
+    log.Fatal(err)
+}
+
+handlers := map[string]worker.DurableHandlerSpec{
+    "send_email": {
+        Make: func() proto.Message { return &workerpb.SendEmailRequest{} },
+        Fn: func(ctx context.Context, payload proto.Message) (any, error) {
+            req := payload.(*workerpb.SendEmailRequest)
+            // process request
+            return &workerpb.SendEmailResponse{MessageId: "msg-1"}, nil
+        },
+    },
+}
+
+tm := worker.NewTaskManagerWithOptions(
+    context.Background(),
+    worker.WithDurableBackend(backend),
+    worker.WithDurableHandlers(handlers),
+)
+
+err = tm.RegisterDurableTask(context.Background(), worker.DurableTask{
+    Handler: "send_email",
+    Message: &workerpb.SendEmailRequest{To: "ops@example.com"},
+    Retries: 5,
+})
+if err != nil {
+    log.Fatal(err)
+}
 ```
 
 Optional retention can be configured to prevent unbounded task registry growth:
