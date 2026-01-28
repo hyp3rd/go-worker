@@ -255,6 +255,7 @@ if err := tm.SetMeterProvider(mp); err != nil {
 ```
 
 See `__examples/otel_metrics` for a complete runnable example.
+See `__examples/otel_metrics_otlp` for an OTLP/HTTP exporter example.
 
 Emitted metrics:
 

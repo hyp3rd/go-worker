@@ -257,16 +257,19 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task *Task) error {
 		return err
 	}
 
+	tm.wg.Add(1)
+
 	err = tm.enqueue(task)
 	if err != nil {
 		tm.registryMu.Lock()
 		delete(tm.registry, task.ID)
 		tm.registryMu.Unlock()
 
+		tm.wg.Done()
+
 		return err
 	}
 
-	tm.wg.Add(1)
 	task.setQueued()
 	tm.metrics.scheduled.Add(1)
 	tm.hookQueued(task)
