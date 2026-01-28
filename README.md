@@ -230,7 +230,8 @@ Tracing hooks can be configured with a tracer implementation:
 tm.SetTracer(myTracer)
 ```
 
-See `__examples/tracing` for a full example.
+See `__examples/tracing` for a minimal logger-based tracer.
+See `__examples/otel_tracing` for OpenTelemetry tracing with a stdout exporter.
 
 ### OpenTelemetry metrics
 

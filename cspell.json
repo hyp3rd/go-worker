@@ -121,6 +121,7 @@
     "staticcheck",
     "stdlib",
     "stdoutmetric",
+    "stdouttrace",
     "strconv",
     "strs",
     "syncer",
