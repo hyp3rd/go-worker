@@ -5,6 +5,7 @@ BUF_VERSION ?= v1.64.0
 GO_VERSION ?= 1.25.6
 GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true
+BENCHTIME ?= 1s
 
 GOFILES = $(shell find . -type f -name '*.go' -not -path "./pkg/api/*" -not -path "./vendor/*" -not -path "./.gocache/*" -not -path "./.git/*")
 
@@ -17,7 +18,7 @@ test-race:
 	go test -race ./...
 
 bench:
-	go test -bench=. -benchtime=3s -benchmem -run=^-memprofile=mem.out ./...
+	go test -bench=. -benchtime=$(BENCHTIME) -benchmem -run=^-memprofile=mem.out ./...
 
 update-deps:
 	go get -v -u ./...
