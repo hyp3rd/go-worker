@@ -24,6 +24,7 @@
   "dictionaryDefinitions": [],
   "dictionaries": [],
   "words": [
+    "acked",
     "anchore",
     "anypb",
     "Atoi",
@@ -99,6 +100,7 @@
     "myproject",
     "mypy",
     "myuser",
+    "nacked",
     "Newf",
     "newuser",
     "nolint",
@@ -119,6 +121,7 @@
     "pycache",
     "pytest",
     "recvcheck",
+    "requirepass",
     "rueidis",
     "sdkmetric",
     "sectools",

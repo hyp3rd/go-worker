@@ -1,0 +1,35 @@
+---
+services:
+  worker-example-redis:
+    hostname: worker-example-redis
+    container_name: worker-example-redis
+    image: redis/redis-stack-server:latest
+    environment:
+      - REDIS_ARGS=--requirepass supersecret
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "supersecret", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+      - "8001:8001"
+    volumes:
+      - redis-worker-stack_data:/data
+    networks:
+      redis-worker-net:
+        ipv4_address: 100.10.10.15
+
+volumes:
+  redis-worker-stack_data:
+    driver: local
+
+networks:
+  redis-worker-net:
+    name: redis-worker-net
+    driver: bridge
+    attachable: true
+    ipam:
+      config:
+        - subnet: 100.10.10.0/24

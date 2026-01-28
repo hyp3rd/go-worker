@@ -198,6 +198,7 @@ tm := worker.NewTaskManager(context.Background(), 4, 10, 5, 30*time.Second, 1*ti
 Durable tasks use a separate `DurableTask` type and a handler registry keyed by name.
 The default encoding is protobuf via `ProtoDurableCodec`. When a durable backend is enabled,
 `RegisterTask`/`RegisterTasks` are disabled in favor of `RegisterDurableTask(s)`.
+See `__examples/durable_redis` for a runnable example.
 
 ```go
 client, err := rueidis.NewClient(rueidis.ClientOption{
@@ -239,6 +240,8 @@ if err != nil {
     log.Fatal(err)
 }
 ```
+
+Defaults: lease is 30s, poll interval is 200ms, and Redis dequeue batch is 50 (configurable via options).
 
 Optional retention can be configured to prevent unbounded task registry growth:
 
