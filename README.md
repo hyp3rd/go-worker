@@ -244,6 +244,14 @@ if err != nil {
 
 Defaults: lease is 30s, poll interval is 200ms, and Redis dequeue batch is 50 (configurable via options).
 
+Operational notes (durable Redis):
+
+- **Key hashing**: Redis Lua scripts touch multiple keys; for clustered Redis, all keys must share the same hash slot. The backend auto-wraps the prefix in `{}` to enforce this (e.g., `{go-worker}:ready`).
+- **DLQ**: Failed tasks are pushed to a dead-letter list (`{prefix}:dead`). There is no built-in replay yet; you should build a replay tool or manually re-enqueue as needed.
+- **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility.
+- **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
+- **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
+
 Optional retention can be configured to prevent unbounded task registry growth:
 
 ```go
