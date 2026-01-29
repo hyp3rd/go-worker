@@ -64,6 +64,31 @@ srv := worker.NewGRPCServer(tm, handlers)
 For production, configure TLS credentials and interceptors (logging/auth) on the gRPC server; see `__examples/grpc` for a complete setup.
 For a Redis-backed durable gRPC example, see `__examples/grpc_durable`.
 
+### Durable gRPC client (example)
+
+Use `RegisterDurableTasks` for persisted tasks (payload is still `Any`). Results stream is shared with non-durable tasks.
+
+```go
+payload, _ := anypb.New(&workerpb.SendEmailPayload{
+    To:      "ops@example.com",
+    Subject: "Hello durable gRPC",
+    Body:    "Persisted task",
+})
+
+resp, err := client.RegisterDurableTasks(ctx, &workerpb.RegisterDurableTasksRequest{
+    Tasks: []*workerpb.DurableTask{
+        {
+            Name:           "send_email",
+            Payload:        payload,
+            IdempotencyKey: "durable:send_email:ops@example.com",
+        },
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}
+```
+
 ### Authorization hook
 
 You can enforce authentication/authorization at the gRPC boundary with `WithGRPCAuth`.
@@ -251,6 +276,7 @@ Operational notes (durable Redis):
 - **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility.
 - **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
 - **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
+- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts and peeks ready IDs.
 
 Optional retention can be configured to prevent unbounded task registry growth:
 

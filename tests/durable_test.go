@@ -30,6 +30,7 @@ type fakeDurableBackend struct {
 	nacked    []uuid.UUID
 	failed    []uuid.UUID
 	nackDelay time.Duration
+	nackCh    chan struct{}
 }
 
 func (b *fakeDurableBackend) Enqueue(_ context.Context, task worker.DurableTask) error {
@@ -78,7 +79,14 @@ func (b *fakeDurableBackend) Nack(_ context.Context, lease worker.DurableTaskLea
 	defer b.mu.Unlock()
 
 	b.nacked = append(b.nacked, lease.Task.ID)
+
 	b.nackDelay = delay
+	if b.nackCh != nil {
+		select {
+		case b.nackCh <- struct{}{}:
+		default:
+		}
+	}
 
 	return nil
 }
@@ -354,5 +362,73 @@ func TestDurableLoop_FailOnError(t *testing.T) {
 
 	if len(backend.acked) != 0 {
 		t.Fatalf("unexpected acked=%v", backend.acked)
+	}
+}
+
+func TestDurableLoop_NackOnRetry(t *testing.T) {
+	t.Parallel()
+
+	taskID := uuid.New()
+
+	payload, err := proto.Marshal(&workerpb.SendEmailPayload{To: "ops@example.com"})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	nackCh := make(chan struct{}, 1)
+	backend := &fakeDurableBackend{
+		leases: []worker.DurableTaskLease{
+			{
+				Task: worker.DurableTask{
+					ID:      taskID,
+					Handler: testTaskName,
+					Payload: payload,
+					Retries: 2,
+				},
+				Attempts:   1,
+				MaxRetries: 2,
+			},
+		},
+		nackCh: nackCh,
+	}
+
+	handlers := map[string]worker.DurableHandlerSpec{
+		testTaskName: {
+			Make: func() proto.Message { return &workerpb.SendEmailPayload{} },
+			Fn: func(context.Context, proto.Message) (any, error) {
+				return nil, errTestBoom
+			},
+		},
+	}
+
+	tm := worker.NewTaskManagerWithOptions(
+		context.Background(),
+		worker.WithDurableBackend(backend),
+		worker.WithDurableHandlers(handlers),
+		worker.WithDurablePollInterval(testPollInterval),
+		worker.WithDurableLease(testLease),
+	)
+
+	t.Cleanup(func() { stopTaskManager(t, tm) })
+
+	select {
+	case <-nackCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for nack")
+	}
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+
+	if len(backend.nacked) != 1 || backend.nacked[0] != taskID {
+		t.Fatalf("expected nack for %s, got %+v", taskID, backend.nacked)
+	}
+
+	if len(backend.failed) != 0 {
+		t.Fatalf("expected no fail, got %+v", backend.failed)
+	}
+
+	if backend.nackDelay <= 0 {
+		t.Fatalf("expected positive nack delay, got %s", backend.nackDelay)
 	}
 }

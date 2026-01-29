@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"time"
@@ -27,6 +28,7 @@ func main() {
 		durablePriority = 1
 		scanCount       = 100
 	)
+	failOnce := flag.Bool("fail-once", false, "fail the task once to populate DLQ")
 	cleanup := flag.Bool("cleanup", true, "delete durable Redis keys for the example prefix")
 	flag.Parse()
 
@@ -50,6 +52,10 @@ func main() {
 			Fn: func(ctx context.Context, payload proto.Message) (any, error) {
 				req := payload.(*workerpb.SendEmailPayload)
 				log.Printf("send email to=%s subject=%s", req.To, req.Subject)
+				if *failOnce {
+					*failOnce = false
+					return nil, errors.New("forced failure")
+				}
 				return "ok", nil
 			},
 		},

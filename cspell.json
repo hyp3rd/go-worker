@@ -91,6 +91,7 @@
     "ints",
     "ipairs",
     "ireturn",
+    "Llen",
     "localmodule",
     "LPUSH",
     "memprofile",
@@ -122,6 +123,7 @@
     "pytest",
     "recvcheck",
     "requirepass",
+    "RPOP",
     "rueidis",
     "sdkmetric",
     "sectools",
@@ -155,6 +157,7 @@
     "xlarge",
     "ZADD",
     "ZCARD",
+    "Zrange",
     "ZRANGEBYSCORE",
     "ZREM"
   ],
