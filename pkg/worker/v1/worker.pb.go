@@ -7,13 +7,14 @@
 package workerpb
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -800,25 +801,27 @@ func file_worker_v1_worker_proto_rawDescGZIP() []byte {
 	return file_worker_v1_worker_proto_rawDescData
 }
 
-var file_worker_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
-var file_worker_v1_worker_proto_goTypes = []any{
-	(*Task)(nil),                         // 0: worker.v1.Task
-	(*RegisterTasksRequest)(nil),         // 1: worker.v1.RegisterTasksRequest
-	(*RegisterTasksResponse)(nil),        // 2: worker.v1.RegisterTasksResponse
-	(*DurableTask)(nil),                  // 3: worker.v1.DurableTask
-	(*RegisterDurableTasksRequest)(nil),  // 4: worker.v1.RegisterDurableTasksRequest
-	(*RegisterDurableTasksResponse)(nil), // 5: worker.v1.RegisterDurableTasksResponse
-	(*StreamResultsRequest)(nil),         // 6: worker.v1.StreamResultsRequest
-	(*StreamResultsResponse)(nil),        // 7: worker.v1.StreamResultsResponse
-	(*CancelTaskRequest)(nil),            // 8: worker.v1.CancelTaskRequest
-	(*CancelTaskResponse)(nil),           // 9: worker.v1.CancelTaskResponse
-	(*GetTaskRequest)(nil),               // 10: worker.v1.GetTaskRequest
-	(*GetTaskResponse)(nil),              // 11: worker.v1.GetTaskResponse
-	nil,                                  // 12: worker.v1.Task.MetadataEntry
-	nil,                                  // 13: worker.v1.DurableTask.MetadataEntry
-	(*durationpb.Duration)(nil),          // 14: google.protobuf.Duration
-	(*anypb.Any)(nil),                    // 15: google.protobuf.Any
-}
+var (
+	file_worker_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+	file_worker_v1_worker_proto_goTypes  = []any{
+		(*Task)(nil),                         // 0: worker.v1.Task
+		(*RegisterTasksRequest)(nil),         // 1: worker.v1.RegisterTasksRequest
+		(*RegisterTasksResponse)(nil),        // 2: worker.v1.RegisterTasksResponse
+		(*DurableTask)(nil),                  // 3: worker.v1.DurableTask
+		(*RegisterDurableTasksRequest)(nil),  // 4: worker.v1.RegisterDurableTasksRequest
+		(*RegisterDurableTasksResponse)(nil), // 5: worker.v1.RegisterDurableTasksResponse
+		(*StreamResultsRequest)(nil),         // 6: worker.v1.StreamResultsRequest
+		(*StreamResultsResponse)(nil),        // 7: worker.v1.StreamResultsResponse
+		(*CancelTaskRequest)(nil),            // 8: worker.v1.CancelTaskRequest
+		(*CancelTaskResponse)(nil),           // 9: worker.v1.CancelTaskResponse
+		(*GetTaskRequest)(nil),               // 10: worker.v1.GetTaskRequest
+		(*GetTaskResponse)(nil),              // 11: worker.v1.GetTaskResponse
+		nil,                                  // 12: worker.v1.Task.MetadataEntry
+		nil,                                  // 13: worker.v1.DurableTask.MetadataEntry
+		(*durationpb.Duration)(nil),          // 14: google.protobuf.Duration
+		(*anypb.Any)(nil),                    // 15: google.protobuf.Any
+	}
+)
 var file_worker_v1_worker_proto_depIdxs = []int32{
 	14, // 0: worker.v1.Task.retry_delay:type_name -> google.protobuf.Duration
 	15, // 1: worker.v1.Task.payload:type_name -> google.protobuf.Any
