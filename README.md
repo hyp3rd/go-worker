@@ -12,6 +12,7 @@
 - `Task.Execute` replaces `Fn` in examples.
 - `NewGRPCServer` requires a handler map.
 - Rate limiting is deterministic: burst is `min(maxWorkers, maxTasks)` and `ExecuteTask` uses the shared limiter.
+- gRPC durable tasks use `RegisterDurableTasks` and the new `DurableTask` message.
 
 ## Features
 

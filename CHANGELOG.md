@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Durable task APIs with a Redis backend (rueidis).
 - `NewTaskManagerWithOptions` for functional configuration.
 - gRPC durable task registration via `RegisterDurableTasks`.
+- Durable Redis examples and tooling: `__examples/durable_redis`, `__examples/grpc_durable`, `__examples/durable_dlq_replay`, `__examples/durable_queue_inspect`.
 
 ### Changed
 
@@ -28,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Breaking: `SubscribeResults` replaces `GetResults()`/`StreamResults()` (shim restored for legacy).
 - Breaking: `RegisterTasks` now returns an error.
 - Breaking: `RegisterTask(s)` are disabled when a durable backend is enabled (use `RegisterDurableTask(s)`).
+- gRPC: new `DurableTask` and `RegisterDurableTasks` for persisted tasks (existing RPCs unchanged).
 
 ## [v0.1.1] - 2025-08-18
 
