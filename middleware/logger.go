@@ -77,6 +77,38 @@ func (mw *loggerMiddleware) RegisterTasks(ctx context.Context, tasks ...*worker.
 	return mw.next.RegisterTasks(ctx, tasks...)
 }
 
+// RegisterDurableTask registers a durable task in the configured backend.
+func (mw *loggerMiddleware) RegisterDurableTask(ctx context.Context, task worker.DurableTask) error {
+	defer func(begin time.Time) {
+		if task.ID != uuid.Nil {
+			mw.logger.Printf("registering durable task ID %v with handler: %s", task.ID, task.Handler)
+		} else {
+			mw.logger.Printf("registering durable task with handler: %s", task.Handler)
+		}
+
+		mw.logger.Printf("`RegisterDurableTask` took: %s", time.Since(begin))
+	}(time.Now())
+
+	return mw.next.RegisterDurableTask(ctx, task)
+}
+
+// RegisterDurableTasks registers multiple durable tasks.
+func (mw *loggerMiddleware) RegisterDurableTasks(ctx context.Context, tasks ...worker.DurableTask) error {
+	defer func(begin time.Time) {
+		for _, task := range tasks {
+			if task.ID != uuid.Nil {
+				mw.logger.Printf("registering durable task ID %v with handler: %s", task.ID, task.Handler)
+			} else {
+				mw.logger.Printf("registering durable task with handler: %s", task.Handler)
+			}
+		}
+
+		mw.logger.Printf("`RegisterDurableTasks` took: %s", time.Since(begin))
+	}(time.Now())
+
+	return mw.next.RegisterDurableTasks(ctx, tasks...)
+}
+
 // StartWorkers starts the task manager.
 func (mw *loggerMiddleware) StartWorkers(ctx context.Context) {
 	defer func(begin time.Time) {

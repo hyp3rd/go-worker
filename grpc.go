@@ -82,6 +82,10 @@ type payloadResult struct {
 	payload protoreflect.ProtoMessage
 }
 
+type durablePayloadResult struct {
+	payload protoreflect.ProtoMessage
+}
+
 // RegisterTasks registers one or more tasks with the underlying service.
 func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTasksRequest) (*workerpb.RegisterTasksResponse, error) {
 	err := s.authorize(ctx, workerpb.WorkerService_RegisterTasks_FullMethodName, req)
@@ -101,6 +105,30 @@ func (s *GRPCServer) RegisterTasks(ctx context.Context, req *workerpb.RegisterTa
 	}
 
 	return &workerpb.RegisterTasksResponse{Ids: ids}, nil
+}
+
+// RegisterDurableTasks registers one or more durable tasks with the underlying service.
+func (s *GRPCServer) RegisterDurableTasks(
+	ctx context.Context,
+	req *workerpb.RegisterDurableTasksRequest,
+) (*workerpb.RegisterDurableTasksResponse, error) {
+	err := s.authorize(ctx, workerpb.WorkerService_RegisterDurableTasks_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, len(req.GetTasks()))
+
+	for i, taskReq := range req.GetTasks() {
+		id, err := s.registerDurableTaskFromRequest(ctx, taskReq)
+		if err != nil {
+			return nil, err
+		}
+
+		ids[i] = id
+	}
+
+	return &workerpb.RegisterDurableTasksResponse{Ids: ids}, nil
 }
 
 // StreamResults streams task results back to the client.
@@ -260,6 +288,33 @@ func (s *GRPCServer) registerTaskFromRequest(ctx context.Context, taskReq *worke
 	return s.registerTaskWithIdempotency(ctx, task, idempotencyKey, record)
 }
 
+func (s *GRPCServer) registerDurableTaskFromRequest(ctx context.Context, taskReq *workerpb.DurableTask) (string, error) {
+	idempotencyKey := strings.TrimSpace(taskReq.GetIdempotencyKey())
+
+	record, existingID, err := s.beginDurableIdempotency(ctx, idempotencyKey, taskReq)
+	if err != nil {
+		return "", err
+	}
+
+	if existingID != "" {
+		return existingID, nil
+	}
+
+	spec, err := s.lookupHandler(taskReq.GetName(), idempotencyKey, record)
+	if err != nil {
+		return "", err
+	}
+
+	payload, err := s.decodeDurablePayload(taskReq, spec, idempotencyKey, record)
+	if err != nil {
+		return "", err
+	}
+
+	task := s.newDurableTaskFromRequest(taskReq, payload.payload)
+
+	return s.registerDurableTaskWithIdempotency(ctx, task, idempotencyKey, record)
+}
+
 func (s *GRPCServer) beginIdempotency(ctx context.Context, key string, taskReq *workerpb.Task) (*idempotencyRecord, string, error) {
 	if key == "" {
 		return nil, "", nil
@@ -270,7 +325,33 @@ func (s *GRPCServer) beginIdempotency(ctx context.Context, key string, taskReq *
 		return nil, "", status.Errorf(codes.InvalidArgument, "idempotency signature for %q: %v", taskReq.GetName(), err)
 	}
 
-	existingID, record, err := s.resolveIdempotency(ctx, key, sig)
+	existingID, record, err := s.resolveIdempotency(ctx, key, sig, true)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if existingID != "" {
+		return nil, existingID, nil
+	}
+
+	return record, "", nil
+}
+
+func (s *GRPCServer) beginDurableIdempotency(
+	ctx context.Context,
+	key string,
+	taskReq *workerpb.DurableTask,
+) (*idempotencyRecord, string, error) {
+	if key == "" {
+		return nil, "", nil
+	}
+
+	sig, err := idempotencySignatureDurable(taskReq)
+	if err != nil {
+		return nil, "", status.Errorf(codes.InvalidArgument, "idempotency signature for %q: %v", taskReq.GetName(), err)
+	}
+
+	existingID, record, err := s.resolveIdempotency(ctx, key, sig, false)
 	if err != nil {
 		return nil, "", err
 	}
@@ -319,6 +400,34 @@ func (s *GRPCServer) decodePayload(
 	return payloadResult{payload: payload}, nil
 }
 
+func (s *GRPCServer) decodeDurablePayload(
+	taskReq *workerpb.DurableTask,
+	spec HandlerSpec,
+	key string,
+	record *idempotencyRecord,
+) (durablePayloadResult, error) {
+	if taskReq.GetPayload() == nil {
+		return durablePayloadResult{}, s.completeIdempotencyError(
+			key,
+			record,
+			status.Errorf(codes.InvalidArgument, "missing payload for %q", taskReq.GetName()),
+		)
+	}
+
+	payload := spec.Make()
+
+	err := anypb.UnmarshalTo(taskReq.GetPayload(), payload, proto.UnmarshalOptions{})
+	if err != nil {
+		return durablePayloadResult{}, s.completeIdempotencyError(
+			key,
+			record,
+			status.Errorf(codes.InvalidArgument, "bad payload for %q: %v", taskReq.GetName(), err),
+		)
+	}
+
+	return durablePayloadResult{payload: payload}, nil
+}
+
 func (s *GRPCServer) newTaskFromRequest(
 	ctx context.Context,
 	taskReq *workerpb.Task,
@@ -346,6 +455,25 @@ func (s *GRPCServer) newTaskFromRequest(
 	return task, nil
 }
 
+func (*GRPCServer) newDurableTaskFromRequest(
+	taskReq *workerpb.DurableTask,
+	payload protoreflect.ProtoMessage,
+) DurableTask {
+	task := DurableTask{
+		Handler:  taskReq.GetName(),
+		Priority: int(taskReq.GetPriority()),
+		Retries:  int(taskReq.GetRetries()),
+		Metadata: taskReq.GetMetadata(),
+		Message:  payload,
+	}
+
+	if d := taskReq.GetRetryDelay(); d != nil {
+		task.RetryDelay = d.AsDuration()
+	}
+
+	return task
+}
+
 func (s *GRPCServer) registerTaskWithIdempotency(
 	ctx context.Context,
 	task *Task,
@@ -360,6 +488,28 @@ func (s *GRPCServer) registerTaskWithIdempotency(
 	s.completeIdempotencySuccess(key, record, task.ID.String())
 
 	return task.ID.String(), nil
+}
+
+func (s *GRPCServer) registerDurableTaskWithIdempotency(
+	ctx context.Context,
+	task DurableTask,
+	key string,
+	record *idempotencyRecord,
+) (string, error) {
+	if task.ID == uuid.Nil {
+		task.ID = uuid.New()
+	}
+
+	err := s.svc.RegisterDurableTask(ctx, task)
+	if err != nil {
+		return "", s.completeIdempotencyError(key, record, status.Errorf(codes.Internal, "register durable task: %v", err))
+	}
+
+	id := task.ID.String()
+
+	s.completeIdempotencySuccess(key, record, id)
+
+	return id, nil
 }
 
 func (s *GRPCServer) completeIdempotencyError(key string, record *idempotencyRecord, err error) error {
@@ -388,10 +538,23 @@ func idempotencySignature(taskReq *workerpb.Task) ([idempotencySignatureSize]byt
 	return sha256.Sum256(payload), nil
 }
 
+func idempotencySignatureDurable(taskReq *workerpb.DurableTask) ([idempotencySignatureSize]byte, error) {
+	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(taskReq)
+	if err != nil {
+		return [idempotencySignatureSize]byte{}, ewrap.Wrapf(
+			err,
+			"marshal durable task request for idempotency signature calculation. Task name: %q",
+			taskReq.GetName())
+	}
+
+	return sha256.Sum256(payload), nil
+}
+
 func (s *GRPCServer) resolveIdempotency(
 	ctx context.Context,
 	key string,
 	sig [idempotencySignatureSize]byte,
+	checkExists bool,
 ) (string, *idempotencyRecord, error) {
 	for {
 		s.idempotencyMu.Lock()
@@ -434,10 +597,12 @@ func (s *GRPCServer) resolveIdempotency(
 			return "", nil, status.Errorf(codes.Internal, "idempotency key %q completed without result", key)
 		}
 
-		if !s.idempotencyTaskExists(id) {
-			s.forgetIdempotency(key)
+		if checkExists {
+			if !s.idempotencyTaskExists(id) {
+				s.forgetIdempotency(key)
 
-			continue
+				continue
+			}
 		}
 
 		return id, nil, nil

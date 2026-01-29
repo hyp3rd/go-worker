@@ -21,6 +21,7 @@
 - Results: fan-out subscriptions via `SubscribeResults`.
 - Cancellation: cancel tasks before or during execution.
 - Retries: exponential backoff with capped delays.
+- Durability: optional Redis-backed durable task queue.
 
 ## Architecture
 
@@ -44,7 +45,7 @@ tasks and query their status.
 
 The server registers handlers keyed by name. Each handler consists of a `Make` function that constructs the expected payload type, and a `Fn` function that executes the task logic using the unpacked payload.
 
-Clients send a `Task` message containing a `name` and a serialized `payload` using `google.protobuf.Any`. The server automatically unpacks the `Any` payload into the correct type based on the registered handler and passes it to the corresponding function.
+Clients send a `Task` message containing a `name` and a serialized `payload` using `google.protobuf.Any`. The server automatically unpacks the `Any` payload into the correct type based on the registered handler and passes it to the corresponding function. For durable tasks, use `RegisterDurableTasks` with the `DurableTask` message (the payload is still an `Any`).
 
 ```go
 handlers := map[string]worker.HandlerSpec{
@@ -61,6 +62,32 @@ srv := worker.NewGRPCServer(tm, handlers)
 ```
 
 For production, configure TLS credentials and interceptors (logging/auth) on the gRPC server; see `__examples/grpc` for a complete setup.
+For a Redis-backed durable gRPC example, see `__examples/grpc_durable`.
+
+### Durable gRPC client (example)
+
+Use `RegisterDurableTasks` for persisted tasks (payload is still `Any`). Results stream is shared with non-durable tasks.
+
+```go
+payload, _ := anypb.New(&workerpb.SendEmailPayload{
+    To:      "ops@example.com",
+    Subject: "Hello durable gRPC",
+    Body:    "Persisted task",
+})
+
+resp, err := client.RegisterDurableTasks(ctx, &workerpb.RegisterDurableTasksRequest{
+    Tasks: []*workerpb.DurableTask{
+        {
+            Name:           "send_email",
+            Payload:        payload,
+            IdempotencyKey: "durable:send_email:ops@example.com",
+        },
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}
+```
 
 ### Authorization hook
 
@@ -191,6 +218,65 @@ Create a new `TaskManager` by calling the `NewTaskManager()` function with the f
 ```go
 tm := worker.NewTaskManager(context.Background(), 4, 10, 5, 30*time.Second, 1*time.Second, 3)
 ```
+
+### Durable backend (Redis)
+
+Durable tasks use a separate `DurableTask` type and a handler registry keyed by name.
+The default encoding is protobuf via `ProtoDurableCodec`. When a durable backend is enabled,
+`RegisterTask`/`RegisterTasks` are disabled in favor of `RegisterDurableTask(s)`.
+See `__examples/durable_redis` for a runnable example.
+
+```go
+client, err := rueidis.NewClient(rueidis.ClientOption{
+    InitAddress: []string{"127.0.0.1:6379"},
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close()
+
+backend, err := worker.NewRedisDurableBackend(client)
+if err != nil {
+    log.Fatal(err)
+}
+
+handlers := map[string]worker.DurableHandlerSpec{
+    "send_email": {
+        Make: func() proto.Message { return &workerpb.SendEmailRequest{} },
+        Fn: func(ctx context.Context, payload proto.Message) (any, error) {
+            req := payload.(*workerpb.SendEmailRequest)
+            // process request
+            return &workerpb.SendEmailResponse{MessageId: "msg-1"}, nil
+        },
+    },
+}
+
+tm := worker.NewTaskManagerWithOptions(
+    context.Background(),
+    worker.WithDurableBackend(backend),
+    worker.WithDurableHandlers(handlers),
+)
+
+err = tm.RegisterDurableTask(context.Background(), worker.DurableTask{
+    Handler: "send_email",
+    Message: &workerpb.SendEmailRequest{To: "ops@example.com"},
+    Retries: 5,
+})
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+Defaults: lease is 30s, poll interval is 200ms, and Redis dequeue batch is 50 (configurable via options).
+
+Operational notes (durable Redis):
+
+- **Key hashing**: Redis Lua scripts touch multiple keys; for clustered Redis, all keys must share the same hash slot. The backend auto-wraps the prefix in `{}` to enforce this (e.g., `{go-worker}:ready`).
+- **DLQ**: Failed tasks are pushed to a dead-letter list (`{prefix}:dead`). There is no built-in replay yet; you should build a replay tool or manually re-enqueue as needed.
+- **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility.
+- **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
+- **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
+- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts and peeks ready IDs.
 
 Optional retention can be configured to prevent unbounded task registry growth:
 
