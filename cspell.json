@@ -99,6 +99,8 @@
     "nolint",
     "nonamedreturns",
     "nonroot",
+    "otlpmetric",
+    "otlpmetrichttp",
     "pipefail",
     "popd",
     "Println",
