@@ -159,6 +159,7 @@ func main() {
 
 	targetID := registerResp.Ids[0]
 	log.Printf("registered durable task id=%s", targetID)
+	log.Printf("note: durable execution is at-least-once; handlers should be idempotent")
 
 	for {
 		msg, err := stream.Recv()

@@ -279,6 +279,24 @@ Operational notes (durable Redis):
 - **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
 - **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts and peeks ready IDs.
 
+### Multi-node coordination (durable Redis)
+
+Durable processing is **at-least-once**. When multiple nodes consume from the same Redis backend:
+
+- **Lease sizing**: set `WithDurableLease` longer than your worst-case task duration (plus buffer). If a task exceeds its lease, it can be requeued and run again on another node.
+- **No lease extension yet**: leases are fixed per dequeue; there is no heartbeat/extension. For long-running tasks, use longer leases or split work into smaller tasks.
+- **Idempotency**: enforce idempotency at the task level (idempotency key + handler-side dedupe) because duplicates are possible on retries and lease expiry.
+- **Throughput control**: worker count and polling interval are per node. If you need a **global** rate limit across nodes, enforce it externally or in the handler.
+- **Clock skew**: Redis uses server time for scores; keep node clocks in sync to avoid uneven dequeue/lease timing.
+- **Isolation**: use distinct prefixes per environment/region/tenant to avoid cross-talk.
+
+Checklist:
+
+- Set `WithDurableLease` above p99 task duration (plus buffer).
+- Keep task handlers idempotent; always use idempotency keys for external side effects.
+- Tune `WithDurablePollInterval` based on desired responsiveness vs. Redis load.
+- Scale `WithMaxWorkers` per node based on CPU and downstream throughput.
+
 Example:
 
 ```bash

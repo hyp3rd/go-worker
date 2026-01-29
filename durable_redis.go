@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -80,7 +81,7 @@ func NewRedisDurableBackend(client rueidis.Client, opts ...RedisDurableOption) (
 		prefix:    redisDefaultPrefix,
 		batchSize: redisDefaultBatchSize,
 		enqueue:   rueidis.NewLuaScript(redisEnqueueScript),
-		dequeue:   rueidis.NewLuaScript(redisDequeueScript),
+		dequeue:   rueidis.NewLuaScript(redisDequeueScript()),
 		ack:       rueidis.NewLuaScript(redisAckScript),
 		nack:      rueidis.NewLuaScript(redisNackScript),
 		fail:      rueidis.NewLuaScript(redisFailScript),
@@ -434,48 +435,23 @@ return 1
 `
 
 //nolint:revive
-const redisDequeueScript = `
-local ready = KEYS[1]
-local processing = KEYS[2]
-local taskPrefix = KEYS[3]
-local now = tonumber(ARGV[1])
-local leaseMs = tonumber(ARGV[2])
-local batch = tonumber(ARGV[3])
+const redisDequeueScriptTemplate = "\nlocal ready = KEYS[1]\nlocal processing = KEYS[2]\nlocal taskPrefix = KEYS[3]\nlocal now = tonumber(ARGV[1])\nlocal leaseMs = tonumber(ARGV[2])\nlocal batch = tonumber(ARGV[3])\n\nlocal expired = redis.call(\"ZRANGEBYSCORE\", processing, \"-inf\", now, \"LIMIT\", 0, batch)\nfor _, id in ipairs(expired) do\n  redis.call(\"ZREM\", processing, id)\n  local taskKey = taskPrefix .. id\n  local readyAt = redis.call(\"HGET\", taskKey, \"%s\")\n  if readyAt == false then\n    readyAt = now\n  end\n  redis.call(\"ZADD\", ready, readyAt, id)\nend\n\nlocal due = redis.call(\"ZRANGEBYSCORE\", ready, \"-inf\", now, \"LIMIT\", 0, batch)\nif #due == 0 then\n  return {}\nend\n\nlocal bestId = nil\nlocal bestPriority = nil\nfor _, id in ipairs(due) do\n  local taskKey = taskPrefix .. id\n  local prio = redis.call(\"HGET\", taskKey, \"%s\")\n  if prio ~= false then\n    prio = tonumber(prio)\n    if bestPriority == nil or prio < bestPriority then\n      bestPriority = prio\n      bestId = id\n    end\n  if bestId == nil then\n  return {}\nend\n\nredis.call(\"ZREM\", ready, bestId)\nredis.call(\"ZADD\", processing, now + leaseMs, bestId)\n\nlocal taskKey = taskPrefix .. bestId\nlocal attempts = redis.call(\"HINCRBY\", taskKey, \"%s\", 1)\nredis.call(\"HSET\", taskKey,\n  \"%s\", now,\n  \"%s\", now\n)\n\nlocal handler = redis.call(\"HGET\", taskKey, \"%s\")\nlocal payload = redis.call(\"HGET\", taskKey, \"%s\")\nlocal retries = redis.call(\"HGET\", taskKey, \"%s\")\nlocal retryDelay = redis.call(\"HGET\", taskKey, \"%s\")\nlocal metadata = redis.call(\"HGET\", taskKey, \"%s\")\n\nreturn {bestId, handler, payload, tostring(bestPriority), retries, retryDelay, tostring(attempts),"
 
-local expired = redis.call("ZRANGEBYSCORE", processing, "-inf", now, "LIMIT", 0, batch)
-for _, id in ipairs(expired) do
-  redis.call("ZREM", processing, id)
-  local taskKey = taskPrefix .. id
-  local readyAt = redis.call("HGET", taskKey, "` + redisFieldReadyAtMs + `")
-  if readyAt == false then
-    readyAt = now
-  end
-  redis.call("ZADD", ready, readyAt, id)
-end
-
-local due = redis.call("ZRANGEBYSCORE", ready, "-inf", now, "LIMIT", 0, batch)
-if #due == 0 then
-  return {}
-end
-
-local bestId = nil
-local bestPriority = nil
-for _, id in ipairs(due) do
-  local taskKey = taskPrefix .. id
-  local prio = redis.call("HGET", taskKey, "` + redisFieldPriority + "\")\n  if prio ~= false then\n    prio = tonumber(prio)\n    if bestPriority == nil or prio < bestPriority then\n      bestPriority = prio\n      bestId = id\n    end\n  if bestId == nil then\n  return {}\nend\n\nredis.call(\"ZREM\", ready, bestId)\nredis.call(\"ZADD\", processing, now + leaseMs, bestId)\n\nlocal taskKey = taskPrefix .. bestId\nlocal attempts = redis.call(\"HINCRBY\", taskKey," + redisFieldAttempts + `", 1)
-redis.call("HSET", taskKey,
-  "` + redisFieldLeaseAtMs + `", now,
-  "` + redisFieldUpdatedAtMs + `", now
-)
-
-local handler = redis.call("HGET", taskKey, "` + redisFieldHandler + `")
-local payload = redis.call("HGET", taskKey, "` + redisFieldPayload + `")
-local retries = redis.call("HGET", taskKey, "` + redisFieldRetries + `")
-local retryDelay = redis.call("HGET", taskKey, "` + redisFieldRetryDelayMs + `")
-local metadata = redis.call("HGET", taskKey, "` + redisFieldMetadata + `")
-
-return {bestId, handler, payload, tostring(bestPriority), retries, retryDelay, tostring(attempts), metadata}
-`
+func redisDequeueScript() string {
+	return fmt.Sprintf(
+		redisDequeueScriptTemplate,
+		redisFieldReadyAtMs,
+		redisFieldPriority,
+		redisFieldAttempts,
+		redisFieldLeaseAtMs,
+		redisFieldUpdatedAtMs,
+		redisFieldHandler,
+		redisFieldPayload,
+		redisFieldRetries,
+		redisFieldRetryDelayMs,
+		redisFieldMetadata,
+	)
+}
 
 const redisAckScript = `
 local processing = KEYS[1]
