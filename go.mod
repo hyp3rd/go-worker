@@ -5,7 +5,7 @@ go 1.25.6
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hyp3rd/ewrap v1.3.7
-	github.com/redis/rueidis v1.0.70
+	github.com/redis/rueidis v1.0.71
 	go.opentelemetry.io/otel/metric v1.39.0
 	go.opentelemetry.io/otel/sdk/metric v1.39.0
 	golang.org/x/time v0.14.0

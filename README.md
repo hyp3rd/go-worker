@@ -278,6 +278,19 @@ Operational notes (durable Redis):
 - **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
 - **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts and peeks ready IDs.
 
+Example:
+
+```bash
+go run __examples/durable_queue_inspect/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker -peek=5
+```
+
+Sample output:
+
+```shell
+ready=3 processing=1 dead=0
+ready IDs: 8c0f8b2d-0a4d-4a3b-9ad7-2d2a5b7f5d12, 9b18d5f2-3b7f-4d7a-9dd1-1bb1a3a56c55
+```
+
 Optional retention can be configured to prevent unbounded task registry growth:
 
 ```go

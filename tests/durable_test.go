@@ -15,9 +15,11 @@ import (
 )
 
 const (
-	testPollInterval = 5 * time.Millisecond
-	testLease        = 2 * time.Second
-	testTaskName     = "send_email"
+	testPollInterval  = 5 * time.Millisecond
+	testLease         = 2 * time.Second
+	testTaskName      = "send_email"
+	testTimeout       = 10 * time.Millisecond
+	errMarshalPayload = "marshal payload: %v"
 )
 
 var errTestBoom = errors.New("boom")
@@ -31,6 +33,7 @@ type fakeDurableBackend struct {
 	failed    []uuid.UUID
 	nackDelay time.Duration
 	nackCh    chan struct{}
+	failCh    chan struct{}
 }
 
 func (b *fakeDurableBackend) Enqueue(_ context.Context, task worker.DurableTask) error {
@@ -96,6 +99,12 @@ func (b *fakeDurableBackend) Fail(_ context.Context, lease worker.DurableTaskLea
 	defer b.mu.Unlock()
 
 	b.failed = append(b.failed, lease.Task.ID)
+	if b.failCh != nil {
+		select {
+		case b.failCh <- struct{}{}:
+		default:
+		}
+	}
 
 	return nil
 }
@@ -236,7 +245,7 @@ func TestDurableLoop_AckOnSuccess(t *testing.T) {
 
 	payload, err := proto.Marshal(&workerpb.SendEmailPayload{To: "ops@example.com"})
 	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
+		t.Fatalf(errMarshalPayload, err)
 	}
 
 	backend := &fakeDurableBackend{
@@ -304,7 +313,7 @@ func TestDurableLoop_FailOnError(t *testing.T) {
 
 	payload, err := proto.Marshal(&workerpb.SendEmailPayload{To: "ops@example.com"})
 	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
+		t.Fatalf(errMarshalPayload, err)
 	}
 
 	backend := &fakeDurableBackend{
@@ -372,7 +381,7 @@ func TestDurableLoop_NackOnRetry(t *testing.T) {
 
 	payload, err := proto.Marshal(&workerpb.SendEmailPayload{To: "ops@example.com"})
 	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
+		t.Fatalf(errMarshalPayload, err)
 	}
 
 	nackCh := make(chan struct{}, 1)
@@ -430,5 +439,129 @@ func TestDurableLoop_NackOnRetry(t *testing.T) {
 
 	if backend.nackDelay <= 0 {
 		t.Fatalf("expected positive nack delay, got %s", backend.nackDelay)
+	}
+}
+
+func TestDurableLoop_NackOnDeadline(t *testing.T) {
+	t.Parallel()
+
+	backend, taskID := setupDeadlineBackend(t, 1, 1)
+
+	tm := newDeadlineTaskManager(backend, deadlineHandlers())
+
+	t.Cleanup(func() { stopTaskManager(t, tm) })
+
+	waitForBackendEvent(t, backend.nackCh, "nack")
+	assertDeadlineBackend(t, backend, taskID, true)
+}
+
+func TestDurableLoop_FailOnDeadline(t *testing.T) {
+	t.Parallel()
+
+	backend, taskID := setupDeadlineBackend(t, 0, 0)
+
+	tm := newDeadlineTaskManager(backend, deadlineHandlers())
+
+	t.Cleanup(func() { stopTaskManager(t, tm) })
+
+	waitForBackendEvent(t, backend.failCh, "fail")
+	assertDeadlineBackend(t, backend, taskID, false)
+}
+
+func setupDeadlineBackend(t *testing.T, retries, maxRetries int) (*fakeDurableBackend, uuid.UUID) {
+	t.Helper()
+
+	taskID := uuid.New()
+
+	payload, err := proto.Marshal(&workerpb.SendEmailPayload{To: "ops@example.com"})
+	if err != nil {
+		t.Fatalf(errMarshalPayload, err)
+	}
+
+	nackCh := make(chan struct{}, 1)
+	failCh := make(chan struct{}, 1)
+
+	backend := &fakeDurableBackend{
+		leases: []worker.DurableTaskLease{
+			{
+				Task: worker.DurableTask{
+					ID:      taskID,
+					Handler: testTaskName,
+					Payload: payload,
+					Retries: retries,
+				},
+				Attempts:   1,
+				MaxRetries: maxRetries,
+			},
+		},
+		nackCh: nackCh,
+		failCh: failCh,
+	}
+
+	return backend, taskID
+}
+
+func deadlineHandlers() map[string]worker.DurableHandlerSpec {
+	return map[string]worker.DurableHandlerSpec{
+		testTaskName: {
+			Make: func() proto.Message { return &workerpb.SendEmailPayload{} },
+			Fn: func(ctx context.Context, _ proto.Message) (any, error) {
+				<-ctx.Done()
+
+				return nil, ctx.Err()
+			},
+		},
+	}
+}
+
+func newDeadlineTaskManager(backend *fakeDurableBackend, handlers map[string]worker.DurableHandlerSpec) *worker.TaskManager {
+	return worker.NewTaskManagerWithOptions(
+		context.Background(),
+		worker.WithDurableBackend(backend),
+		worker.WithDurableHandlers(handlers),
+		worker.WithDurablePollInterval(testPollInterval),
+		worker.WithDurableLease(testLease),
+		worker.WithTimeout(testTimeout),
+	)
+}
+
+func waitForBackendEvent(t *testing.T, ch <-chan struct{}, label string) {
+	t.Helper()
+
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timeout waiting for %s", label)
+	}
+}
+
+func assertDeadlineBackend(t *testing.T, backend *fakeDurableBackend, taskID uuid.UUID, expectNack bool) {
+	t.Helper()
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+
+	if expectNack {
+		if len(backend.nacked) != 1 || backend.nacked[0] != taskID {
+			t.Fatalf("expected nack for %s, got %+v", taskID, backend.nacked)
+		}
+
+		if len(backend.failed) != 0 {
+			t.Fatalf("expected no fail, got %+v", backend.failed)
+		}
+
+		if backend.nackDelay <= 0 {
+			t.Fatalf("expected positive nack delay, got %s", backend.nackDelay)
+		}
+
+		return
+	}
+
+	if len(backend.failed) != 1 || backend.failed[0] != taskID {
+		t.Fatalf("expected fail for %s, got %+v", taskID, backend.failed)
+	}
+
+	if len(backend.nacked) != 0 {
+		t.Fatalf("expected no nack, got %+v", backend.nacked)
 	}
 }
