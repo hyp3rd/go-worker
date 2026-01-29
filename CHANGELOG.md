@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 - Benchmarks for registration throughput and retention pruning.
 - Durable task APIs with a Redis backend (rueidis).
 - `NewTaskManagerWithOptions` for functional configuration.
+- gRPC durable task registration via `RegisterDurableTasks`.
 
 ### Changed
 

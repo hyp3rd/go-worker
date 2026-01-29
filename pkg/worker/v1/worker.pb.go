@@ -221,6 +221,194 @@ func (x *RegisterTasksResponse) GetIds() []string {
 	return nil
 }
 
+type DurableTask struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description    string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Priority       int32                  `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
+	Retries        int32                  `protobuf:"varint,4,opt,name=retries,proto3" json:"retries,omitempty"`
+	RetryDelay     *durationpb.Duration   `protobuf:"bytes,5,opt,name=retry_delay,json=retryDelay,proto3" json:"retry_delay,omitempty"`
+	Payload        *anypb.Any             `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`                                                                             // the typed input for `name`
+	IdempotencyKey string                 `protobuf:"bytes,7,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`                                         // dedupe on the server/handler
+	Metadata       map[string]string      `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // free-form tags
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DurableTask) Reset() {
+	*x = DurableTask{}
+	mi := &file_worker_v1_worker_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DurableTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DurableTask) ProtoMessage() {}
+
+func (x *DurableTask) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_worker_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DurableTask.ProtoReflect.Descriptor instead.
+func (*DurableTask) Descriptor() ([]byte, []int) {
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DurableTask) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DurableTask) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *DurableTask) GetPriority() int32 {
+	if x != nil {
+		return x.Priority
+	}
+	return 0
+}
+
+func (x *DurableTask) GetRetries() int32 {
+	if x != nil {
+		return x.Retries
+	}
+	return 0
+}
+
+func (x *DurableTask) GetRetryDelay() *durationpb.Duration {
+	if x != nil {
+		return x.RetryDelay
+	}
+	return nil
+}
+
+func (x *DurableTask) GetPayload() *anypb.Any {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *DurableTask) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *DurableTask) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+type RegisterDurableTasksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tasks         []*DurableTask         `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterDurableTasksRequest) Reset() {
+	*x = RegisterDurableTasksRequest{}
+	mi := &file_worker_v1_worker_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterDurableTasksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterDurableTasksRequest) ProtoMessage() {}
+
+func (x *RegisterDurableTasksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_worker_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterDurableTasksRequest.ProtoReflect.Descriptor instead.
+func (*RegisterDurableTasksRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RegisterDurableTasksRequest) GetTasks() []*DurableTask {
+	if x != nil {
+		return x.Tasks
+	}
+	return nil
+}
+
+type RegisterDurableTasksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ids           []string               `protobuf:"bytes,1,rep,name=ids,proto3" json:"ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterDurableTasksResponse) Reset() {
+	*x = RegisterDurableTasksResponse{}
+	mi := &file_worker_v1_worker_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterDurableTasksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterDurableTasksResponse) ProtoMessage() {}
+
+func (x *RegisterDurableTasksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_worker_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterDurableTasksResponse.ProtoReflect.Descriptor instead.
+func (*RegisterDurableTasksResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RegisterDurableTasksResponse) GetIds() []string {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
 type StreamResultsRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Ids               []string               `protobuf:"bytes,1,rep,name=ids,proto3" json:"ids,omitempty"`                                                         // only these
@@ -231,7 +419,7 @@ type StreamResultsRequest struct {
 
 func (x *StreamResultsRequest) Reset() {
 	*x = StreamResultsRequest{}
-	mi := &file_worker_v1_worker_proto_msgTypes[3]
+	mi := &file_worker_v1_worker_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +431,7 @@ func (x *StreamResultsRequest) String() string {
 func (*StreamResultsRequest) ProtoMessage() {}
 
 func (x *StreamResultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_worker_proto_msgTypes[3]
+	mi := &file_worker_v1_worker_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,7 +444,7 @@ func (x *StreamResultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamResultsRequest.ProtoReflect.Descriptor instead.
 func (*StreamResultsRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_worker_proto_rawDescGZIP(), []int{3}
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *StreamResultsRequest) GetIds() []string {
@@ -284,7 +472,7 @@ type StreamResultsResponse struct {
 
 func (x *StreamResultsResponse) Reset() {
 	*x = StreamResultsResponse{}
-	mi := &file_worker_v1_worker_proto_msgTypes[4]
+	mi := &file_worker_v1_worker_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -296,7 +484,7 @@ func (x *StreamResultsResponse) String() string {
 func (*StreamResultsResponse) ProtoMessage() {}
 
 func (x *StreamResultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_worker_proto_msgTypes[4]
+	mi := &file_worker_v1_worker_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -309,7 +497,7 @@ func (x *StreamResultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamResultsResponse.ProtoReflect.Descriptor instead.
 func (*StreamResultsResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_worker_proto_rawDescGZIP(), []int{4}
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *StreamResultsResponse) GetId() string {
@@ -342,7 +530,7 @@ type CancelTaskRequest struct {
 
 func (x *CancelTaskRequest) Reset() {
 	*x = CancelTaskRequest{}
-	mi := &file_worker_v1_worker_proto_msgTypes[5]
+	mi := &file_worker_v1_worker_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -354,7 +542,7 @@ func (x *CancelTaskRequest) String() string {
 func (*CancelTaskRequest) ProtoMessage() {}
 
 func (x *CancelTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_worker_proto_msgTypes[5]
+	mi := &file_worker_v1_worker_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -367,7 +555,7 @@ func (x *CancelTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelTaskRequest.ProtoReflect.Descriptor instead.
 func (*CancelTaskRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_worker_proto_rawDescGZIP(), []int{5}
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CancelTaskRequest) GetId() string {
@@ -385,7 +573,7 @@ type CancelTaskResponse struct {
 
 func (x *CancelTaskResponse) Reset() {
 	*x = CancelTaskResponse{}
-	mi := &file_worker_v1_worker_proto_msgTypes[6]
+	mi := &file_worker_v1_worker_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -397,7 +585,7 @@ func (x *CancelTaskResponse) String() string {
 func (*CancelTaskResponse) ProtoMessage() {}
 
 func (x *CancelTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_worker_proto_msgTypes[6]
+	mi := &file_worker_v1_worker_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -410,7 +598,7 @@ func (x *CancelTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelTaskResponse.ProtoReflect.Descriptor instead.
 func (*CancelTaskResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_worker_proto_rawDescGZIP(), []int{6}
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{9}
 }
 
 type GetTaskRequest struct {
@@ -422,7 +610,7 @@ type GetTaskRequest struct {
 
 func (x *GetTaskRequest) Reset() {
 	*x = GetTaskRequest{}
-	mi := &file_worker_v1_worker_proto_msgTypes[7]
+	mi := &file_worker_v1_worker_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -434,7 +622,7 @@ func (x *GetTaskRequest) String() string {
 func (*GetTaskRequest) ProtoMessage() {}
 
 func (x *GetTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_worker_proto_msgTypes[7]
+	mi := &file_worker_v1_worker_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -447,7 +635,7 @@ func (x *GetTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskRequest.ProtoReflect.Descriptor instead.
 func (*GetTaskRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_worker_proto_rawDescGZIP(), []int{7}
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetTaskRequest) GetId() string {
@@ -470,7 +658,7 @@ type GetTaskResponse struct {
 
 func (x *GetTaskResponse) Reset() {
 	*x = GetTaskResponse{}
-	mi := &file_worker_v1_worker_proto_msgTypes[8]
+	mi := &file_worker_v1_worker_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -482,7 +670,7 @@ func (x *GetTaskResponse) String() string {
 func (*GetTaskResponse) ProtoMessage() {}
 
 func (x *GetTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_worker_proto_msgTypes[8]
+	mi := &file_worker_v1_worker_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -495,7 +683,7 @@ func (x *GetTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskResponse.ProtoReflect.Descriptor instead.
 func (*GetTaskResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_worker_proto_rawDescGZIP(), []int{8}
+	return file_worker_v1_worker_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetTaskResponse) GetId() string {
@@ -555,6 +743,23 @@ const file_worker_v1_worker_proto_rawDesc = "" +
 	"\x14RegisterTasksRequest\x12%\n" +
 	"\x05tasks\x18\x01 \x03(\v2\x0f.worker.v1.TaskR\x05tasks\")\n" +
 	"\x15RegisterTasksResponse\x12\x10\n" +
+	"\x03ids\x18\x01 \x03(\tR\x03ids\"\x8d\x03\n" +
+	"\vDurableTask\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bpriority\x18\x03 \x01(\x05R\bpriority\x12\x18\n" +
+	"\aretries\x18\x04 \x01(\x05R\aretries\x12:\n" +
+	"\vretry_delay\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\n" +
+	"retryDelay\x12.\n" +
+	"\apayload\x18\x06 \x01(\v2\x14.google.protobuf.AnyR\apayload\x12'\n" +
+	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x12@\n" +
+	"\bmetadata\x18\b \x03(\v2$.worker.v1.DurableTask.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"K\n" +
+	"\x1bRegisterDurableTasksRequest\x12,\n" +
+	"\x05tasks\x18\x01 \x03(\v2\x16.worker.v1.DurableTaskR\x05tasks\"0\n" +
+	"\x1cRegisterDurableTasksResponse\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\tR\x03ids\"X\n" +
 	"\x14StreamResultsRequest\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\tR\x03ids\x12.\n" +
@@ -573,9 +778,10 @@ const file_worker_v1_worker_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
 	"\x06status\x18\x03 \x01(\tR\x06status\x12\x16\n" +
 	"\x06output\x18\x04 \x01(\tR\x06output\x12\x14\n" +
-	"\x05error\x18\x05 \x01(\tR\x05error2\xc6\x02\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error2\xaf\x03\n" +
 	"\rWorkerService\x12R\n" +
-	"\rRegisterTasks\x12\x1f.worker.v1.RegisterTasksRequest\x1a .worker.v1.RegisterTasksResponse\x12T\n" +
+	"\rRegisterTasks\x12\x1f.worker.v1.RegisterTasksRequest\x1a .worker.v1.RegisterTasksResponse\x12g\n" +
+	"\x14RegisterDurableTasks\x12&.worker.v1.RegisterDurableTasksRequest\x1a'.worker.v1.RegisterDurableTasksResponse\x12T\n" +
 	"\rStreamResults\x12\x1f.worker.v1.StreamResultsRequest\x1a .worker.v1.StreamResultsResponse0\x01\x12I\n" +
 	"\n" +
 	"CancelTask\x12\x1c.worker.v1.CancelTaskRequest\x1a\x1d.worker.v1.CancelTaskResponse\x12@\n" +
@@ -596,41 +802,51 @@ func file_worker_v1_worker_proto_rawDescGZIP() []byte {
 }
 
 var (
-	file_worker_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+	file_worker_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 	file_worker_v1_worker_proto_goTypes  = []any{
-		(*Task)(nil),                  // 0: worker.v1.Task
-		(*RegisterTasksRequest)(nil),  // 1: worker.v1.RegisterTasksRequest
-		(*RegisterTasksResponse)(nil), // 2: worker.v1.RegisterTasksResponse
-		(*StreamResultsRequest)(nil),  // 3: worker.v1.StreamResultsRequest
-		(*StreamResultsResponse)(nil), // 4: worker.v1.StreamResultsResponse
-		(*CancelTaskRequest)(nil),     // 5: worker.v1.CancelTaskRequest
-		(*CancelTaskResponse)(nil),    // 6: worker.v1.CancelTaskResponse
-		(*GetTaskRequest)(nil),        // 7: worker.v1.GetTaskRequest
-		(*GetTaskResponse)(nil),       // 8: worker.v1.GetTaskResponse
-		nil,                           // 9: worker.v1.Task.MetadataEntry
-		(*durationpb.Duration)(nil),   // 10: google.protobuf.Duration
-		(*anypb.Any)(nil),             // 11: google.protobuf.Any
+		(*Task)(nil),                         // 0: worker.v1.Task
+		(*RegisterTasksRequest)(nil),         // 1: worker.v1.RegisterTasksRequest
+		(*RegisterTasksResponse)(nil),        // 2: worker.v1.RegisterTasksResponse
+		(*DurableTask)(nil),                  // 3: worker.v1.DurableTask
+		(*RegisterDurableTasksRequest)(nil),  // 4: worker.v1.RegisterDurableTasksRequest
+		(*RegisterDurableTasksResponse)(nil), // 5: worker.v1.RegisterDurableTasksResponse
+		(*StreamResultsRequest)(nil),         // 6: worker.v1.StreamResultsRequest
+		(*StreamResultsResponse)(nil),        // 7: worker.v1.StreamResultsResponse
+		(*CancelTaskRequest)(nil),            // 8: worker.v1.CancelTaskRequest
+		(*CancelTaskResponse)(nil),           // 9: worker.v1.CancelTaskResponse
+		(*GetTaskRequest)(nil),               // 10: worker.v1.GetTaskRequest
+		(*GetTaskResponse)(nil),              // 11: worker.v1.GetTaskResponse
+		nil,                                  // 12: worker.v1.Task.MetadataEntry
+		nil,                                  // 13: worker.v1.DurableTask.MetadataEntry
+		(*durationpb.Duration)(nil),          // 14: google.protobuf.Duration
+		(*anypb.Any)(nil),                    // 15: google.protobuf.Any
 	}
 )
 
 var file_worker_v1_worker_proto_depIdxs = []int32{
-	10, // 0: worker.v1.Task.retry_delay:type_name -> google.protobuf.Duration
-	11, // 1: worker.v1.Task.payload:type_name -> google.protobuf.Any
-	9,  // 2: worker.v1.Task.metadata:type_name -> worker.v1.Task.MetadataEntry
+	14, // 0: worker.v1.Task.retry_delay:type_name -> google.protobuf.Duration
+	15, // 1: worker.v1.Task.payload:type_name -> google.protobuf.Any
+	12, // 2: worker.v1.Task.metadata:type_name -> worker.v1.Task.MetadataEntry
 	0,  // 3: worker.v1.RegisterTasksRequest.tasks:type_name -> worker.v1.Task
-	1,  // 4: worker.v1.WorkerService.RegisterTasks:input_type -> worker.v1.RegisterTasksRequest
-	3,  // 5: worker.v1.WorkerService.StreamResults:input_type -> worker.v1.StreamResultsRequest
-	5,  // 6: worker.v1.WorkerService.CancelTask:input_type -> worker.v1.CancelTaskRequest
-	7,  // 7: worker.v1.WorkerService.GetTask:input_type -> worker.v1.GetTaskRequest
-	2,  // 8: worker.v1.WorkerService.RegisterTasks:output_type -> worker.v1.RegisterTasksResponse
-	4,  // 9: worker.v1.WorkerService.StreamResults:output_type -> worker.v1.StreamResultsResponse
-	6,  // 10: worker.v1.WorkerService.CancelTask:output_type -> worker.v1.CancelTaskResponse
-	8,  // 11: worker.v1.WorkerService.GetTask:output_type -> worker.v1.GetTaskResponse
-	8,  // [8:12] is the sub-list for method output_type
-	4,  // [4:8] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	14, // 4: worker.v1.DurableTask.retry_delay:type_name -> google.protobuf.Duration
+	15, // 5: worker.v1.DurableTask.payload:type_name -> google.protobuf.Any
+	13, // 6: worker.v1.DurableTask.metadata:type_name -> worker.v1.DurableTask.MetadataEntry
+	3,  // 7: worker.v1.RegisterDurableTasksRequest.tasks:type_name -> worker.v1.DurableTask
+	1,  // 8: worker.v1.WorkerService.RegisterTasks:input_type -> worker.v1.RegisterTasksRequest
+	4,  // 9: worker.v1.WorkerService.RegisterDurableTasks:input_type -> worker.v1.RegisterDurableTasksRequest
+	6,  // 10: worker.v1.WorkerService.StreamResults:input_type -> worker.v1.StreamResultsRequest
+	8,  // 11: worker.v1.WorkerService.CancelTask:input_type -> worker.v1.CancelTaskRequest
+	10, // 12: worker.v1.WorkerService.GetTask:input_type -> worker.v1.GetTaskRequest
+	2,  // 13: worker.v1.WorkerService.RegisterTasks:output_type -> worker.v1.RegisterTasksResponse
+	5,  // 14: worker.v1.WorkerService.RegisterDurableTasks:output_type -> worker.v1.RegisterDurableTasksResponse
+	7,  // 15: worker.v1.WorkerService.StreamResults:output_type -> worker.v1.StreamResultsResponse
+	9,  // 16: worker.v1.WorkerService.CancelTask:output_type -> worker.v1.CancelTaskResponse
+	11, // 17: worker.v1.WorkerService.GetTask:output_type -> worker.v1.GetTaskResponse
+	13, // [13:18] is the sub-list for method output_type
+	8,  // [8:13] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_worker_v1_worker_proto_init() }
@@ -644,7 +860,7 @@ func file_worker_v1_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_worker_v1_worker_proto_rawDesc), len(file_worker_v1_worker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

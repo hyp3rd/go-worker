@@ -29,6 +29,26 @@ message RegisterTasksResponse {
   repeated string ids = 1;
 }
 
+message DurableTask {
+  string name = 1;
+  string description = 2;
+  int32 priority = 3;
+  int32 retries = 4;
+  google.protobuf.Duration retry_delay = 5;
+
+  google.protobuf.Any payload = 6; // the typed input for `name`
+  string idempotency_key = 7; // dedupe on the server/handler
+  map<string, string> metadata = 8; // free-form tags
+}
+
+message RegisterDurableTasksRequest {
+  repeated DurableTask tasks = 1;
+}
+
+message RegisterDurableTasksResponse {
+  repeated string ids = 1;
+}
+
 message StreamResultsRequest {
   repeated string ids = 1; // only these
   bool close_on_completion = 2; // server ends stream when all are terminal
@@ -60,6 +80,7 @@ message GetTaskResponse {
 
 service WorkerService {
   rpc RegisterTasks(RegisterTasksRequest) returns (RegisterTasksResponse);
+  rpc RegisterDurableTasks(RegisterDurableTasksRequest) returns (RegisterDurableTasksResponse);
   rpc StreamResults(StreamResultsRequest) returns (stream StreamResultsResponse);
   rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
   rpc GetTask(GetTaskRequest) returns (GetTaskResponse);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -283,27 +284,39 @@ func (b *RedisDurableBackend) dequeueOne(ctx context.Context, lease time.Duratio
 
 // readyKey returns the Redis key for the ready sorted set.
 func (b *RedisDurableBackend) readyKey() string {
-	return b.prefix + redisKVSeparator + redisReadyKey
+	return b.keyPrefix() + redisKVSeparator + redisReadyKey
 }
 
 // processingKey returns the Redis key for the processing sorted set.
 func (b *RedisDurableBackend) processingKey() string {
-	return b.prefix + redisKVSeparator + redisProcessingKey
+	return b.keyPrefix() + redisKVSeparator + redisProcessingKey
 }
 
 // deadKey returns the Redis key for the dead letter list.
 func (b *RedisDurableBackend) deadKey() string {
-	return b.prefix + redisKVSeparator + redisDeadKey
+	return b.keyPrefix() + redisKVSeparator + redisDeadKey
 }
 
 // taskPrefixKey returns the prefix for durable task keys.
 func (b *RedisDurableBackend) taskPrefixKey() string {
-	return b.prefix + redisKVSeparator + redisTaskKeyPrefix
+	return b.keyPrefix() + redisKVSeparator + redisTaskKeyPrefix
 }
 
 // taskKey returns the Redis key for a specific durable task.
 func (b *RedisDurableBackend) taskKey(id uuid.UUID) string {
 	return b.taskPrefixKey() + id.String()
+}
+
+func (b *RedisDurableBackend) keyPrefix() string {
+	if b.prefix == "" {
+		return redisDefaultPrefix
+	}
+
+	if strings.Contains(b.prefix, "{") {
+		return b.prefix
+	}
+
+	return "{" + b.prefix + "}"
 }
 
 // parseLease parses a durable task lease from Redis command results.

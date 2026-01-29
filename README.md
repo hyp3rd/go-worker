@@ -45,7 +45,7 @@ tasks and query their status.
 
 The server registers handlers keyed by name. Each handler consists of a `Make` function that constructs the expected payload type, and a `Fn` function that executes the task logic using the unpacked payload.
 
-Clients send a `Task` message containing a `name` and a serialized `payload` using `google.protobuf.Any`. The server automatically unpacks the `Any` payload into the correct type based on the registered handler and passes it to the corresponding function.
+Clients send a `Task` message containing a `name` and a serialized `payload` using `google.protobuf.Any`. The server automatically unpacks the `Any` payload into the correct type based on the registered handler and passes it to the corresponding function. For durable tasks, use `RegisterDurableTasks` with the `DurableTask` message (the payload is still an `Any`).
 
 ```go
 handlers := map[string]worker.HandlerSpec{
@@ -62,6 +62,7 @@ srv := worker.NewGRPCServer(tm, handlers)
 ```
 
 For production, configure TLS credentials and interceptors (logging/auth) on the gRPC server; see `__examples/grpc` for a complete setup.
+For a Redis-backed durable gRPC example, see `__examples/grpc_durable`.
 
 ### Authorization hook
 

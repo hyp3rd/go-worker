@@ -20,10 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WorkerService_RegisterTasks_FullMethodName = "/worker.v1.WorkerService/RegisterTasks"
-	WorkerService_StreamResults_FullMethodName = "/worker.v1.WorkerService/StreamResults"
-	WorkerService_CancelTask_FullMethodName    = "/worker.v1.WorkerService/CancelTask"
-	WorkerService_GetTask_FullMethodName       = "/worker.v1.WorkerService/GetTask"
+	WorkerService_RegisterTasks_FullMethodName        = "/worker.v1.WorkerService/RegisterTasks"
+	WorkerService_RegisterDurableTasks_FullMethodName = "/worker.v1.WorkerService/RegisterDurableTasks"
+	WorkerService_StreamResults_FullMethodName        = "/worker.v1.WorkerService/StreamResults"
+	WorkerService_CancelTask_FullMethodName           = "/worker.v1.WorkerService/CancelTask"
+	WorkerService_GetTask_FullMethodName              = "/worker.v1.WorkerService/GetTask"
 )
 
 // WorkerServiceClient is the client API for WorkerService service.
@@ -31,6 +32,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkerServiceClient interface {
 	RegisterTasks(ctx context.Context, in *RegisterTasksRequest, opts ...grpc.CallOption) (*RegisterTasksResponse, error)
+	RegisterDurableTasks(ctx context.Context, in *RegisterDurableTasksRequest, opts ...grpc.CallOption) (*RegisterDurableTasksResponse, error)
 	StreamResults(ctx context.Context, in *StreamResultsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamResultsResponse], error)
 	CancelTask(ctx context.Context, in *CancelTaskRequest, opts ...grpc.CallOption) (*CancelTaskResponse, error)
 	GetTask(ctx context.Context, in *GetTaskRequest, opts ...grpc.CallOption) (*GetTaskResponse, error)
@@ -48,6 +50,16 @@ func (c *workerServiceClient) RegisterTasks(ctx context.Context, in *RegisterTas
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterTasksResponse)
 	err := c.cc.Invoke(ctx, WorkerService_RegisterTasks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workerServiceClient) RegisterDurableTasks(ctx context.Context, in *RegisterDurableTasksRequest, opts ...grpc.CallOption) (*RegisterDurableTasksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterDurableTasksResponse)
+	err := c.cc.Invoke(ctx, WorkerService_RegisterDurableTasks_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +110,7 @@ func (c *workerServiceClient) GetTask(ctx context.Context, in *GetTaskRequest, o
 // for forward compatibility.
 type WorkerServiceServer interface {
 	RegisterTasks(context.Context, *RegisterTasksRequest) (*RegisterTasksResponse, error)
+	RegisterDurableTasks(context.Context, *RegisterDurableTasksRequest) (*RegisterDurableTasksResponse, error)
 	StreamResults(*StreamResultsRequest, grpc.ServerStreamingServer[StreamResultsResponse]) error
 	CancelTask(context.Context, *CancelTaskRequest) (*CancelTaskResponse, error)
 	GetTask(context.Context, *GetTaskRequest) (*GetTaskResponse, error)
@@ -112,6 +125,10 @@ type UnimplementedWorkerServiceServer struct{}
 
 func (UnimplementedWorkerServiceServer) RegisterTasks(context.Context, *RegisterTasksRequest) (*RegisterTasksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterTasks not implemented")
+}
+
+func (UnimplementedWorkerServiceServer) RegisterDurableTasks(context.Context, *RegisterDurableTasksRequest) (*RegisterDurableTasksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterDurableTasks not implemented")
 }
 
 func (UnimplementedWorkerServiceServer) StreamResults(*StreamResultsRequest, grpc.ServerStreamingServer[StreamResultsResponse]) error {
@@ -159,6 +176,24 @@ func _WorkerService_RegisterTasks_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WorkerServiceServer).RegisterTasks(ctx, req.(*RegisterTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkerService_RegisterDurableTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterDurableTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkerServiceServer).RegisterDurableTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkerService_RegisterDurableTasks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkerServiceServer).RegisterDurableTasks(ctx, req.(*RegisterDurableTasksRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -220,6 +255,10 @@ var WorkerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterTasks",
 			Handler:    _WorkerService_RegisterTasks_Handler,
+		},
+		{
+			MethodName: "RegisterDurableTasks",
+			Handler:    _WorkerService_RegisterDurableTasks_Handler,
 		},
 		{
 			MethodName: "CancelTask",
