@@ -88,7 +88,8 @@ func main() {
 			intToString(limit),
 		},
 	)
-	if err := resp.Error(); err != nil {
+	err := resp.Error()
+	if err != nil {
 		log.Fatal(err)
 	}
 

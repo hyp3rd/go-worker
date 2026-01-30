@@ -265,3 +265,11 @@ func (b *loggingBackend) Fail(ctx context.Context, lease worker.DurableTaskLease
 	}
 	return failErr
 }
+
+func (b *loggingBackend) Extend(ctx context.Context, lease worker.DurableTaskLease, duration time.Duration) error {
+	extendErr := b.inner.Extend(ctx, lease, duration)
+	if extendErr != nil {
+		log.Printf("extend error: %v", extendErr)
+	}
+	return extendErr
+}

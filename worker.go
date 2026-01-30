@@ -73,6 +73,7 @@ type TaskManager struct {
 	durableLease        time.Duration
 	durablePollInterval time.Duration
 	durableBatchSize    int
+	durableLeaseRenewal time.Duration
 	durableEnabled      bool
 
 	retentionMu        sync.RWMutex
@@ -107,6 +108,14 @@ func limiterBurst(maxWorkers, maxTasks int) int {
 	}
 
 	return burst
+}
+
+func newLimiter(tasksPerSecond float64, burst int) *rate.Limiter {
+	if tasksPerSecond <= 0 {
+		return rate.NewLimiter(rate.Inf, burst)
+	}
+
+	return rate.NewLimiter(rate.Limit(tasksPerSecond), burst)
 }
 
 // NewTaskManagerWithOptions creates a new task manager using functional options.
@@ -186,13 +195,7 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 	}
 
 	burst := limiterBurst(maxWorkers, maxTasks)
-
-	var limiter *rate.Limiter
-	if cfg.tasksPerSecond <= 0 {
-		limiter = rate.NewLimiter(rate.Inf, burst)
-	} else {
-		limiter = rate.NewLimiter(rate.Limit(cfg.tasksPerSecond), burst)
-	}
+	limiter := newLimiter(cfg.tasksPerSecond, burst)
 
 	durableEnabled := cfg.durableBackend != nil
 	if cfg.durableCodec == nil {
@@ -219,6 +222,7 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 		durableLease:        cfg.durableLease,
 		durablePollInterval: cfg.durablePollInterval,
 		durableBatchSize:    cfg.durableBatchSize,
+		durableLeaseRenewal: cfg.durableLeaseRenewal,
 		durableEnabled:      durableEnabled,
 	}
 

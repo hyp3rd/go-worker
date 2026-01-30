@@ -28,6 +28,8 @@ var (
 	ErrTaskAlreadyStarted = ewrap.New("task already started")
 	// ErrTaskCompleted is returned when a task is already completed.
 	ErrTaskCompleted = ewrap.New("task completed")
+	// ErrDurableLeaseNotFound is returned when a durable lease cannot be renewed.
+	ErrDurableLeaseNotFound = ewrap.New("durable lease not found")
 )
 
 const (

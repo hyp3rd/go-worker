@@ -164,7 +164,8 @@
     "ZCARD",
     "Zrange",
     "ZRANGEBYSCORE",
-    "ZREM"
+    "ZREM",
+    "ZSCORE"
   ],
   "ignoreWords": [],
   "import": []

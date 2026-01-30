@@ -300,6 +300,113 @@ func (*TaskManager) shouldRetryDurable(lease DurableTaskLease) bool {
 	return lease.Attempts <= lease.MaxRetries
 }
 
+func (tm *TaskManager) durableLeaseRenewalConfig() (interval, leaseDuration time.Duration) {
+	if tm.durableBackend == nil {
+		return 0, 0
+	}
+
+	interval = tm.durableLeaseRenewal
+	if interval <= 0 {
+		return 0, 0
+	}
+
+	leaseDuration = tm.durableLease
+	if leaseDuration <= 0 {
+		leaseDuration = defaultDurableLease
+	}
+
+	if interval >= leaseDuration {
+		interval = leaseDuration / 2
+	}
+
+	if interval <= 0 {
+		return 0, 0
+	}
+
+	return interval, leaseDuration
+}
+
+func (tm *TaskManager) startDurableLeaseRenewal(
+	ctx context.Context,
+	execCtx context.Context,
+	lease DurableTaskLease,
+) func() {
+	interval, leaseDuration := tm.durableLeaseRenewalConfig()
+	if interval <= 0 {
+		return func() {}
+	}
+
+	baseCtx := execCtx
+	if baseCtx == nil {
+		baseCtx = ctx
+	}
+
+	if baseCtx == nil {
+		return func() {}
+	}
+
+	renewCtx := baseCtx
+
+	renewCancel := func() {}
+	if ctx != nil && ctx != baseCtx {
+		renewCtx, renewCancel = mergeContext(baseCtx, ctx)
+	}
+
+	done := make(chan struct{})
+
+	tm.workerWg.Go(func() {
+		tm.runDurableLeaseRenewalLoop(renewCtx, lease, leaseDuration, interval, done)
+	})
+
+	return func() {
+		close(done)
+		renewCancel()
+	}
+}
+
+func (tm *TaskManager) runDurableLeaseRenewalLoop(
+	renewCtx context.Context,
+	lease DurableTaskLease,
+	leaseDuration time.Duration,
+	interval time.Duration,
+	done <-chan struct{},
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-renewCtx.Done():
+			return
+		case <-ticker.C:
+			if tm.handleDurableLeaseRenewal(renewCtx, lease, leaseDuration) {
+				return
+			}
+		}
+	}
+}
+
+func (tm *TaskManager) handleDurableLeaseRenewal(
+	ctx context.Context,
+	lease DurableTaskLease,
+	leaseDuration time.Duration,
+) bool {
+	err := tm.durableBackend.Extend(ctx, lease, leaseDuration)
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, ErrDurableLeaseNotFound) {
+		return true
+	}
+
+	tm.noteDurableBackendErr(ctx, err)
+
+	return false
+}
+
 func (tm *TaskManager) runDurableTask(ctx context.Context, task *Task, timeout time.Duration) (any, error) {
 	defer tm.wg.Done()
 
@@ -328,6 +435,9 @@ func (tm *TaskManager) runDurableTask(ctx context.Context, task *Task, timeout t
 
 	execCtx, cancel := tm.taskContext(ctx, task, timeout)
 	defer cancel()
+
+	stopRenew := tm.startDurableLeaseRenewal(ctx, execCtx, *lease)
+	defer stopRenew()
 
 	var (
 		result any
