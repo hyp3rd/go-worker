@@ -19,9 +19,11 @@ test:
 	RUN_INTEGRATION_TEST=yes go test -v -timeout 5m -cover ./...
 
 test-integration:
-	docker compose -f $(REDIS_TEST_COMPOSE_FILE) up -d && \
-	RUN_INTEGRATION_TEST=yes REDIS_ADDR=$(REDIS_ADDR) REDIS_PASSWORD=$(REDIS_PASSWORD) REDIS_PREFIX=$(REDIS_PREFIX) go test -v -timeout 5m -cover ./... || \
-	docker compose -f $(REDIS_TEST_COMPOSE_FILE) down
+	docker compose -f $(REDIS_TEST_COMPOSE_FILE) up -d; \
+	EXIT_CODE=0; \
+	RUN_INTEGRATION_TEST=yes REDIS_ADDR=$(REDIS_ADDR) REDIS_PASSWORD=$(REDIS_PASSWORD) REDIS_PREFIX=$(REDIS_PREFIX) go test -v -timeout 5m -cover ./... || EXIT_CODE=$$?; \
+	docker compose -f $(REDIS_TEST_COMPOSE_FILE) down; \
+	exit $$EXIT_CODE
 
 test-race:
 	go test -race ./...
@@ -196,7 +198,7 @@ help:
 	@echo
 	@echo "Testing commands:"
 	@echo "  test\t\t\t\tRun all tests in the project"
-	@echo "  test-integration\t\tRun all integration tests (requires external services
+	@echo "  test-integration\t\tRun all integration tests (requires external services)"
 	@echo
 	@echo "Code quality commands:"
 	@echo "  lint\t\t\t\tRun all linters (gci, gofumpt, staticcheck, golangci-lint)"
