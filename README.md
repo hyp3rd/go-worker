@@ -13,6 +13,7 @@
 - `NewGRPCServer` requires a handler map.
 - Rate limiting is deterministic: burst is `min(maxWorkers, maxTasks)` and `ExecuteTask` uses the shared limiter.
 - gRPC durable tasks use `RegisterDurableTasks` and the new `DurableTask` message.
+- `DurableBackend` now requires `Extend` (lease renewal support for custom backends).
 
 ## Features
 
@@ -268,7 +269,7 @@ if err != nil {
 }
 ```
 
-Defaults: lease is 30s, poll interval is 200ms, and Redis dequeue batch is 50 (configurable via options).
+Defaults: lease is 30s, poll interval is 200ms, Redis dequeue batch is 50, and lease renewal is disabled (configurable via options).
 
 Operational notes (durable Redis):
 
@@ -276,6 +277,7 @@ Operational notes (durable Redis):
 - **DLQ**: Failed tasks are pushed to a dead-letter list (`{prefix}:dead`). There is no built-in replay yet; you should build a replay tool or manually re-enqueue as needed.
 - **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility.
 - **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
+- **Lease renewal**: enable `WithDurableLeaseRenewalInterval` for long-running tasks to extend leases while a task executes.
 - **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
 - **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts and peeks ready IDs.
 
@@ -284,7 +286,7 @@ Operational notes (durable Redis):
 Durable processing is **at-least-once**. When multiple nodes consume from the same Redis backend:
 
 - **Lease sizing**: set `WithDurableLease` longer than your worst-case task duration (plus buffer). If a task exceeds its lease, it can be requeued and run again on another node.
-- **No lease extension yet**: leases are fixed per dequeue; there is no heartbeat/extension. For long-running tasks, use longer leases or split work into smaller tasks.
+- **Lease renewal (optional)**: set `WithDurableLeaseRenewalInterval` (less than the lease duration) to extend leases while tasks run.
 - **Idempotency**: enforce idempotency at the task level (idempotency key + handler-side dedupe) because duplicates are possible on retries and lease expiry.
 - **Throughput control**: worker count and polling interval are per node. If you need a **global** rate limit across nodes, enforce it externally or in the handler.
 - **Clock skew**: Redis uses server time for scores; keep node clocks in sync to avoid uneven dequeue/lease timing.
@@ -293,6 +295,7 @@ Durable processing is **at-least-once**. When multiple nodes consume from the sa
 Checklist:
 
 - Set `WithDurableLease` above p99 task duration (plus buffer).
+- Enable `WithDurableLeaseRenewalInterval` for tasks that can exceed the lease duration.
 - Keep task handlers idempotent; always use idempotency keys for external side effects.
 - Tune `WithDurablePollInterval` based on desired responsiveness vs. Redis load.
 - Scale `WithMaxWorkers` per node based on CPU and downstream throughput.

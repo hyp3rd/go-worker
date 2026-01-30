@@ -71,4 +71,5 @@ type DurableBackend interface {
 	Ack(ctx context.Context, lease DurableTaskLease) error
 	Nack(ctx context.Context, lease DurableTaskLease, delay time.Duration) error
 	Fail(ctx context.Context, lease DurableTaskLease, err error) error
+	Extend(ctx context.Context, lease DurableTaskLease, leaseDuration time.Duration) error
 }

@@ -208,3 +208,7 @@ func (*idempotencyDurableBackend) Nack(context.Context, worker.DurableTaskLease,
 func (*idempotencyDurableBackend) Fail(context.Context, worker.DurableTaskLease, error) error {
 	return nil
 }
+
+func (*idempotencyDurableBackend) Extend(context.Context, worker.DurableTaskLease, time.Duration) error {
+	return nil
+}

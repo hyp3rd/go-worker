@@ -24,6 +24,7 @@ type taskManagerConfig struct {
 	durableLease        time.Duration
 	durablePollInterval time.Duration
 	durableBatchSize    int
+	durableLeaseRenewal time.Duration
 }
 
 func defaultTaskManagerConfig() taskManagerConfig {
@@ -37,6 +38,7 @@ func defaultTaskManagerConfig() taskManagerConfig {
 		durableLease:        defaultDurableLease,
 		durablePollInterval: defaultDurablePollInterval,
 		durableBatchSize:    1,
+		durableLeaseRenewal: 0,
 		durableCodec:        ProtoDurableCodec{},
 	}
 }
@@ -124,5 +126,13 @@ func WithDurablePollInterval(interval time.Duration) TaskManagerOption {
 func WithDurableBatchSize(size int) TaskManagerOption {
 	return func(cfg *taskManagerConfig) {
 		cfg.durableBatchSize = size
+	}
+}
+
+// WithDurableLeaseRenewalInterval sets the interval for renewing durable task leases.
+// Set to <= 0 to disable renewal.
+func WithDurableLeaseRenewalInterval(interval time.Duration) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		cfg.durableLeaseRenewal = interval
 	}
 }

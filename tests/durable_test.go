@@ -31,9 +31,11 @@ type fakeDurableBackend struct {
 	acked     []uuid.UUID
 	nacked    []uuid.UUID
 	failed    []uuid.UUID
+	extended  []uuid.UUID
 	nackDelay time.Duration
 	nackCh    chan struct{}
 	failCh    chan struct{}
+	extendCh  chan struct{}
 }
 
 func (b *fakeDurableBackend) Enqueue(_ context.Context, task worker.DurableTask) error {
@@ -109,6 +111,21 @@ func (b *fakeDurableBackend) Fail(_ context.Context, lease worker.DurableTaskLea
 	return nil
 }
 
+func (b *fakeDurableBackend) Extend(_ context.Context, lease worker.DurableTaskLease, _ time.Duration) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.extended = append(b.extended, lease.Task.ID)
+	if b.extendCh != nil {
+		select {
+		case b.extendCh <- struct{}{}:
+		default:
+		}
+	}
+
+	return nil
+}
+
 type testCodec struct {
 	marshalCalls   int
 	unmarshalCalls int
@@ -135,6 +152,44 @@ func stopTaskManager(t *testing.T, tm *worker.TaskManager) {
 	err := tm.StopGraceful(ctx)
 	if err != nil {
 		t.Fatalf("stop task manager: %v", err)
+	}
+}
+
+func newDurableLeaseBackend(taskID uuid.UUID, payload []byte, retries int) *fakeDurableBackend {
+	return &fakeDurableBackend{
+		leases: []worker.DurableTaskLease{
+			{
+				Task: worker.DurableTask{
+					ID:      taskID,
+					Handler: testTaskName,
+					Payload: payload,
+					Retries: retries,
+				},
+				Attempts:   1,
+				MaxRetries: retries,
+			},
+		},
+	}
+}
+
+func closeOnce(ch chan struct{}) func() {
+	var once sync.Once
+
+	return func() {
+		once.Do(func() { close(ch) })
+	}
+}
+
+func blockingDurableHandlers(done <-chan struct{}) map[string]worker.DurableHandlerSpec {
+	return map[string]worker.DurableHandlerSpec{
+		testTaskName: {
+			Make: func() proto.Message { return &workerpb.SendEmailPayload{} },
+			Fn: func(context.Context, proto.Message) (any, error) {
+				<-done
+
+				return "ok", nil
+			},
+		},
 	}
 }
 
@@ -303,6 +358,63 @@ func TestDurableLoop_AckOnSuccess(t *testing.T) {
 
 	if len(backend.failed) != 0 || len(backend.nacked) != 0 {
 		t.Fatalf("unexpected backend calls acked=%v nacked=%v failed=%v", backend.acked, backend.nacked, backend.failed)
+	}
+}
+
+func TestDurableLoop_ExtendLease(t *testing.T) {
+	t.Parallel()
+
+	taskID := uuid.New()
+
+	payload, err := proto.Marshal(&workerpb.SendEmailPayload{To: "ops@example.com"})
+	if err != nil {
+		t.Fatalf(errMarshalPayload, err)
+	}
+
+	backend := newDurableLeaseBackend(taskID, payload, 0)
+	backend.extendCh = make(chan struct{}, 1)
+
+	done := make(chan struct{})
+	closeDone := closeOnce(done)
+	handlers := blockingDurableHandlers(done)
+
+	tm := worker.NewTaskManagerWithOptions(
+		context.Background(),
+		worker.WithDurableBackend(backend),
+		worker.WithDurableHandlers(handlers),
+		worker.WithDurablePollInterval(testPollInterval),
+		worker.WithDurableLease(50*time.Millisecond),
+		worker.WithDurableLeaseRenewalInterval(10*time.Millisecond),
+	)
+
+	t.Cleanup(func() {
+		closeDone()
+		stopTaskManager(t, tm)
+	})
+
+	results, cancel := tm.SubscribeResults(1)
+	defer cancel()
+
+	select {
+	case <-backend.extendCh:
+		// expected
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timeout waiting for lease renewal")
+	}
+
+	closeDone()
+
+	select {
+	case <-results:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for result")
+	}
+
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+
+	if len(backend.extended) == 0 {
+		t.Fatal("expected lease extension to be recorded")
 	}
 }
 
