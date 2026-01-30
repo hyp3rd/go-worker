@@ -31,6 +31,22 @@ func TestGRPCServer_CancelTaskNotFound(t *testing.T) {
 	}
 }
 
+func TestGRPCServer_CancelTaskInvalidID(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+	server := worker.NewGRPCServer(tm, map[string]worker.HandlerSpec{})
+
+	_, err := server.CancelTask(context.TODO(), &workerpb.CancelTaskRequest{Id: "not-a-uuid"})
+	if err == nil {
+		t.Fatal("expected error for invalid task id")
+	}
+
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
+	}
+}
+
 func TestGRPCServer_GetTaskNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -46,6 +62,22 @@ func TestGRPCServer_GetTaskNotFound(t *testing.T) {
 
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("expected NotFound, got %v", status.Code(err))
+	}
+}
+
+func TestGRPCServer_GetTaskInvalidID(t *testing.T) {
+	t.Parallel()
+
+	tm := worker.NewTaskManager(context.TODO(), maxWorkers, maxTasks, tasksPerSecond, time.Second*30, time.Second*30, maxRetries)
+	server := worker.NewGRPCServer(tm, map[string]worker.HandlerSpec{})
+
+	_, err := server.GetTask(context.TODO(), &workerpb.GetTaskRequest{Id: "not-a-uuid"})
+	if err == nil {
+		t.Fatal("expected error for invalid task id")
+	}
+
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
 	}
 }
 
