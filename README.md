@@ -7,12 +7,13 @@
 ## Breaking changes (January 2026)
 
 - `Stop()` removed. Use `StopGraceful(ctx)` or `StopNow()`.
-- Local result streaming uses `SubscribeResults(buffer)`; `GetResults()` is now a compatibility shim and `StreamResults()` is removed.
+- Local result streaming uses `SubscribeResults(buffer)`; `GetResults()` is now a compatibility shim and the legacy local `StreamResults()` is removed (gRPC `StreamResults` remains).
 - `RegisterTasks` now returns an error.
 - `Task.Execute` replaces `Fn` in examples.
 - `NewGRPCServer` requires a handler map.
 - Rate limiting is deterministic: burst is `min(maxWorkers, maxTasks)` and `ExecuteTask` uses the shared limiter.
 - gRPC durable tasks use `RegisterDurableTasks` and the new `DurableTask` message.
+- When a durable backend is configured, use `RegisterDurableTask(s)` instead of `RegisterTask(s)`.
 - `DurableBackend` now requires `Extend` (lease renewal support for custom backends).
 
 ## Features
@@ -23,7 +24,7 @@
 - Results: fan-out subscriptions via `SubscribeResults`.
 - Cancellation: cancel tasks before or during execution.
 - Retries: exponential backoff with capped delays.
-- Durability: optional Redis-backed durable task queue.
+- Durability: optional Redis-backed durable task queue (at-least-once, lease-based).
 
 ## Architecture
 
