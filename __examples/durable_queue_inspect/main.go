@@ -15,6 +15,7 @@ const (
 	defaultRedisPassword = "supersecret"
 	defaultRedisPrefix   = "go-worker"
 	defaultPeekCount     = 5
+	defaultTimeout       = 5 * time.Second
 )
 
 func main() {
@@ -22,6 +23,8 @@ func main() {
 	redisPassword := flag.String("redis-password", defaultRedisPassword, "redis password (empty for no auth)")
 	redisPrefix := flag.String("redis-prefix", defaultRedisPrefix, "redis key prefix")
 	peek := flag.Int("peek", defaultPeekCount, "number of ready task IDs to display")
+	timeout := flag.Duration("timeout", defaultTimeout, "redis operation timeout")
+	showIDs := flag.Bool("show-ids", false, "print ready task IDs (off by default)")
 	flag.Parse()
 
 	client, err := rueidis.NewClient(rueidis.ClientOption{
@@ -33,7 +36,8 @@ func main() {
 	}
 	defer client.Close()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
 	prefix := keyPrefix(*redisPrefix)
 	readyKey := prefix + ":ready"
 	processingKey := prefix + ":processing"
@@ -49,7 +53,7 @@ func main() {
 
 	log.Printf("ready=%d processing=%d dead=%d", readyCount, processingCount, deadCount)
 
-	if *peek <= 0 {
+	if !*showIDs || *peek <= 0 {
 		return
 	}
 
