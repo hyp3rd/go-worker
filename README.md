@@ -73,6 +73,22 @@ Security defaults to follow in production:
 - Scrub payloads and auth metadata from logs; log task IDs or correlation IDs instead of PII.
 - Implement auth via `WithGRPCAuth` and redact/validate tokens inside interceptors.
 
+### Typed handler registry (optional)
+
+For compile-time payload checks in handlers, use the typed registry. It removes the need for payload type assertions inside your handler functions.
+
+```go
+registry := worker.NewTypedHandlerRegistry()
+_ = worker.AddTypedHandler(registry, "create_user", worker.TypedHandlerSpec[*workerpb.CreateUserPayload]{
+    Make: func() *workerpb.CreateUserPayload { return &workerpb.CreateUserPayload{} },
+    Fn: func(ctx context.Context, payload *workerpb.CreateUserPayload) (any, error) {
+        return &workerpb.CreateUserResponse{UserId: "1234"}, nil
+    },
+})
+
+srv := worker.NewGRPCServer(tm, registry.Handlers())
+```
+
 ### Durable gRPC client (example)
 
 Use `RegisterDurableTasks` for persisted tasks (payload is still `Any`). Results stream is shared with non-durable tasks.
@@ -274,6 +290,25 @@ err = tm.RegisterDurableTask(context.Background(), worker.DurableTask{
 if err != nil {
     log.Fatal(err)
 }
+```
+
+Or use the typed durable registry for compile-time checks:
+
+```go
+durableRegistry := worker.NewTypedDurableRegistry()
+_ = worker.AddTypedDurableHandler(durableRegistry, "send_email", worker.TypedDurableHandlerSpec[*workerpb.SendEmailRequest]{
+    Make: func() *workerpb.SendEmailRequest { return &workerpb.SendEmailRequest{} },
+    Fn: func(ctx context.Context, payload *workerpb.SendEmailRequest) (any, error) {
+        // process request
+        return &workerpb.SendEmailResponse{MessageId: "msg-1"}, nil
+    },
+})
+
+tm := worker.NewTaskManagerWithOptions(
+    context.Background(),
+    worker.WithDurableBackend(backend),
+    worker.WithDurableHandlers(durableRegistry.Handlers()),
+)
 ```
 
 Defaults: lease is 30s, poll interval is 200ms, Redis dequeue batch is 50, and lease renewal is disabled (configurable via options).

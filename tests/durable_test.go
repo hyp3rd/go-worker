@@ -2,12 +2,12 @@ package tests
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyp3rd/ewrap"
 	"google.golang.org/protobuf/proto"
 
 	worker "github.com/hyp3rd/go-worker"
@@ -22,7 +22,7 @@ const (
 	errMarshalPayload = "marshal payload: %v"
 )
 
-var errTestBoom = errors.New("boom")
+var errTestBoom = ewrap.New("boom")
 
 type fakeDurableBackend struct {
 	mu        sync.Mutex
