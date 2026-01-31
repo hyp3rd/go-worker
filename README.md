@@ -67,6 +67,11 @@ srv := worker.NewGRPCServer(tm, handlers)
 For production, configure TLS credentials and interceptors (logging/auth) on the gRPC server; see `__examples/grpc` for a complete setup.
 For a Redis-backed durable gRPC example, see `__examples/grpc_durable`.
 
+Queue selection for gRPC tasks is done via metadata (`worker.MetadataQueueKey`, `worker.MetadataWeightKey`):
+
+- `queue`: named queue (empty means `default`)
+- `weight`: integer weight (as string)
+
 Security defaults to follow in production:
 
 - Use TLS (prefer mTLS) for gRPC; the durable gRPC example uses insecure credentials for local demos only.
@@ -286,6 +291,8 @@ err = tm.RegisterDurableTask(context.Background(), worker.DurableTask{
     Handler: "send_email",
     Message: &workerpb.SendEmailRequest{To: "ops@example.com"},
     Retries: 5,
+    Queue:   "email",
+    Weight:  2,
 })
 if err != nil {
     log.Fatal(err)
@@ -312,6 +319,7 @@ tm := worker.NewTaskManagerWithOptions(
 ```
 
 Defaults: lease is 30s, poll interval is 200ms, Redis dequeue batch is 50, and lease renewal is disabled (configurable via options).
+Queue weights for durable tasks can be configured with `WithRedisDurableQueueWeights`, and the default queue via `WithRedisDurableDefaultQueue`.
 
 Operational notes (durable Redis):
 
@@ -320,8 +328,8 @@ Operational notes (durable Redis):
 - **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility (dry-run by default; use `-apply` to replay).
 - **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
 - **Lease renewal**: enable `WithDurableLeaseRenewalInterval` for long-running tasks to extend leases while a task executes.
-- **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
-- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts; use `-show-ids` to display IDs (hidden by default to avoid leaking sensitive identifiers).
+- **Visibility**: Ready/processing queues live in per-queue sorted sets: `{prefix}:ready:<queue>` and `{prefix}:processing:<queue>`. Known queues are tracked in `{prefix}:queues`.
+- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts; use `-show-ids -queue=<name>` to display IDs (hidden by default to avoid leaking sensitive identifiers).
 
 ### Multi-node coordination (durable Redis)
 
@@ -346,12 +354,13 @@ Example:
 
 ```bash
 go run __examples/durable_queue_inspect/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker
-go run __examples/durable_queue_inspect/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker -show-ids -peek=5
+go run __examples/durable_queue_inspect/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker -queue=default -show-ids -peek=5
 ```
 
 Sample output:
 
 ```shell
+queue=default ready=3 processing=1
 ready=3 processing=1 dead=0
 ready IDs: 8c0f8b2d-0a4d-4a3b-9ad7-2d2a5b7f5d12, 9b18d5f2-3b7f-4d7a-9dd1-1bb1a3a56c55
 ```
@@ -452,6 +461,8 @@ task := &worker.Task{
     Name:        "Some task",
     Description: "Here goes the description of the task",
     Priority:    10,
+    Queue:       "critical",
+    Weight:      2,
     Ctx:         context.Background(),
     Execute: func(ctx context.Context, _ ...any) (any, error) {
         time.Sleep(time.Second)
@@ -464,6 +475,8 @@ task := &worker.Task{
 task2 := &worker.Task{
     ID:       uuid.New(),
     Priority: 10,
+    Queue:    "default",
+    Weight:   1,
     Ctx:      context.Background(),
     Execute:  func(ctx context.Context, _ ...any) (any, error) { return "Hello, World!", nil },
 }
@@ -472,6 +485,14 @@ if err := tm.RegisterTasks(context.Background(), task, task2); err != nil {
     log.Fatal(err)
 }
 ```
+
+Queues and weights:
+
+- `Queue` groups tasks for scheduling. Empty means `default`.
+- `Weight` is a per-task scheduling hint within a queue (higher weight runs earlier among equal priorities).
+- Queue weights control inter-queue share via `WithQueueWeights`; change the default queue via `WithDefaultQueue`.
+
+For gRPC, set `metadata["queue"]` and `metadata["weight"]` (string) on `Task`/`DurableTask`.
 
 ### Stopping the Task Manager
 

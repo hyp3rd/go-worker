@@ -17,14 +17,17 @@ const (
 	defaultRedisPrefix   = "go-worker"
 	defaultBatchSize     = 100
 	defaultTimeout       = 5 * time.Second
+	defaultQueueName     = "default"
 )
 
 const replayScript = `
 local dead = KEYS[1]
-local ready = KEYS[2]
-local taskPrefix = KEYS[3]
+local taskPrefix = KEYS[2]
+local queuesKey = KEYS[3]
 local now = tonumber(ARGV[1])
 local limit = tonumber(ARGV[2])
+local prefix = ARGV[3]
+local defaultQueue = ARGV[4]
 
 local moved = 0
 for i = 1, limit do
@@ -34,8 +37,14 @@ for i = 1, limit do
   end
   local taskKey = taskPrefix .. id
   if redis.call("EXISTS", taskKey) == 1 then
+    local queue = redis.call("HGET", taskKey, "queue")
+    if queue == false or queue == "" then
+      queue = defaultQueue
+    end
+    local readyKey = prefix .. ":ready:" .. queue
     redis.call("HSET", taskKey, "ready_at_ms", now, "updated_at_ms", now)
-    redis.call("ZADD", ready, now, id)
+    redis.call("ZADD", readyKey, now, id)
+    redis.call("SADD", queuesKey, queue)
     moved = moved + 1
   end
 end
@@ -67,7 +76,7 @@ func main() {
 
 	prefix := keyPrefix(*redisPrefix)
 	deadKey := prefix + ":dead"
-	readyKey := prefix + ":ready"
+	queuesKey := prefix + ":queues"
 	taskPrefix := prefix + ":task:"
 
 	now := time.Now().UnixMilli()
@@ -94,10 +103,12 @@ func main() {
 	resp := script.Exec(
 		ctx,
 		client,
-		[]string{deadKey, readyKey, taskPrefix},
+		[]string{deadKey, taskPrefix, queuesKey},
 		[]string{
 			int64ToString(now),
 			intToString(limit),
+			prefix,
+			defaultQueueName,
 		},
 	)
 	err := resp.Error()

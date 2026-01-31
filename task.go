@@ -115,6 +115,8 @@ type Task struct {
 	Name        string             `json:"name"`        // Name is the name of the task
 	Description string             `json:"description"` // Description is the description of the task
 	Priority    int                `json:"priority"`    // Priority is the priority of the task
+	Queue       string             `json:"queue"`       // Queue is the queue name for scheduling
+	Weight      int                `json:"weight"`      // Weight influences scheduling share within a queue
 	Execute     TaskFunc           `json:"-"`           // Execute is the function that will be executed by the task
 	Ctx         context.Context    `json:"-"`           // Ctx is the context of the task
 	CancelFunc  context.CancelFunc `json:"-"`           // CancelFunc is the cancel function of the task

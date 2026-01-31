@@ -115,12 +115,16 @@ func (pq *priorityQueue[T]) down(i0 int) {
 
 // newTaskHeap returns a priority queue for *Task items ordered by priority.
 func newTaskHeap() *priorityQueue[*Task] {
-	return newPriorityQueue(func(a, b *Task) bool {
-		if a.Priority != b.Priority {
-			return a.Priority < b.Priority
+	return newPriorityQueue(func(left, right *Task) bool {
+		if left.Priority != right.Priority {
+			return left.Priority < right.Priority
 		}
 
-		return a.ID.String() < b.ID.String()
+		if left.Weight != right.Weight {
+			return left.Weight > right.Weight
+		}
+
+		return left.ID.String() < right.ID.String()
 	}, func(t *Task, i int) {
 		t.index = i
 	})

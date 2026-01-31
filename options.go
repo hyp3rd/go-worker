@@ -17,6 +17,8 @@ type taskManagerConfig struct {
 	timeout        time.Duration
 	retryDelay     time.Duration
 	maxRetries     int
+	defaultQueue   string
+	queueWeights   map[string]int
 
 	durableBackend      DurableBackend
 	durableHandlers     map[string]DurableHandlerSpec
@@ -35,6 +37,8 @@ func defaultTaskManagerConfig() taskManagerConfig {
 		timeout:             DefaultTimeout,
 		retryDelay:          DefaultRetryDelay,
 		maxRetries:          DefaultMaxRetries,
+		defaultQueue:        DefaultQueueName,
+		queueWeights:        map[string]int{},
 		durableLease:        defaultDurableLease,
 		durablePollInterval: defaultDurablePollInterval,
 		durableBatchSize:    1,
@@ -82,6 +86,26 @@ func WithRetryDelay(delay time.Duration) TaskManagerOption {
 func WithMaxRetries(n int) TaskManagerOption {
 	return func(cfg *taskManagerConfig) {
 		cfg.maxRetries = n
+	}
+}
+
+// WithDefaultQueue sets the default queue name for tasks without a queue.
+func WithDefaultQueue(name string) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		cfg.defaultQueue = name
+	}
+}
+
+// WithQueueWeights sets the queue weight map for named queues.
+func WithQueueWeights(weights map[string]int) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		if weights == nil {
+			cfg.queueWeights = map[string]int{}
+
+			return
+		}
+
+		cfg.queueWeights = copyQueueWeights(weights)
 	}
 }
 
