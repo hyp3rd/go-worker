@@ -67,6 +67,12 @@ srv := worker.NewGRPCServer(tm, handlers)
 For production, configure TLS credentials and interceptors (logging/auth) on the gRPC server; see `__examples/grpc` for a complete setup.
 For a Redis-backed durable gRPC example, see `__examples/grpc_durable`.
 
+Security defaults to follow in production:
+
+- Use TLS (prefer mTLS) for gRPC; the durable gRPC example uses insecure credentials for local demos only.
+- Scrub payloads and auth metadata from logs; log task IDs or correlation IDs instead of PII.
+- Implement auth via `WithGRPCAuth` and redact/validate tokens inside interceptors.
+
 ### Durable gRPC client (example)
 
 Use `RegisterDurableTasks` for persisted tasks (payload is still `Any`). Results stream is shared with non-durable tasks.
@@ -280,7 +286,7 @@ Operational notes (durable Redis):
 - **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
 - **Lease renewal**: enable `WithDurableLeaseRenewalInterval` for long-running tasks to extend leases while a task executes.
 - **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
-- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts and peeks ready IDs.
+- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts; use `-show-ids` to display IDs (hidden by default to avoid leaking sensitive identifiers).
 
 ### Multi-node coordination (durable Redis)
 

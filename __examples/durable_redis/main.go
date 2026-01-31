@@ -50,8 +50,8 @@ func main() {
 		"send_email": {
 			Make: func() proto.Message { return &workerpb.SendEmailPayload{} },
 			Fn: func(ctx context.Context, payload proto.Message) (any, error) {
-				req := payload.(*workerpb.SendEmailPayload)
-				log.Printf("send email to=%s subject=%s", req.To, req.Subject)
+				_ = payload.(*workerpb.SendEmailPayload)
+				log.Printf("send_email handler invoked")
 				if *failOnce {
 					*failOnce = false
 					return nil, errors.New("forced failure")

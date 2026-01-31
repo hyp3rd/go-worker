@@ -45,8 +45,9 @@ func handlers() map[string]worker.HandlerSpec {
 				if !ok {
 					return nil, status.Errorf(codes.InvalidArgument, "invalid payload type")
 				}
+				_ = in
 				// do work...
-				return fmt.Sprintf("email sent to %s with subject %s", in.GetTo(), in.GetSubject()), nil
+				return "ok", nil
 			},
 		},
 		// Other Tasks:
@@ -306,6 +307,6 @@ func main() {
 			continue
 		}
 
-		log.Printf("task %s output: %s", msg.GetId(), msg.GetOutput())
+		log.Printf("task %s completed", msg.GetId())
 	}
 }
