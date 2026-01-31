@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"log"
 	"time"
 
+	"github.com/hyp3rd/ewrap"
 	"github.com/redis/rueidis"
 	"google.golang.org/protobuf/proto"
 
@@ -54,7 +54,7 @@ func main() {
 				log.Printf("send_email handler invoked")
 				if *failOnce {
 					*failOnce = false
-					return nil, errors.New("forced failure")
+					return nil, ewrap.New("forced failure")
 				}
 				return "ok", nil
 			},
