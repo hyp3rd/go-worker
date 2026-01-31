@@ -16,6 +16,7 @@ const (
 	defaultRedisPassword = "supersecret"
 	defaultRedisPrefix   = "go-worker"
 	defaultBatchSize     = 100
+	defaultTimeout       = 5 * time.Second
 )
 
 const replayScript = `
@@ -48,6 +49,8 @@ func main() {
 	redisPrefix := flag.String("redis-prefix", defaultRedisPrefix, "redis key prefix")
 	batch := flag.Int("batch", defaultBatchSize, "max DLQ items to replay")
 	showCounts := flag.Bool("show-counts", true, "print DLQ size before/after replay")
+	apply := flag.Bool("apply", false, "apply replay (default is dry-run)")
+	timeout := flag.Duration("timeout", defaultTimeout, "redis operation timeout")
 	flag.Parse()
 
 	client, err := rueidis.NewClient(rueidis.ClientOption{
@@ -58,6 +61,9 @@ func main() {
 		log.Fatal(err)
 	}
 	defer client.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
 
 	prefix := keyPrefix(*redisPrefix)
 	deadKey := prefix + ":dead"
@@ -71,16 +77,22 @@ func main() {
 	}
 
 	if *showCounts {
-		before, err := client.Do(context.Background(), client.B().Llen().Key(deadKey).Build()).AsInt64()
+		before, err := client.Do(ctx, client.B().Llen().Key(deadKey).Build()).AsInt64()
 		if err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("DLQ size before: %d", before)
 	}
 
+	if !*apply {
+		log.Printf("dry-run: use -apply to replay up to %d DLQ item(s)", limit)
+
+		return
+	}
+
 	script := rueidis.NewLuaScript(replayScript)
 	resp := script.Exec(
-		context.Background(),
+		ctx,
 		client,
 		[]string{deadKey, readyKey, taskPrefix},
 		[]string{
@@ -101,7 +113,7 @@ func main() {
 	log.Printf("replayed %d DLQ item(s)", moved)
 
 	if *showCounts {
-		after, err := client.Do(context.Background(), client.B().Llen().Key(deadKey).Build()).AsInt64()
+		after, err := client.Do(ctx, client.B().Llen().Key(deadKey).Build()).AsInt64()
 		if err != nil {
 			log.Fatal(err)
 		}

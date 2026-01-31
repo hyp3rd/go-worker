@@ -183,7 +183,7 @@ func (s *GRPCServer) CancelTask(ctx context.Context, req *workerpb.CancelTaskReq
 
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
-		return nil, ewrap.Wrap(err, "parse id")
+		return nil, status.Errorf(codes.InvalidArgument, "parse id: %v", err)
 	}
 
 	err = s.svc.CancelTask(id)
@@ -207,7 +207,7 @@ func (s *GRPCServer) GetTask(ctx context.Context, req *workerpb.GetTaskRequest) 
 
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
-		return nil, ewrap.Wrap(err, "parse id")
+		return nil, status.Errorf(codes.InvalidArgument, "parse id: %v", err)
 	}
 
 	task, err := s.svc.GetTask(id)
@@ -482,7 +482,7 @@ func (s *GRPCServer) registerTaskWithIdempotency(
 ) (string, error) {
 	err := s.svc.RegisterTask(ctx, task)
 	if err != nil {
-		return "", s.completeIdempotencyError(key, record, status.Errorf(codes.Internal, "register task: %v", err))
+		return "", s.completeIdempotencyError(key, record, grpcRegisterError("register task", err))
 	}
 
 	s.completeIdempotencySuccess(key, record, task.ID.String())
@@ -502,7 +502,7 @@ func (s *GRPCServer) registerDurableTaskWithIdempotency(
 
 	err := s.svc.RegisterDurableTask(ctx, task)
 	if err != nil {
-		return "", s.completeIdempotencyError(key, record, status.Errorf(codes.Internal, "register durable task: %v", err))
+		return "", s.completeIdempotencyError(key, record, grpcRegisterError("register durable task", err))
 	}
 
 	id := task.ID.String()
@@ -633,6 +633,31 @@ func waitForIdempotency(ctx context.Context, ready <-chan struct{}) error {
 		return nil
 	case <-ctx.Done():
 		return ewrap.Wrap(status.FromContextError(ctx.Err()).Err(), "client went away; stop streaming")
+	}
+}
+
+func grpcRegisterError(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+
+	switch {
+	case errors.Is(err, ErrInvalidTaskID),
+		errors.Is(err, ErrInvalidTaskContext),
+		errors.Is(err, ErrInvalidTaskFunc):
+		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
+	case errors.Is(err, context.Canceled):
+		return status.Errorf(codes.Canceled, "%s: %v", op, err)
+	case errors.Is(err, context.DeadlineExceeded):
+		return status.Errorf(codes.DeadlineExceeded, "%s: %v", op, err)
+	case errors.Is(err, ErrTaskNotFound):
+		return status.Errorf(codes.NotFound, "%s: %v", op, err)
+	default:
+		return status.Errorf(codes.Internal, "%s: %v", op, err)
 	}
 }
 

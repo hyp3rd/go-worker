@@ -65,8 +65,8 @@ func main() {
 		"send_email": {
 			Make: func() proto.Message { return &workerpb.SendEmailPayload{} },
 			Fn: func(ctx context.Context, payload proto.Message) (any, error) {
-				msg := payload.(*workerpb.SendEmailPayload)
-				log.Printf("send email to=%s subject=%s", msg.To, msg.Subject)
+				_ = payload.(*workerpb.SendEmailPayload)
+				log.Printf("send_email handler invoked")
 				return "ok", nil
 			},
 		},
@@ -76,8 +76,8 @@ func main() {
 		"send_email": {
 			Make: func() protoreflect.ProtoMessage { return &workerpb.SendEmailPayload{} },
 			Fn: func(ctx context.Context, payload protoreflect.ProtoMessage) (any, error) {
-				msg := payload.(*workerpb.SendEmailPayload)
-				log.Printf("grpc handler send email to=%s subject=%s", msg.To, msg.Subject)
+				_ = payload.(*workerpb.SendEmailPayload)
+				log.Printf("grpc handler send_email invoked")
 				return "ok", nil
 			},
 		},
@@ -113,6 +113,7 @@ func main() {
 	dialCtx, dialCancel := context.WithTimeout(ctx, dialTimeout)
 	defer dialCancel()
 
+	// NOTE: insecure transport is for local demos only; use TLS credentials in production.
 	conn, err := grpc.DialContext(dialCtx, grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		log.Fatal(err)
@@ -168,7 +169,7 @@ func main() {
 			break
 		}
 		if msg.Id == targetID {
-			log.Printf("result id=%s output=%s error=%s", msg.Id, msg.Output, msg.Error)
+			log.Printf("result id=%s error=%s", msg.Id, msg.Error)
 			break
 		}
 	}

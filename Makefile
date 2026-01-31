@@ -6,6 +6,10 @@ GO_VERSION ?= 1.25.6
 GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true
 BENCHTIME ?= 1s
+REDIS_ADDR ?= localhost:6380
+REDIS_PASSWORD ?= "supersecret"
+REDIS_PREFIX ?= test_prefix_
+REDIS_TEST_COMPOSE_FILE ?= ./__examples/durable_redis/compose.redis-stack.yaml
 
 GOFILES = $(shell find . -type f -name '*.go' -not -path "./pkg/api/*" -not -path "./vendor/*" -not -path "./.gocache/*" -not -path "./.git/*")
 
@@ -13,6 +17,13 @@ GOFILES = $(shell find . -type f -name '*.go' -not -path "./pkg/api/*" -not -pat
 
 test:
 	RUN_INTEGRATION_TEST=yes go test -v -timeout 5m -cover ./...
+
+test-integration:
+	docker compose -f $(REDIS_TEST_COMPOSE_FILE) up -d; \
+	EXIT_CODE=0; \
+	RUN_INTEGRATION_TEST=yes REDIS_ADDR=$(REDIS_ADDR) REDIS_PASSWORD=$(REDIS_PASSWORD) REDIS_PREFIX=$(REDIS_PREFIX) go test -v -timeout 5m -cover ./... || EXIT_CODE=$$?; \
+	docker compose -f $(REDIS_TEST_COMPOSE_FILE) down; \
+	exit $$EXIT_CODE
 
 test-race:
 	go test -race ./...
@@ -187,6 +198,7 @@ help:
 	@echo
 	@echo "Testing commands:"
 	@echo "  test\t\t\t\tRun all tests in the project"
+	@echo "  test-integration\t\tRun all integration tests (requires external services)"
 	@echo
 	@echo "Code quality commands:"
 	@echo "  lint\t\t\t\tRun all linters (gci, gofumpt, staticcheck, golangci-lint)"
@@ -200,4 +212,4 @@ help:
 	@echo
 	@echo
 	@echo "For more information, see the project README."
-.PHONY: prepare-toolchain prepare-proto-tools prepare-base-tools update-toolchain test bench vet update-deps lint sec help init proto proto-update proto-lint proto-generate proto-format proto-breaking
+.PHONY: prepare-toolchain prepare-proto-tools prepare-base-tools update-toolchain test test-integration bench vet update-deps lint sec help init proto proto-update proto-lint proto-generate proto-format proto-breaking

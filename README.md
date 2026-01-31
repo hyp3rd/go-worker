@@ -7,12 +7,13 @@
 ## Breaking changes (January 2026)
 
 - `Stop()` removed. Use `StopGraceful(ctx)` or `StopNow()`.
-- Local result streaming uses `SubscribeResults(buffer)`; `GetResults()` is now a compatibility shim and `StreamResults()` is removed.
+- Local result streaming uses `SubscribeResults(buffer)`; `GetResults()` is now a compatibility shim and the legacy local `StreamResults()` is removed (gRPC `StreamResults` remains).
 - `RegisterTasks` now returns an error.
 - `Task.Execute` replaces `Fn` in examples.
 - `NewGRPCServer` requires a handler map.
 - Rate limiting is deterministic: burst is `min(maxWorkers, maxTasks)` and `ExecuteTask` uses the shared limiter.
 - gRPC durable tasks use `RegisterDurableTasks` and the new `DurableTask` message.
+- When a durable backend is configured, use `RegisterDurableTask(s)` instead of `RegisterTask(s)`.
 - `DurableBackend` now requires `Extend` (lease renewal support for custom backends).
 
 ## Features
@@ -23,7 +24,7 @@
 - Results: fan-out subscriptions via `SubscribeResults`.
 - Cancellation: cancel tasks before or during execution.
 - Retries: exponential backoff with capped delays.
-- Durability: optional Redis-backed durable task queue.
+- Durability: optional Redis-backed durable task queue (at-least-once, lease-based).
 
 ## Architecture
 
@@ -65,6 +66,12 @@ srv := worker.NewGRPCServer(tm, handlers)
 
 For production, configure TLS credentials and interceptors (logging/auth) on the gRPC server; see `__examples/grpc` for a complete setup.
 For a Redis-backed durable gRPC example, see `__examples/grpc_durable`.
+
+Security defaults to follow in production:
+
+- Use TLS (prefer mTLS) for gRPC; the durable gRPC example uses insecure credentials for local demos only.
+- Scrub payloads and auth metadata from logs; log task IDs or correlation IDs instead of PII.
+- Implement auth via `WithGRPCAuth` and redact/validate tokens inside interceptors.
 
 ### Durable gRPC client (example)
 
@@ -275,11 +282,11 @@ Operational notes (durable Redis):
 
 - **Key hashing**: Redis Lua scripts touch multiple keys; for clustered Redis, all keys must share the same hash slot. The backend auto-wraps the prefix in `{}` to enforce this (e.g., `{go-worker}:ready`).
 - **DLQ**: Failed tasks are pushed to a dead-letter list (`{prefix}:dead`). There is no built-in replay yet; you should build a replay tool or manually re-enqueue as needed.
-- **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility.
+- **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility (dry-run by default; use `-apply` to replay).
 - **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
 - **Lease renewal**: enable `WithDurableLeaseRenewalInterval` for long-running tasks to extend leases while a task executes.
 - **Visibility**: Ready and processing queues live in sorted sets; you can inspect sizes via `ZCARD` on `{prefix}:ready` and `{prefix}:processing`.
-- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts and peeks ready IDs.
+- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts; use `-show-ids` to display IDs (hidden by default to avoid leaking sensitive identifiers).
 
 ### Multi-node coordination (durable Redis)
 
@@ -303,7 +310,8 @@ Checklist:
 Example:
 
 ```bash
-go run __examples/durable_queue_inspect/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker -peek=5
+go run __examples/durable_queue_inspect/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker
+go run __examples/durable_queue_inspect/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker -show-ids -peek=5
 ```
 
 Sample output:
@@ -311,6 +319,13 @@ Sample output:
 ```shell
 ready=3 processing=1 dead=0
 ready IDs: 8c0f8b2d-0a4d-4a3b-9ad7-2d2a5b7f5d12, 9b18d5f2-3b7f-4d7a-9dd1-1bb1a3a56c55
+```
+
+DLQ replay example (dry-run by default):
+
+```bash
+go run __examples/durable_dlq_replay/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker -batch=100
+go run __examples/durable_dlq_replay/main.go -redis-addr=localhost:6380 -redis-password=supersecret -redis-prefix=go-worker -batch=100 -apply
 ```
 
 Optional retention can be configured to prevent unbounded task registry growth:

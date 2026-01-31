@@ -11,10 +11,11 @@
 - Ensure cancellation, timeouts, retries, and shutdown are safe, idempotent, and leak-free.
 - Make behavior observable (metrics, logs, tracing) with minimal overhead.
 - Keep API ergonomics while enabling strong operational controls.
+- Provide an optional durable backend (Redis) with at-least-once delivery, leasing, and DLQ support.
 
 ## Non-Goals
 
-- Implementing a durable persistent queue (can be a future extension).
+- Additional durable backends beyond Redis (e.g., Postgres) are out of scope for now.
 - Building a full scheduler with cron semantics.
 - Providing a multi-tenant authorization system inside the library.
 
@@ -48,7 +49,7 @@
          - Implement exponential backoff with jitter without blocking shared locks.
          - Retries must not deadlock or block the scheduler.
 1. **Shutdown / drain semantics**
-         - `Stop()` must be idempotent and non-blocking.
+         - `StopGraceful(ctx)` and `StopNow()` must be idempotent and non-blocking.
          - Support graceful drain (finish running tasks) and hard stop (cancel).
          - No channel closes while writers are active.
 1. **Result handling**
@@ -73,10 +74,9 @@
 
 - Replace dual scheduling (scheduler + direct channel send) with a single scheduling path.
 - Clarify defaults using typed `time.Duration` constants (e.g., `5 * time.Minute`).
-- Replace `GetResults()` with either:
-         - a) `Results()` returning a receive-only channel, or
-         - b) `CollectResults(ctx)` that safely drains results without closing channels used by workers.
+- Replace `GetResults()` with `SubscribeResults(buffer)` and keep `GetResults()` as a compatibility shim for one release cycle.
 - Provide `StopGraceful(ctx)` and `StopNow()` to separate drain vs cancel semantics.
+- When a durable backend is enabled, use `RegisterDurableTask(s)` instead of `RegisterTask(s)`.
 
 ## Observability Requirements
 
@@ -104,6 +104,47 @@
 - Provide a compatibility shim for old `GetResults()` behavior.
 - Document breaking changes and safe upgrade path.
 
+## Status vs Repo (January 30, 2026)
+
+### Functional Requirements (January 30, 2026)
+
+- **Task lifecycle correctness**: Done for in-memory tasks; durable tasks are at-least-once by design.
+- **Rate limiting & concurrency**: Done; single scheduling path with deterministic burst (`min(maxWorkers, maxTasks)`).
+- **Timeouts & cancellation**: Done; task contexts inherit deadlines and cancellation is propagated.
+- **Retries**: Done; exponential backoff with jitter and non-blocking scheduling.
+- **Shutdown / drain semantics**: Done; `StopGraceful` + `StopNow` are idempotent and safe.
+- **Result handling**: Done; fan-out `SubscribeResults` + drop policy + `GetResults` shim.
+- **Registry management**: Done; retention policy and cleanup implemented.
+- **gRPC behavior**: Done; fan-out streaming, idempotency enforcement, NotFound for missing tasks.
+
+### Non-Functional Requirements (January 30, 2026)
+
+- **Safety**: Partial; panic recovery in hooks/tracer/broadcaster exists, but `go test -race ./...` still needs to be validated on your machine.
+- **Reliability**: Done; stop paths are idempotent and workers/scheduler loops are tracked via WaitGroups.
+- **Performance**: Done; queue scheduling avoids global locks in steady state beyond the queue/registry.
+- **Observability**: Done; metrics snapshot + OpenTelemetry metrics/tracing and examples.
+- **Compatibility**: Done; breaking changes documented, shim for `GetResults`.
+
+### API / Behavior Changes (January 30, 2026)
+
+- **Single scheduling path**: Done.
+- **Defaults clarified**: Done (typed `time.Duration` constants).
+- **`GetResults()` replacement**: Done as `SubscribeResults` + compatibility shim.
+- **StopGraceful/StopNow**: Done.
+- **Durable mode registration**: Done; `RegisterTask(s)` disabled when durable backend is enabled.
+
+### Security & Compliance (January 30, 2026)
+
+- **TLS/interceptor examples**: Done (`__examples/grpc`).
+- **Auth hook**: Done (`WithGRPCAuth`).
+- **Avoid logging payloads by default**: Partial; core avoids logging payloads, but examples/tests should be reviewed for sensitive logging.
+
+### Durable Backend
+
+- **Redis durable backend**: Done (leases, DLQ, replay/inspect tools, gRPC durable API).
+- **Multi-backend support**: Not started.
+- **Global coordination**: Partial; lease renewal + guidance exist, but no global rate limiting/leader election.
+
 ## Milestones
 
 1. **Stability Patch**: Fix critical panics, timeout propagation, cancellation correctness, and shutdown deadlocks.
@@ -116,7 +157,7 @@
 
 - All unit tests pass; new tests cover cancellation, retries, shutdown, rate limiting, and fan-out streaming.
 - `go test -race ./...` passes with no data races.
-- `Stop()` returns within a bounded timeout even with pending tasks.
+- `StopGraceful(ctx)` returns within a bounded timeout even with pending tasks.
 - No panics in `GetTask`, middleware logging, or streaming when tasks have no result/error yet.
 - Task execution respects deadlines; canceled tasks do not execute.
 
@@ -129,14 +170,14 @@
 
 ### Gaps vs comparable packages
 
-- **Durability**: no persisted queue, no transactional enqueue, no guaranteed recovery after process restart.
-- **Operational tooling**: no built‑in admin UI, dashboards, or DLQ replay tooling.
-- **Distributed coordination**: no broker/queue backend or multi‑node worker coordination.
+- **Durability**: Redis-backed at-least-once exists, but no transactional enqueue across services and no exactly-once guarantees.
+- **Operational tooling**: basic CLI tools exist (DLQ replay, queue inspect), but no admin UI or dashboards.
+- **Distributed coordination**: multi-node guidance + lease renewal exist; no global rate limiting, leader election, or quorum controls.
 - **Scheduling**: no cron‑like schedules or delayed tasks beyond retries.
 
 ### Nice‑to‑have improvements
 
-- **DLQ & replay** for terminal failures.
+- **DLQ & replay**: current replay utility is basic; add safety guards, dry-run, and filtering.
 - **Queue segmentation** (multiple named queues, weighted priorities).
 - **Typed task payloads** (optional typed registry, stronger compile‑time checks).
 - **More observability knobs** (labels for task name/status; exemplar support).
@@ -144,7 +185,7 @@
 
 ### Roadmap (future milestones)
 
-1. **Durable backend**: pluggable persistence (Postgres/Redis) with transactional enqueue.
+1. **Durable backend**: add additional backends (Postgres) and stronger transactional enqueue semantics.
 1. **Operational tooling**: admin UI + CLI for queue inspection, retries, and DLQ.
 1. **Scheduled jobs**: cron/delayed scheduling layer.
 1. **Multi‑node coordination**: optional distributed workers via backend.

@@ -14,14 +14,23 @@ import (
 )
 
 const (
-	redisEnvAddr     = "REDIS_ADDR"
-	redisEnvPassword = "REDIS_PASSWORD"
-	redisEnvPrefix   = "REDIS_PREFIX"
-	redisScanCount   = 100
-	redisLease       = 2 * time.Second
-	redisNackDelay   = 50 * time.Millisecond
-	redisRetryDelay  = 10 * time.Millisecond
-	redisTestTimeout = 5 * time.Second
+	redisEnvAddr                 = "REDIS_ADDR"
+	redisEnvPassword             = "REDIS_PASSWORD"
+	redisEnvPrefix               = "REDIS_PREFIX"
+	redisScanCount               = 100
+	redisLease                   = 2 * time.Second
+	redisLeaseShort              = 200 * time.Millisecond
+	redisLeaseExtend             = 600 * time.Millisecond
+	redisLeaseGrace              = 150 * time.Millisecond
+	redisNackDelay               = 50 * time.Millisecond
+	redisRetryDelay              = 10 * time.Millisecond
+	redisTestTimeout             = 5 * time.Second
+	redisErrEnvNotSet            = "%s not set; skipping Redis integration test"
+	redisErrEnqueue              = "enqueue: %v"
+	redisErrDequeue              = "dequeue: %v"
+	redisErrUnexpectedLeaseCount = "expected 1 lease, got %d"
+	redisHandler                 = "test_handler"
+	redisPayload                 = "payload"
 )
 
 func TestRedisDurableBackend_EnqueueDequeueAck(t *testing.T) {
@@ -29,7 +38,7 @@ func TestRedisDurableBackend_EnqueueDequeueAck(t *testing.T) {
 
 	addr := os.Getenv(redisEnvAddr)
 	if addr == "" {
-		t.Skipf("%s not set; skipping Redis integration test", redisEnvAddr)
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
 	}
 
 	password := os.Getenv(redisEnvPassword)
@@ -48,8 +57,8 @@ func TestRedisDurableBackend_EnqueueDequeueAck(t *testing.T) {
 	taskID := uuid.New()
 	task := worker.DurableTask{
 		ID:         taskID,
-		Handler:    "test_handler",
-		Payload:    []byte("payload"),
+		Handler:    redisHandler,
+		Payload:    []byte(redisPayload),
 		Priority:   1,
 		Retries:    0,
 		RetryDelay: redisRetryDelay,
@@ -58,16 +67,16 @@ func TestRedisDurableBackend_EnqueueDequeueAck(t *testing.T) {
 
 	err := backend.Enqueue(ctx, task)
 	if err != nil {
-		t.Fatalf("enqueue: %v", err)
+		t.Fatalf(redisErrEnqueue, err)
 	}
 
 	leases, err := backend.Dequeue(ctx, 1, redisLease)
 	if err != nil {
-		t.Fatalf("dequeue: %v", err)
+		t.Fatalf(redisErrDequeue, err)
 	}
 
 	if len(leases) != 1 {
-		t.Fatalf("expected 1 lease, got %d", len(leases))
+		t.Fatalf(redisErrUnexpectedLeaseCount, len(leases))
 	}
 
 	if leases[0].Task.ID != taskID {
@@ -94,7 +103,7 @@ func TestRedisDurableBackend_NackRequeues(t *testing.T) {
 
 	addr := os.Getenv(redisEnvAddr)
 	if addr == "" {
-		t.Skipf("%s not set; skipping Redis integration test", redisEnvAddr)
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
 	}
 
 	password := os.Getenv(redisEnvPassword)
@@ -113,8 +122,8 @@ func TestRedisDurableBackend_NackRequeues(t *testing.T) {
 	taskID := uuid.New()
 	task := worker.DurableTask{
 		ID:         taskID,
-		Handler:    "test_handler",
-		Payload:    []byte("payload"),
+		Handler:    redisHandler,
+		Payload:    []byte(redisPayload),
 		Priority:   1,
 		Retries:    1,
 		RetryDelay: redisRetryDelay,
@@ -122,16 +131,16 @@ func TestRedisDurableBackend_NackRequeues(t *testing.T) {
 
 	err := backend.Enqueue(ctx, task)
 	if err != nil {
-		t.Fatalf("enqueue: %v", err)
+		t.Fatalf(redisErrEnqueue, err)
 	}
 
 	leases, err := backend.Dequeue(ctx, 1, redisLease)
 	if err != nil {
-		t.Fatalf("dequeue: %v", err)
+		t.Fatalf(redisErrDequeue, err)
 	}
 
 	if len(leases) != 1 {
-		t.Fatalf("expected 1 lease, got %d", len(leases))
+		t.Fatalf(redisErrUnexpectedLeaseCount, len(leases))
 	}
 
 	err = backend.Nack(ctx, leases[0], redisNackDelay)
@@ -160,12 +169,12 @@ func TestRedisDurableBackend_NackRequeues(t *testing.T) {
 	}
 }
 
-func TestRedisDurableBackend_FailMovesToDLQ(t *testing.T) {
+func TestRedisDurableBackend_LeaseExpiresAndRequeues(t *testing.T) {
 	t.Parallel()
 
 	addr := os.Getenv(redisEnvAddr)
 	if addr == "" {
-		t.Skipf("%s not set; skipping Redis integration test", redisEnvAddr)
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
 	}
 
 	password := os.Getenv(redisEnvPassword)
@@ -184,8 +193,155 @@ func TestRedisDurableBackend_FailMovesToDLQ(t *testing.T) {
 	taskID := uuid.New()
 	task := worker.DurableTask{
 		ID:         taskID,
-		Handler:    "test_handler",
-		Payload:    []byte("payload"),
+		Handler:    redisHandler,
+		Payload:    []byte(redisPayload),
+		Priority:   1,
+		Retries:    1,
+		RetryDelay: redisRetryDelay,
+	}
+
+	err := backend.Enqueue(ctx, task)
+	if err != nil {
+		t.Fatalf(redisErrEnqueue, err)
+	}
+
+	leases, err := backend.Dequeue(ctx, 1, redisLeaseShort)
+	if err != nil {
+		t.Fatalf(redisErrDequeue, err)
+	}
+
+	if len(leases) != 1 {
+		t.Fatalf(redisErrUnexpectedLeaseCount, len(leases))
+	}
+
+	time.Sleep(redisLeaseShort + redisLeaseGrace)
+
+	leases, err = backend.Dequeue(ctx, 1, redisLeaseShort)
+	if err != nil {
+		t.Fatalf("dequeue after lease expiry: %v", err)
+	}
+
+	if len(leases) != 1 {
+		t.Fatalf("expected 1 lease after expiry, got %d", len(leases))
+	}
+
+	if leases[0].Task.ID != taskID {
+		t.Fatalf("expected task id %s, got %s", taskID, leases[0].Task.ID)
+	}
+
+	if leases[0].Attempts < 2 {
+		t.Fatalf("expected attempts >= 2 after expiry, got %d", leases[0].Attempts)
+	}
+}
+
+//nolint:revive,funlen
+func TestRedisDurableBackend_ExtendPreventsRequeue(t *testing.T) {
+	t.Parallel()
+
+	addr := os.Getenv(redisEnvAddr)
+	if addr == "" {
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
+	}
+
+	password := os.Getenv(redisEnvPassword)
+	prefix := redisTestPrefix(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTestTimeout)
+	defer cancel()
+
+	client := newRedisClient(t, addr, password)
+	defer client.Close()
+
+	cleanupRedisPrefix(ctx, t, client, prefix)
+
+	backend := newRedisBackend(t, client, prefix)
+
+	taskID := uuid.New()
+	task := worker.DurableTask{
+		ID:         taskID,
+		Handler:    redisHandler,
+		Payload:    []byte(redisPayload),
+		Priority:   1,
+		Retries:    1,
+		RetryDelay: redisRetryDelay,
+	}
+
+	err := backend.Enqueue(ctx, task)
+	if err != nil {
+		t.Fatalf(redisErrEnqueue, err)
+	}
+
+	leases, err := backend.Dequeue(ctx, 1, redisLeaseShort)
+	if err != nil {
+		t.Fatalf(redisErrDequeue, err)
+	}
+
+	if len(leases) != 1 {
+		t.Fatalf(redisErrUnexpectedLeaseCount, len(leases))
+	}
+
+	err = backend.Extend(ctx, leases[0], redisLeaseExtend)
+	if err != nil {
+		t.Fatalf("extend: %v", err)
+	}
+
+	time.Sleep(redisLeaseShort + redisLeaseGrace)
+
+	leases, err = backend.Dequeue(ctx, 1, redisLeaseShort)
+	if err != nil {
+		t.Fatalf("dequeue after extend: %v", err)
+	}
+
+	if len(leases) != 0 {
+		t.Fatalf("expected no leases before extended expiry, got %d", len(leases))
+	}
+
+	time.Sleep(redisLeaseExtend + redisLeaseGrace)
+
+	leases, err = backend.Dequeue(ctx, 1, redisLeaseShort)
+	if err != nil {
+		t.Fatalf("dequeue after extended expiry: %v", err)
+	}
+
+	if len(leases) != 1 {
+		t.Fatalf("expected 1 lease after extended expiry, got %d", len(leases))
+	}
+
+	if leases[0].Task.ID != taskID {
+		t.Fatalf("expected task id %s, got %s", taskID, leases[0].Task.ID)
+	}
+
+	if leases[0].Attempts < 2 {
+		t.Fatalf("expected attempts >= 2 after extended expiry, got %d", leases[0].Attempts)
+	}
+}
+
+func TestRedisDurableBackend_FailMovesToDLQ(t *testing.T) {
+	t.Parallel()
+
+	addr := os.Getenv(redisEnvAddr)
+	if addr == "" {
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
+	}
+
+	password := os.Getenv(redisEnvPassword)
+	prefix := redisTestPrefix(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTestTimeout)
+	defer cancel()
+
+	client := newRedisClient(t, addr, password)
+	defer client.Close()
+
+	cleanupRedisPrefix(ctx, t, client, prefix)
+
+	backend := newRedisBackend(t, client, prefix)
+
+	taskID := uuid.New()
+	task := worker.DurableTask{
+		ID:         taskID,
+		Handler:    redisHandler,
+		Payload:    []byte(redisPayload),
 		Priority:   1,
 		Retries:    0,
 		RetryDelay: redisRetryDelay,
@@ -193,16 +349,16 @@ func TestRedisDurableBackend_FailMovesToDLQ(t *testing.T) {
 
 	err := backend.Enqueue(ctx, task)
 	if err != nil {
-		t.Fatalf("enqueue: %v", err)
+		t.Fatalf(redisErrEnqueue, err)
 	}
 
 	leases, err := backend.Dequeue(ctx, 1, redisLease)
 	if err != nil {
-		t.Fatalf("dequeue: %v", err)
+		t.Fatalf(redisErrDequeue, err)
 	}
 
 	if len(leases) != 1 {
-		t.Fatalf("expected 1 lease, got %d", len(leases))
+		t.Fatalf(redisErrUnexpectedLeaseCount, len(leases))
 	}
 
 	err = backend.Fail(ctx, leases[0], errTestBoom)
