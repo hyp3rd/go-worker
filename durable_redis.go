@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,9 +23,12 @@ const (
 	redisReadyKey          = "ready"
 	redisProcessingKey     = "processing"
 	redisDeadKey           = "dead"
+	redisQueuesKey         = "queues"
 	redisFieldHandler      = "handler"
 	redisFieldPayload      = "payload"
 	redisFieldPriority     = "priority"
+	redisFieldQueue        = "queue"
+	redisFieldWeight       = "weight"
 	redisFieldRetries      = "retries"
 	redisFieldRetryDelayMs = "retry_delay_ms"
 	redisFieldAttempts     = "attempts"
@@ -34,20 +41,24 @@ const (
 	redisKVSeparator       = ":"
 	redisDefaultBatchSize  = 50
 	redisLeaseDefault      = 30 * time.Second
-	redisLeasePayloadSize  = 8
+	redisLeasePayloadSize  = 10
 )
 
 // RedisDurableBackend implements a durable task backend using Redis.
 type RedisDurableBackend struct {
-	client    rueidis.Client
-	prefix    string
-	batchSize int
-	enqueue   *rueidis.Lua
-	dequeue   *rueidis.Lua
-	ack       *rueidis.Lua
-	nack      *rueidis.Lua
-	fail      *rueidis.Lua
-	extend    *rueidis.Lua
+	client       rueidis.Client
+	prefix       string
+	batchSize    int
+	queueMu      sync.RWMutex
+	defaultQueue string
+	queueWeights map[string]int
+	queueCursor  atomic.Uint32
+	enqueue      *rueidis.Lua
+	dequeue      *rueidis.Lua
+	ack          *rueidis.Lua
+	nack         *rueidis.Lua
+	fail         *rueidis.Lua
+	extend       *rueidis.Lua
 }
 
 // RedisDurableOption defines an option for configuring RedisDurableBackend.
@@ -71,6 +82,20 @@ func WithRedisDurableBatchSize(size int) RedisDurableOption {
 	}
 }
 
+// WithRedisDurableDefaultQueue sets the default queue name for durable tasks.
+func WithRedisDurableDefaultQueue(name string) RedisDurableOption {
+	return func(b *RedisDurableBackend) {
+		b.defaultQueue = normalizeQueueName(name)
+	}
+}
+
+// WithRedisDurableQueueWeights sets queue weights for durable task scheduling.
+func WithRedisDurableQueueWeights(weights map[string]int) RedisDurableOption {
+	return func(b *RedisDurableBackend) {
+		b.queueWeights = copyQueueWeights(weights)
+	}
+}
+
 // NewRedisDurableBackend creates a new RedisDurableBackend with the given Redis client and options.
 func NewRedisDurableBackend(client rueidis.Client, opts ...RedisDurableOption) (*RedisDurableBackend, error) {
 	if client == nil {
@@ -78,15 +103,17 @@ func NewRedisDurableBackend(client rueidis.Client, opts ...RedisDurableOption) (
 	}
 
 	backend := &RedisDurableBackend{
-		client:    client,
-		prefix:    redisDefaultPrefix,
-		batchSize: redisDefaultBatchSize,
-		enqueue:   rueidis.NewLuaScript(redisEnqueueScript),
-		dequeue:   rueidis.NewLuaScript(redisDequeueScript()),
-		ack:       rueidis.NewLuaScript(redisAckScript),
-		nack:      rueidis.NewLuaScript(redisNackScript),
-		fail:      rueidis.NewLuaScript(redisFailScript),
-		extend:    rueidis.NewLuaScript(redisExtendScript),
+		client:       client,
+		prefix:       redisDefaultPrefix,
+		batchSize:    redisDefaultBatchSize,
+		defaultQueue: DefaultQueueName,
+		queueWeights: map[string]int{},
+		enqueue:      rueidis.NewLuaScript(redisEnqueueScript),
+		dequeue:      rueidis.NewLuaScript(redisDequeueScript()),
+		ack:          rueidis.NewLuaScript(redisAckScript),
+		nack:         rueidis.NewLuaScript(redisNackScript),
+		fail:         rueidis.NewLuaScript(redisFailScript),
+		extend:       rueidis.NewLuaScript(redisExtendScript),
 	}
 
 	for _, opt := range opts {
@@ -96,6 +123,15 @@ func NewRedisDurableBackend(client rueidis.Client, opts ...RedisDurableOption) (
 	}
 
 	return backend, nil
+}
+
+// ConfigureQueues applies default queue and weights for durable scheduling.
+func (b *RedisDurableBackend) ConfigureQueues(defaultQueue string, weights map[string]int) {
+	b.queueMu.Lock()
+	defer b.queueMu.Unlock()
+
+	b.defaultQueue = normalizeQueueName(defaultQueue)
+	b.queueWeights = copyQueueWeights(weights)
 }
 
 // Enqueue adds a new durable task to the Redis backend.
@@ -112,6 +148,14 @@ func (b *RedisDurableBackend) Enqueue(ctx context.Context, task DurableTask) err
 		return ewrap.New("durable task handler is required")
 	}
 
+	if task.Queue == "" {
+		task.Queue = b.defaultQueueName()
+	}
+
+	if task.Weight <= 0 {
+		task.Weight = DefaultTaskWeight
+	}
+
 	readyAt := time.Now().UnixMilli()
 
 	meta, err := encodeMetadata(task.Metadata)
@@ -124,7 +168,7 @@ func (b *RedisDurableBackend) Enqueue(ctx context.Context, task DurableTask) err
 	resp := b.enqueue.Exec(
 		ctx,
 		b.client,
-		[]string{b.readyKey(), taskKey},
+		[]string{b.readyKey(task.Queue), taskKey, b.queuesKey()},
 		[]string{
 			strconv.FormatInt(readyAt, 10),
 			task.Handler,
@@ -134,6 +178,8 @@ func (b *RedisDurableBackend) Enqueue(ctx context.Context, task DurableTask) err
 			strconv.FormatInt(task.RetryDelay.Milliseconds(), 10),
 			meta,
 			task.ID.String(),
+			task.Queue,
+			strconv.Itoa(task.Weight),
 		},
 	)
 
@@ -160,29 +206,31 @@ func (b *RedisDurableBackend) Dequeue(ctx context.Context, limit int, lease time
 		return nil, ErrInvalidTaskContext
 	}
 
+	limit = normalizeDequeueLimit(limit)
+	lease = normalizeDequeueLease(lease)
+
+	queues, weights, err := b.dequeueQueues(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.dequeueFromQueues(ctx, queues, weights, limit, lease)
+}
+
+func normalizeDequeueLimit(limit int) int {
 	if limit <= 0 {
-		limit = 1
+		return 1
 	}
 
+	return limit
+}
+
+func normalizeDequeueLease(lease time.Duration) time.Duration {
 	if lease <= 0 {
-		lease = redisLeaseDefault
+		return redisLeaseDefault
 	}
 
-	results := make([]DurableTaskLease, 0, limit)
-	for range limit {
-		leaseItem, ok, err := b.dequeueOne(ctx, lease)
-		if err != nil {
-			return nil, err
-		}
-
-		if !ok {
-			break
-		}
-
-		results = append(results, leaseItem)
-	}
-
-	return results, nil
+	return lease
 }
 
 // Ack acknowledges the successful processing of a durable task.
@@ -194,7 +242,12 @@ func (b *RedisDurableBackend) Ack(ctx context.Context, lease DurableTaskLease) e
 	taskID := lease.Task.ID.String()
 	taskKey := b.taskKey(lease.Task.ID)
 
-	resp := b.ack.Exec(ctx, b.client, []string{b.processingKey(), taskKey}, []string{taskID})
+	queue := lease.Task.Queue
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
+	resp := b.ack.Exec(ctx, b.client, []string{b.processingKey(queue), taskKey}, []string{taskID})
 
 	err := resp.Error()
 	if err != nil {
@@ -212,12 +265,18 @@ func (b *RedisDurableBackend) Nack(ctx context.Context, lease DurableTaskLease, 
 
 	taskID := lease.Task.ID.String()
 	taskKey := b.taskKey(lease.Task.ID)
+
+	queue := lease.Task.Queue
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
 	readyAt := time.Now().Add(delay).UnixMilli()
 
 	resp := b.nack.Exec(
 		ctx,
 		b.client,
-		[]string{b.readyKey(), b.processingKey(), taskKey},
+		[]string{b.readyKey(queue), b.processingKey(queue), taskKey},
 		[]string{taskID, strconv.FormatInt(readyAt, 10)},
 	)
 
@@ -238,6 +297,11 @@ func (b *RedisDurableBackend) Fail(ctx context.Context, lease DurableTaskLease, 
 	taskID := lease.Task.ID.String()
 	taskKey := b.taskKey(lease.Task.ID)
 
+	queue := lease.Task.Queue
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
 	errMsg := ""
 	if err != nil {
 		errMsg = err.Error()
@@ -246,7 +310,7 @@ func (b *RedisDurableBackend) Fail(ctx context.Context, lease DurableTaskLease, 
 	resp := b.fail.Exec(
 		ctx,
 		b.client,
-		[]string{b.readyKey(), b.processingKey(), b.deadKey(), taskKey},
+		[]string{b.readyKey(queue), b.processingKey(queue), b.deadKey(), taskKey},
 		[]string{taskID, strconv.FormatInt(time.Now().UnixMilli(), 10), errMsg},
 	)
 
@@ -274,13 +338,19 @@ func (b *RedisDurableBackend) Extend(ctx context.Context, lease DurableTaskLease
 
 	taskID := lease.Task.ID.String()
 	taskKey := b.taskKey(lease.Task.ID)
+
+	queue := lease.Task.Queue
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
 	now := time.Now().UnixMilli()
 	leaseAt := now + leaseDuration.Milliseconds()
 
 	resp := b.extend.Exec(
 		ctx,
 		b.client,
-		[]string{b.processingKey(), taskKey},
+		[]string{b.processingKey(queue), taskKey},
 		[]string{
 			taskID,
 			strconv.FormatInt(leaseAt, 10),
@@ -305,8 +375,97 @@ func (b *RedisDurableBackend) Extend(ctx context.Context, lease DurableTaskLease
 	return nil
 }
 
+func (b *RedisDurableBackend) dequeueQueues(ctx context.Context) ([]string, map[string]int, error) {
+	defaultQueue, weights := b.queueWeightsSnapshot()
+
+	queues, err := b.queueList(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	queues = ensureQueueList(queues, defaultQueue)
+	sort.Strings(queues)
+
+	return queues, weights, nil
+}
+
+func (b *RedisDurableBackend) dequeueFromQueues(
+	ctx context.Context,
+	queues []string,
+	weights map[string]int,
+	limit int,
+	lease time.Duration,
+) ([]DurableTaskLease, error) {
+	if len(queues) == 0 {
+		return nil, nil
+	}
+
+	start := b.queueStartIndex(len(queues))
+
+	results := make([]DurableTaskLease, 0, limit)
+	for i := 0; i < len(queues) && len(results) < limit; i++ {
+		queue := queues[(start+i)%len(queues)]
+		weight := b.queueWeight(weights, queue)
+
+		for j := 0; j < weight && len(results) < limit; j++ {
+			leaseItem, ok, err := b.dequeueOne(ctx, queue, lease)
+			if err != nil {
+				return nil, err
+			}
+
+			if !ok {
+				break
+			}
+
+			applyLeaseDefaults(&leaseItem, queue)
+			results = append(results, leaseItem)
+		}
+	}
+
+	return results, nil
+}
+
+func (b *RedisDurableBackend) queueStartIndex(queueCount int) int {
+	if queueCount == 0 {
+		return 0
+	}
+
+	return int(b.queueCursor.Add(1)) % queueCount
+}
+
+func (*RedisDurableBackend) queueWeight(weights map[string]int, queue string) int {
+	weight := normalizeQueueWeight(weights[queue])
+	if weight <= 0 {
+		return DefaultQueueWeight
+	}
+
+	return weight
+}
+
+func ensureQueueList(queues []string, defaultQueue string) []string {
+	if len(queues) == 0 {
+		return []string{defaultQueue}
+	}
+
+	if !containsQueue(queues, defaultQueue) {
+		queues = append(queues, defaultQueue)
+	}
+
+	return queues
+}
+
+func applyLeaseDefaults(lease *DurableTaskLease, queue string) {
+	if lease.Task.Queue == "" {
+		lease.Task.Queue = queue
+	}
+
+	if lease.Task.Weight <= 0 {
+		lease.Task.Weight = DefaultTaskWeight
+	}
+}
+
 // dequeueOne retrieves a single durable task lease from Redis.
-func (b *RedisDurableBackend) dequeueOne(ctx context.Context, lease time.Duration) (DurableTaskLease, bool, error) {
+func (b *RedisDurableBackend) dequeueOne(ctx context.Context, queue string, lease time.Duration) (DurableTaskLease, bool, error) {
 	now := time.Now().UnixMilli()
 
 	leaseMs := lease.Milliseconds()
@@ -317,7 +476,7 @@ func (b *RedisDurableBackend) dequeueOne(ctx context.Context, lease time.Duratio
 	resp := b.dequeue.Exec(
 		ctx,
 		b.client,
-		[]string{b.readyKey(), b.processingKey(), b.taskPrefixKey()},
+		[]string{b.readyKey(queue), b.processingKey(queue), b.taskPrefixKey()},
 		[]string{
 			strconv.FormatInt(now, 10),
 			strconv.FormatInt(leaseMs, 10),
@@ -348,18 +507,27 @@ func (b *RedisDurableBackend) dequeueOne(ctx context.Context, lease time.Duratio
 }
 
 // readyKey returns the Redis key for the ready sorted set.
-func (b *RedisDurableBackend) readyKey() string {
-	return b.keyPrefix() + redisKVSeparator + redisReadyKey
+func (b *RedisDurableBackend) readyKey(queue string) string {
+	queue = normalizeQueueName(queue)
+
+	return b.keyPrefix() + redisKVSeparator + redisReadyKey + redisKVSeparator + queue
 }
 
 // processingKey returns the Redis key for the processing sorted set.
-func (b *RedisDurableBackend) processingKey() string {
-	return b.keyPrefix() + redisKVSeparator + redisProcessingKey
+func (b *RedisDurableBackend) processingKey(queue string) string {
+	queue = normalizeQueueName(queue)
+
+	return b.keyPrefix() + redisKVSeparator + redisProcessingKey + redisKVSeparator + queue
 }
 
 // deadKey returns the Redis key for the dead letter list.
 func (b *RedisDurableBackend) deadKey() string {
 	return b.keyPrefix() + redisKVSeparator + redisDeadKey
+}
+
+// queuesKey returns the Redis key for known queues.
+func (b *RedisDurableBackend) queuesKey() string {
+	return b.keyPrefix() + redisKVSeparator + redisQueuesKey
 }
 
 // taskPrefixKey returns the prefix for durable task keys.
@@ -384,53 +552,121 @@ func (b *RedisDurableBackend) keyPrefix() string {
 	return "{" + b.prefix + "}"
 }
 
+func (b *RedisDurableBackend) defaultQueueName() string {
+	b.queueMu.RLock()
+	defer b.queueMu.RUnlock()
+
+	return normalizeQueueName(b.defaultQueue)
+}
+
+func (b *RedisDurableBackend) queueWeightsSnapshot() (string, map[string]int) {
+	b.queueMu.RLock()
+	defaultQueue := normalizeQueueName(b.defaultQueue)
+	weights := copyQueueWeights(b.queueWeights)
+	b.queueMu.RUnlock()
+
+	if len(weights) == 0 {
+		weights = map[string]int{defaultQueue: DefaultQueueWeight}
+	}
+
+	if _, ok := weights[defaultQueue]; !ok {
+		weights[defaultQueue] = DefaultQueueWeight
+	}
+
+	return defaultQueue, weights
+}
+
+func (b *RedisDurableBackend) queueList(ctx context.Context) ([]string, error) {
+	if ctx == nil {
+		return nil, ErrInvalidTaskContext
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Smembers().Key(b.queuesKey()).Build())
+
+	values, err := resp.AsStrSlice()
+	if err != nil {
+		return nil, ewrap.Wrap(err, "read durable queue list")
+	}
+
+	return values, nil
+}
+
+func containsQueue(queues []string, name string) bool {
+	return slices.Contains(queues, name)
+}
+
+const (
+	leaseIdxID = iota
+	leaseIdxHandler
+	leaseIdxPayload
+	leaseIdxPriority
+	leaseIdxRetries
+	leaseIdxRetryDelayMs
+	leaseIdxAttempts
+	leaseIdxMetadata
+	leaseIdxQueue
+	leaseIdxWeight
+)
+
 // parseLease parses a durable task lease from Redis command results.
 func parseLease(values []string) (DurableTaskLease, error) {
 	if len(values) < redisLeasePayloadSize {
 		return DurableTaskLease{}, ewrap.New("invalid lease payload")
 	}
 
-	id, err := uuid.Parse(values[0])
+	id, err := uuid.Parse(values[leaseIdxID])
 	if err != nil {
 		return DurableTaskLease{}, ewrap.Wrap(err, "parse durable task id")
 	}
 
-	priority, err := strconv.Atoi(values[3])
+	priority, err := strconv.Atoi(values[leaseIdxPriority])
 	if err != nil {
 		return DurableTaskLease{}, ewrap.Wrap(err, "parse durable priority")
 	}
 
-	retries, err := strconv.Atoi(values[4])
+	retries, err := strconv.Atoi(values[leaseIdxRetries])
 	if err != nil {
 		return DurableTaskLease{}, ewrap.Wrap(err, "parse durable retries")
 	}
 	//nolint:revive
-	retryDelayMs, err := strconv.ParseInt(values[5], 10, 64)
+	retryDelayMs, err := strconv.ParseInt(values[leaseIdxRetryDelayMs], 10, 64)
 	if err != nil {
 		return DurableTaskLease{}, ewrap.Wrap(err, "parse durable retry delay")
 	}
 
-	attempts, err := strconv.Atoi(values[6])
+	attempts, err := strconv.Atoi(values[leaseIdxAttempts])
 	if err != nil {
 		return DurableTaskLease{}, ewrap.Wrap(err, "parse durable attempts")
 	}
 
-	meta, err := decodeMetadata(values[7])
+	meta, err := decodeMetadata(values[leaseIdxMetadata])
 	if err != nil {
 		return DurableTaskLease{}, err
+	}
+
+	queue := values[leaseIdxQueue]
+
+	weight := 0
+	if values[leaseIdxWeight] != "" {
+		weight, err = strconv.Atoi(values[leaseIdxWeight])
+		if err != nil {
+			return DurableTaskLease{}, ewrap.Wrap(err, "parse durable weight")
+		}
 	}
 
 	return DurableTaskLease{
 		Task: DurableTask{
 			ID:         id,
-			Handler:    values[1],
-			Payload:    []byte(values[2]),
+			Handler:    values[leaseIdxHandler],
+			Payload:    []byte(values[leaseIdxPayload]),
 			Priority:   priority,
+			Queue:      queue,
+			Weight:     weight,
 			Retries:    retries,
 			RetryDelay: time.Duration(retryDelayMs) * time.Millisecond,
 			Metadata:   meta,
 		},
-		LeaseID:    values[0],
+		LeaseID:    values[leaseIdxID],
 		Attempts:   attempts,
 		MaxRetries: retries,
 	}, nil
@@ -469,6 +705,7 @@ func decodeMetadata(raw string) (map[string]string, error) {
 const redisEnqueueScript = `
 local ready = KEYS[1]
 local taskKey = KEYS[2]
+local queues = KEYS[3]
 local now = tonumber(ARGV[1])
 local handler = ARGV[2]
 local payload = ARGV[3]
@@ -477,6 +714,8 @@ local retries = ARGV[5]
 local retryDelay = ARGV[6]
 local metadata = ARGV[7]
 local id = ARGV[8]
+local queue = ARGV[9]
+local weight = ARGV[10]
 
 if redis.call("EXISTS", taskKey) == 1 then
   return 0
@@ -486,6 +725,8 @@ redis.call("HSET", taskKey,
   "` + redisFieldHandler + `", handler,
   "` + redisFieldPayload + `", payload,
   "` + redisFieldPriority + `", priority,
+  "` + redisFieldQueue + `", queue,
+  "` + redisFieldWeight + `", weight,
   "` + redisFieldRetries + `", retries,
   "` + redisFieldRetryDelayMs + `", retryDelay,
   "` + redisFieldAttempts + `", 0,
@@ -494,6 +735,7 @@ redis.call("HSET", taskKey,
   "` + redisFieldMetadata + `", metadata
 )
 
+redis.call("SADD", queues, queue)
 redis.call("ZADD", ready, now, id)
 return 1
 `
@@ -525,13 +767,20 @@ end
 
 local bestId = nil
 local bestPriority = nil
+local bestWeight = nil
 for _, id in ipairs(due) do
   local taskKey = taskPrefix .. id
   local prio = redis.call("HGET", taskKey, "%s")
   if prio ~= false then
     prio = tonumber(prio)
-    if bestPriority == nil or prio < bestPriority then
+    local weight = redis.call("HGET", taskKey, "%s")
+    if weight == false then
+      weight = "1"
+    end
+    weight = tonumber(weight)
+    if bestPriority == nil or prio < bestPriority or (prio == bestPriority and weight > bestWeight) then
       bestPriority = prio
+      bestWeight = weight
       bestId = id
     end
   end
@@ -556,8 +805,12 @@ local payload = redis.call("HGET", taskKey, "%s")
 local retries = redis.call("HGET", taskKey, "%s")
 local retryDelay = redis.call("HGET", taskKey, "%s")
 local metadata = redis.call("HGET", taskKey, "%s")
+local queue = redis.call("HGET", taskKey, "%s")
+if queue == false then
+  queue = ""
+end
 
-return {bestId, handler, payload, tostring(bestPriority), retries, retryDelay, tostring(attempts), metadata}
+return {bestId, handler, payload, tostring(bestPriority), retries, retryDelay, tostring(attempts), metadata, queue, tostring(bestWeight)}
 `
 
 func redisDequeueScript() string {
@@ -565,6 +818,7 @@ func redisDequeueScript() string {
 		redisDequeueScriptTemplate,
 		redisFieldReadyAtMs,
 		redisFieldPriority,
+		redisFieldWeight,
 		redisFieldAttempts,
 		redisFieldLeaseAtMs,
 		redisFieldUpdatedAtMs,
@@ -573,6 +827,7 @@ func redisDequeueScript() string {
 		redisFieldRetries,
 		redisFieldRetryDelayMs,
 		redisFieldMetadata,
+		redisFieldQueue,
 	)
 }
 

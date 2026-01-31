@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -312,6 +313,19 @@ func (s *GRPCServer) registerDurableTaskFromRequest(ctx context.Context, taskReq
 
 	task := s.newDurableTaskFromRequest(taskReq, payload.payload)
 
+	queue, weight, err := queueConfigFromMetadata(taskReq.GetMetadata())
+	if err != nil {
+		return "", s.completeIdempotencyError(idempotencyKey, record, err)
+	}
+
+	if queue != "" {
+		task.Queue = queue
+	}
+
+	if weight > 0 {
+		task.Weight = weight
+	}
+
 	return s.registerDurableTaskWithIdempotency(ctx, task, idempotencyKey, record)
 }
 
@@ -452,6 +466,19 @@ func (s *GRPCServer) newTaskFromRequest(
 		task.RetryDelay = d.AsDuration()
 	}
 
+	queue, weight, err := queueConfigFromMetadata(taskReq.GetMetadata())
+	if err != nil {
+		return nil, s.completeIdempotencyError(key, record, err)
+	}
+
+	if queue != "" {
+		task.Queue = queue
+	}
+
+	if weight > 0 {
+		task.Weight = weight
+	}
+
 	return task, nil
 }
 
@@ -518,6 +545,26 @@ func (s *GRPCServer) completeIdempotencyError(key string, record *idempotencyRec
 	}
 
 	return err
+}
+
+func queueConfigFromMetadata(meta map[string]string) (string, int, error) {
+	if len(meta) == 0 {
+		return "", 0, nil
+	}
+
+	queue := strings.TrimSpace(meta[MetadataQueueKey])
+
+	rawWeight := strings.TrimSpace(meta[MetadataWeightKey])
+	if rawWeight == "" {
+		return queue, 0, nil
+	}
+
+	weight, err := strconv.Atoi(rawWeight)
+	if err != nil || weight <= 0 {
+		return "", 0, status.Errorf(codes.InvalidArgument, "invalid queue weight %q", rawWeight)
+	}
+
+	return queue, weight, nil
 }
 
 func (s *GRPCServer) completeIdempotencySuccess(key string, record *idempotencyRecord, id string) {

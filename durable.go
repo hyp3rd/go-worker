@@ -88,6 +88,14 @@ func (tm *TaskManager) normalizeDurableConfig(task *DurableTask) {
 	if task.Priority == 0 {
 		task.Priority = 1
 	}
+
+	if task.Queue == "" {
+		task.Queue = tm.defaultQueue
+	}
+
+	if task.Weight <= 0 {
+		task.Weight = DefaultTaskWeight
+	}
 }
 
 func (tm *TaskManager) durableHandlerSpec(handler string) (DurableHandlerSpec, error) {
@@ -209,6 +217,17 @@ func (tm *TaskManager) taskFromLease(ctx context.Context, lease DurableTaskLease
 	tmTask.Priority = task.Priority
 	tmTask.Retries = task.Retries
 	tmTask.RetryDelay = task.RetryDelay
+
+	tmTask.Queue = task.Queue
+	if tmTask.Queue == "" {
+		tmTask.Queue = tm.defaultQueue
+	}
+
+	tmTask.Weight = task.Weight
+	if tmTask.Weight <= 0 {
+		tmTask.Weight = DefaultTaskWeight
+	}
+
 	tmTask.durableLease = &lease
 
 	tm.registryMu.Lock()

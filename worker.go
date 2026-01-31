@@ -18,6 +18,12 @@ const (
 	DefaultMaxTasks = 10
 	// DefaultTasksPerSecond is the default rate limit of tasks that can be executed per second.
 	DefaultTasksPerSecond = 5
+	// DefaultQueueName is the default queue name when none is provided.
+	DefaultQueueName = "default"
+	// DefaultQueueWeight is the default scheduling weight for a queue.
+	DefaultQueueWeight = 1
+	// DefaultTaskWeight is the default scheduling weight for a task.
+	DefaultTaskWeight = 1
 	// DefaultTimeout is the default timeout for tasks.
 	DefaultTimeout = 5 * time.Minute
 	// DefaultRetryDelay is the default delay between retries.
@@ -37,7 +43,7 @@ type TaskManager struct {
 
 	queueMu   sync.Mutex
 	queueCond *sync.Cond
-	scheduler *priorityQueue[*Task]
+	scheduler *queueScheduler
 
 	jobs chan *Task
 
@@ -49,11 +55,13 @@ type TaskManager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	maxWorkers int
-	maxTasks   int
-	timeout    time.Duration
-	retryDelay time.Duration
-	maxRetries int
+	maxWorkers   int
+	maxTasks     int
+	timeout      time.Duration
+	retryDelay   time.Duration
+	maxRetries   int
+	defaultQueue string
+	queueWeights map[string]int
 
 	workerMutex sync.Mutex
 	workerQuit  []chan struct{}
@@ -169,53 +177,31 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	maxWorkers := cfg.maxWorkers
-	if maxWorkers <= 0 {
-		maxWorkers = runtime.NumCPU()
-	}
+	cfg = normalizeTaskManagerConfig(cfg)
+	defaultQueue := normalizeQueueName(cfg.defaultQueue)
+	queueWeights := copyQueueWeights(cfg.queueWeights)
 
-	maxTasks := cfg.maxTasks
-	if maxTasks <= 0 {
-		maxTasks = DefaultMaxTasks
-	}
-
-	timeout := cfg.timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-
-	retryDelay := cfg.retryDelay
-	if retryDelay <= 0 {
-		retryDelay = DefaultRetryDelay
-	}
-
-	maxRetries := cfg.maxRetries
-	if maxRetries < 0 {
-		maxRetries = DefaultMaxRetries
-	}
-
-	burst := limiterBurst(maxWorkers, maxTasks)
+	burst := limiterBurst(cfg.maxWorkers, cfg.maxTasks)
 	limiter := newLimiter(cfg.tasksPerSecond, burst)
 
 	durableEnabled := cfg.durableBackend != nil
-	if cfg.durableCodec == nil {
-		cfg.durableCodec = ProtoDurableCodec{}
-	}
 
 	tm := &TaskManager{
 		registry:            make(map[uuid.UUID]*Task),
-		scheduler:           newTaskHeap(),
-		jobs:                make(chan *Task, maxWorkers),
+		scheduler:           newQueueScheduler(),
+		jobs:                make(chan *Task, cfg.maxWorkers),
 		limiter:             limiter,
 		ctx:                 ctx,
 		cancel:              cancel,
-		maxWorkers:          maxWorkers,
-		maxTasks:            maxTasks,
-		timeout:             timeout,
-		retryDelay:          retryDelay,
-		maxRetries:          maxRetries,
-		workerQuit:          make([]chan struct{}, 0, maxWorkers),
-		results:             newResultBroadcaster(maxTasks),
+		maxWorkers:          cfg.maxWorkers,
+		maxTasks:            cfg.maxTasks,
+		timeout:             cfg.timeout,
+		retryDelay:          cfg.retryDelay,
+		maxRetries:          cfg.maxRetries,
+		defaultQueue:        defaultQueue,
+		queueWeights:        queueWeights,
+		workerQuit:          make([]chan struct{}, 0, cfg.maxWorkers),
+		results:             newResultBroadcaster(cfg.maxTasks),
 		durableBackend:      cfg.durableBackend,
 		durableHandlers:     cfg.durableHandlers,
 		durableCodec:        cfg.durableCodec,
@@ -229,10 +215,42 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 	tm.queueCond = sync.NewCond(&tm.queueMu)
 	tm.accepting.Store(true)
 
+	if configurable, ok := tm.durableBackend.(QueueConfigurableBackend); ok {
+		configurable.ConfigureQueues(defaultQueue, queueWeights)
+	}
+
 	// start the workers
 	tm.StartWorkers(ctx)
 
 	return tm
+}
+
+func normalizeTaskManagerConfig(cfg taskManagerConfig) taskManagerConfig {
+	if cfg.maxWorkers <= 0 {
+		cfg.maxWorkers = runtime.NumCPU()
+	}
+
+	if cfg.maxTasks <= 0 {
+		cfg.maxTasks = DefaultMaxTasks
+	}
+
+	if cfg.timeout <= 0 {
+		cfg.timeout = DefaultTimeout
+	}
+
+	if cfg.retryDelay <= 0 {
+		cfg.retryDelay = DefaultRetryDelay
+	}
+
+	if cfg.maxRetries < 0 {
+		cfg.maxRetries = DefaultMaxRetries
+	}
+
+	if cfg.durableCodec == nil {
+		cfg.durableCodec = ProtoDurableCodec{}
+	}
+
+	return cfg
 }
 
 // IsEmpty checks if the task scheduler queue is empty.
@@ -424,7 +442,7 @@ func (tm *TaskManager) CancelTask(id uuid.UUID) error {
 		tm.queueMu.Lock()
 
 		if task.index >= 0 {
-			tm.scheduler.Remove(task.index)
+			tm.scheduler.Remove(task)
 		}
 
 		tm.queueMu.Unlock()
@@ -551,6 +569,21 @@ func (tm *TaskManager) queueDepth() int {
 	return tm.scheduler.Len()
 }
 
+func (tm *TaskManager) queueWeight(name string) int {
+	if tm == nil {
+		return DefaultQueueWeight
+	}
+
+	name = normalizeQueueName(name)
+
+	weight, ok := tm.queueWeights[name]
+	if !ok {
+		return DefaultQueueWeight
+	}
+
+	return normalizeQueueWeight(weight)
+}
+
 func (tm *TaskManager) waitForPermit(ctx context.Context) error {
 	if ctx == nil {
 		return ErrInvalidTaskContext
@@ -580,9 +613,9 @@ func (tm *TaskManager) removeFromQueue(task *Task) bool {
 		return false
 	}
 
-	tm.scheduler.Remove(task.index)
+	_, ok := tm.scheduler.Remove(task)
 
-	return true
+	return ok
 }
 
 func (tm *TaskManager) restoreQueued(task *Task, removed bool) {
@@ -646,6 +679,7 @@ func (tm *TaskManager) validateRegisterArgs(ctx context.Context, task *Task) err
 
 func (tm *TaskManager) prepareTaskForRegister(ctx context.Context, task *Task) error {
 	task.initRetryState(tm.retryDelay, tm.maxRetries)
+	tm.applyQueueDefaults(task)
 
 	taskCtx, cancel := mergeContext(ctx, task.Ctx)
 	task.Ctx = taskCtx
@@ -670,6 +704,20 @@ func (tm *TaskManager) prepareTaskForRegister(ctx context.Context, task *Task) e
 	}
 
 	return nil
+}
+
+func (tm *TaskManager) applyQueueDefaults(task *Task) {
+	if task == nil {
+		return
+	}
+
+	if task.Queue == "" {
+		task.Queue = tm.defaultQueue
+	}
+
+	if task.Weight <= 0 {
+		task.Weight = DefaultTaskWeight
+	}
 }
 
 func (tm *TaskManager) storeTask(task *Task) error {
@@ -706,7 +754,7 @@ func (tm *TaskManager) enqueue(task *Task) error {
 		return ewrap.Newf("queue is full (max %d)", tm.maxTasks)
 	}
 
-	tm.scheduler.Push(task)
+	tm.scheduler.Push(task, tm.queueWeight(task.Queue))
 	tm.queueCond.Signal()
 
 	return nil
