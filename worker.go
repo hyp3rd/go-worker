@@ -32,6 +32,7 @@ const (
 	DefaultMaxRetries = 3
 	// ErrMsgContextDone is the error message used when the context is done.
 	ErrMsgContextDone = "context done"
+	errMsgTaskNil     = "task is nil"
 )
 
 // TaskManager is a struct that manages a pool of goroutines that can execute tasks.
@@ -41,9 +42,12 @@ type TaskManager struct {
 	registryMu sync.RWMutex
 	registry   map[uuid.UUID]*Task
 
-	queueMu   sync.Mutex
-	queueCond *sync.Cond
-	scheduler *queueScheduler
+	queueMu       sync.Mutex
+	queueCond     *sync.Cond
+	scheduler     *queueScheduler
+	delayed       *priorityQueue[*Task]
+	delayTimer    *time.Timer
+	delayDeadline time.Time
 
 	jobs chan *Task
 
@@ -189,6 +193,7 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 	tm := &TaskManager{
 		registry:            make(map[uuid.UUID]*Task),
 		scheduler:           newQueueScheduler(),
+		delayed:             newScheduledTaskHeap(),
 		jobs:                make(chan *Task, cfg.maxWorkers),
 		limiter:             limiter,
 		ctx:                 ctx,
@@ -258,7 +263,7 @@ func (tm *TaskManager) IsEmpty() bool {
 	tm.queueMu.Lock()
 	defer tm.queueMu.Unlock()
 
-	return tm.scheduler.Len() == 0
+	return tm.scheduler.Len() == 0 && tm.delayed.Len() == 0
 }
 
 // StartWorkers starts the task manager's workers and scheduler (idempotent).
@@ -357,6 +362,30 @@ func (tm *TaskManager) RegisterTask(ctx context.Context, task *Task) error {
 	return nil
 }
 
+// RegisterTaskAt registers a new task to execute at or after the provided time.
+func (tm *TaskManager) RegisterTaskAt(ctx context.Context, task *Task, runAt time.Time) error {
+	if task == nil {
+		return ewrap.New(errMsgTaskNil)
+	}
+
+	task.RunAt = runAt
+
+	return tm.RegisterTask(ctx, task)
+}
+
+// RegisterTaskAfter registers a new task to execute after the provided delay.
+func (tm *TaskManager) RegisterTaskAfter(ctx context.Context, task *Task, delay time.Duration) error {
+	if task == nil {
+		return ewrap.New(errMsgTaskNil)
+	}
+
+	if delay <= 0 {
+		return tm.RegisterTask(ctx, task)
+	}
+
+	return tm.RegisterTaskAt(ctx, task, time.Now().Add(delay))
+}
+
 // RegisterTasks registers multiple tasks to the task manager at once.
 func (tm *TaskManager) RegisterTasks(ctx context.Context, tasks ...*Task) error {
 	var joined error
@@ -439,13 +468,7 @@ func (tm *TaskManager) CancelTask(id uuid.UUID) error {
 
 	// If queued or in backoff, remove and finish immediately.
 	if status == Queued || status == RateLimited {
-		tm.queueMu.Lock()
-
-		if task.index >= 0 {
-			tm.scheduler.Remove(task)
-		}
-
-		tm.queueMu.Unlock()
+		tm.removeFromQueue(task)
 
 		tm.finishTask(task, Cancelled, nil, ErrTaskCancelled)
 	}
@@ -566,7 +589,11 @@ func (tm *TaskManager) queueDepth() int {
 	tm.queueMu.Lock()
 	defer tm.queueMu.Unlock()
 
-	return tm.scheduler.Len()
+	return tm.queueSizeLocked()
+}
+
+func (tm *TaskManager) queueSizeLocked() int {
+	return tm.scheduler.Len() + tm.delayed.Len()
 }
 
 func (tm *TaskManager) queueWeight(name string) int {
@@ -609,13 +636,23 @@ func (tm *TaskManager) removeFromQueue(task *Task) bool {
 	tm.queueMu.Lock()
 	defer tm.queueMu.Unlock()
 
-	if task.index < 0 {
+	if task.index < 0 && task.delayIndex < 0 {
 		return false
 	}
 
-	_, ok := tm.scheduler.Remove(task)
+	if task.index >= 0 {
+		if _, ok := tm.scheduler.Remove(task); ok {
+			return true
+		}
+	}
 
-	return ok
+	if task.delayIndex >= 0 {
+		_, ok := tm.delayed.Remove(task.delayIndex)
+
+		return ok
+	}
+
+	return false
 }
 
 func (tm *TaskManager) restoreQueued(task *Task, removed bool) {
@@ -647,7 +684,7 @@ func (tm *TaskManager) spawnWorker(ctx context.Context) {
 
 func (tm *TaskManager) validateRegisterArgs(ctx context.Context, task *Task) error {
 	if task == nil {
-		return ewrap.New("task is nil")
+		return ewrap.New(errMsgTaskNil)
 	}
 
 	if tm.durableEnabled {
@@ -747,17 +784,103 @@ func (tm *TaskManager) cancelAllInternal() {
 }
 
 func (tm *TaskManager) enqueue(task *Task) error {
+	now := time.Now()
+
 	tm.queueMu.Lock()
 	defer tm.queueMu.Unlock()
 
-	if tm.scheduler.Len() >= tm.maxTasks {
+	if tm.queueSizeLocked() >= tm.maxTasks {
 		return ewrap.Newf("queue is full (max %d)", tm.maxTasks)
+	}
+
+	if task.RunAt.After(now) {
+		tm.delayed.Push(task)
+		tm.scheduleDelayWakeupLocked(now)
+		tm.queueCond.Signal()
+
+		return nil
+	}
+
+	if !task.RunAt.IsZero() {
+		task.RunAt = time.Time{}
 	}
 
 	tm.scheduler.Push(task, tm.queueWeight(task.Queue))
 	tm.queueCond.Signal()
 
 	return nil
+}
+
+func (tm *TaskManager) scheduleDelayWakeupLocked(now time.Time) {
+	if tm.delayed.Len() == 0 {
+		tm.stopDelayTimerLocked()
+
+		return
+	}
+
+	next, ok := tm.delayed.Peek()
+	if !ok {
+		tm.stopDelayTimerLocked()
+
+		return
+	}
+
+	runAt := next.RunAt
+	if runAt.IsZero() {
+		runAt = now
+	}
+
+	if !tm.delayDeadline.IsZero() && runAt.Equal(tm.delayDeadline) {
+		return
+	}
+
+	delay := max(runAt.Sub(now), 0)
+
+	if tm.delayTimer != nil {
+		tm.delayTimer.Stop()
+	}
+
+	tm.delayDeadline = runAt
+	tm.delayTimer = time.AfterFunc(delay, tm.signalQueue)
+}
+
+func (tm *TaskManager) stopDelayTimerLocked() {
+	if tm.delayTimer != nil {
+		tm.delayTimer.Stop()
+		tm.delayTimer = nil
+	}
+
+	tm.delayDeadline = time.Time{}
+}
+
+func (tm *TaskManager) signalQueue() {
+	tm.queueMu.Lock()
+	defer tm.queueMu.Unlock()
+
+	tm.queueCond.Signal()
+}
+
+func (tm *TaskManager) drainDueTasksLocked(now time.Time) {
+	for tm.delayed.Len() > 0 {
+		next, ok := tm.delayed.Peek()
+		if !ok {
+			return
+		}
+
+		if next.RunAt.After(now) {
+			return
+		}
+
+		task, ok := tm.delayed.Pop()
+		if !ok {
+			return
+		}
+
+		task.RunAt = time.Time{}
+		task.setQueued()
+
+		tm.scheduler.Push(task, tm.queueWeight(task.Queue))
+	}
 }
 
 func (tm *TaskManager) schedulerLoop(ctx context.Context) {
@@ -802,20 +925,26 @@ func (tm *TaskManager) nextTask(ctx context.Context) *Task {
 	tm.queueMu.Lock()
 	defer tm.queueMu.Unlock()
 
-	for tm.scheduler.Len() == 0 && ctx.Err() == nil {
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		now := time.Now()
+		tm.drainDueTasksLocked(now)
+
+		if tm.scheduler.Len() > 0 {
+			task, ok := tm.scheduler.Pop()
+			if !ok {
+				return nil
+			}
+
+			return task
+		}
+
+		tm.scheduleDelayWakeupLocked(now)
 		tm.queueCond.Wait()
 	}
-
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	task, ok := tm.scheduler.Pop()
-	if !ok {
-		return nil
-	}
-
-	return task
 }
 
 func (tm *TaskManager) workerLoop(ctx context.Context, stop chan struct{}) {
@@ -845,7 +974,7 @@ func (tm *TaskManager) workerLoop(ctx context.Context, stop chan struct{}) {
 
 func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Duration) (any, error) {
 	if task == nil {
-		return nil, ewrap.New("task is nil")
+		return nil, ewrap.New(errMsgTaskNil)
 	}
 
 	if task.durableLease != nil {

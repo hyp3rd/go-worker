@@ -173,7 +173,7 @@
 - **Durability**: Redis-backed at-least-once exists, but no transactional enqueue across services and no exactly-once guarantees.
 - **Operational tooling**: basic CLI tools exist (DLQ replay, queue inspect), but no admin UI or dashboards.
 - **Distributed coordination**: multi-node guidance + lease renewal exist; no global rate limiting, leader election, or quorum controls.
-- **Scheduling**: no cron‑like schedules or delayed tasks beyond retries.
+- **Scheduling**: delayed scheduling is now supported; cron‑like schedules are still missing.
 
 ### Nice‑to‑have improvements
 

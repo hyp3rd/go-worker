@@ -156,7 +156,12 @@ func (b *RedisDurableBackend) Enqueue(ctx context.Context, task DurableTask) err
 		task.Weight = DefaultTaskWeight
 	}
 
-	readyAt := time.Now().UnixMilli()
+	now := time.Now()
+
+	readyAt := now
+	if !task.RunAt.IsZero() && task.RunAt.After(now) {
+		readyAt = task.RunAt
+	}
 
 	meta, err := encodeMetadata(task.Metadata)
 	if err != nil {
@@ -170,7 +175,8 @@ func (b *RedisDurableBackend) Enqueue(ctx context.Context, task DurableTask) err
 		b.client,
 		[]string{b.readyKey(task.Queue), taskKey, b.queuesKey()},
 		[]string{
-			strconv.FormatInt(readyAt, 10),
+			strconv.FormatInt(now.UnixMilli(), 10),
+			strconv.FormatInt(readyAt.UnixMilli(), 10),
 			task.Handler,
 			rueidis.BinaryString(task.Payload),
 			strconv.Itoa(task.Priority),
@@ -707,15 +713,16 @@ local ready = KEYS[1]
 local taskKey = KEYS[2]
 local queues = KEYS[3]
 local now = tonumber(ARGV[1])
-local handler = ARGV[2]
-local payload = ARGV[3]
-local priority = ARGV[4]
-local retries = ARGV[5]
-local retryDelay = ARGV[6]
-local metadata = ARGV[7]
-local id = ARGV[8]
-local queue = ARGV[9]
-local weight = ARGV[10]
+local readyAt = tonumber(ARGV[2])
+local handler = ARGV[3]
+local payload = ARGV[4]
+local priority = ARGV[5]
+local retries = ARGV[6]
+local retryDelay = ARGV[7]
+local metadata = ARGV[8]
+local id = ARGV[9]
+local queue = ARGV[10]
+local weight = ARGV[11]
 
 if redis.call("EXISTS", taskKey) == 1 then
   return 0
@@ -730,13 +737,13 @@ redis.call("HSET", taskKey,
   "` + redisFieldRetries + `", retries,
   "` + redisFieldRetryDelayMs + `", retryDelay,
   "` + redisFieldAttempts + `", 0,
-  "` + redisFieldReadyAtMs + `", now,
+  "` + redisFieldReadyAtMs + `", readyAt,
   "` + redisFieldUpdatedAtMs + `", now,
   "` + redisFieldMetadata + `", metadata
 )
 
 redis.call("SADD", queues, queue)
-redis.call("ZADD", ready, now, id)
+redis.call("ZADD", ready, readyAt, id)
 return 1
 `
 

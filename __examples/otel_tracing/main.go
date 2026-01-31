@@ -91,7 +91,8 @@ func main() {
 	waitCtx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	if err := tm.Wait(waitCtx); err != nil {
+	err := tm.Wait(waitCtx)
+	if err != nil {
 		log.Fatalf("wait: %v", err)
 	}
 }

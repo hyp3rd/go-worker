@@ -494,6 +494,22 @@ Queues and weights:
 
 For gRPC, set `metadata["queue"]` and `metadata["weight"]` (string) on `Task`/`DurableTask`.
 
+### Scheduling Tasks
+
+Schedule tasks for later execution with `RunAt`, `RegisterTaskAt`, or `RegisterTaskAfter`.
+
+```go
+task, _ := worker.NewTask(context.Background(), func(ctx context.Context, _ ...any) (any, error) {
+    return "delayed", nil
+})
+
+_ = tm.RegisterTaskAt(context.Background(), task, time.Now().Add(30*time.Second))
+// or
+_ = tm.RegisterTaskAfter(context.Background(), task, 30*time.Second)
+```
+
+Durable tasks can also be delayed by setting `RunAt` before `RegisterDurableTask`.
+
 ### Stopping the Task Manager
 
 Use `StopGraceful` to stop accepting new tasks and wait for completion, or `StopNow` to cancel tasks immediately.
