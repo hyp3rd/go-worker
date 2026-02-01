@@ -3,6 +3,7 @@ module github.com/hyp3rd/go-worker
 go 1.25.6
 
 require (
+	github.com/goccy/go-json v0.10.5
 	github.com/google/uuid v1.6.0
 	github.com/hyp3rd/ewrap v1.3.7
 	github.com/redis/rueidis v1.0.71
@@ -18,7 +19,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

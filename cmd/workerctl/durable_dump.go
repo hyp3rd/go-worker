@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/hyp3rd/ewrap"
 	"github.com/redis/rueidis"
 	"github.com/spf13/cobra"
