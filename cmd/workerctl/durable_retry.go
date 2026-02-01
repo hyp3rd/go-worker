@@ -229,12 +229,12 @@ func retryTasks(
 
 	err := resp.Error()
 	if err != nil {
-		return 0, fmt.Errorf("requeue: %w", err)
+		return 0, ewrap.Wrap(err, "requeue")
 	}
 
 	moved, err := resp.AsInt64()
 	if err != nil {
-		return 0, fmt.Errorf("requeue result: %w", err)
+		return 0, ewrap.Wrap(err, "requeue result")
 	}
 
 	return moved, nil

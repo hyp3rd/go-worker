@@ -14,6 +14,7 @@ func newDurableCmd(cfg *redisConfig) *cobra.Command {
 		newDurableRetryCmd(cfg),
 		newDurablePurgeCmd(cfg),
 		newDurableQueuesCmd(cfg),
+		newDurableGetCmd(cfg),
 		newDurableDumpCmd(cfg),
 	)
 

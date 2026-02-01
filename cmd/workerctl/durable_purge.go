@@ -148,7 +148,7 @@ func purgeDLQ(ctx context.Context, client rueidis.Client, prefix string, limit i
 	if count <= 0 {
 		length, err := client.Do(ctx, client.B().Llen().Key(deadKey).Build()).AsInt64()
 		if err != nil {
-			return fmt.Errorf("dlq size: %w", err)
+			return ewrap.Wrap(err, "dlq size")
 		}
 
 		count = int(length)

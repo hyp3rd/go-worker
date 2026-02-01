@@ -99,6 +99,7 @@
     "Llen",
     "localmodule",
     "LPOP",
+    "Lpos",
     "LPUSH",
     "Lrange",
     "LREM",
@@ -175,7 +176,8 @@
     "ZRANGEBYSCORE",
     "ZREM",
     "Zremrangebyrank",
-    "ZSCORE"
+    "ZSCORE",
+    "zset"
   ],
   "ignoreWords": [],
   "import": []

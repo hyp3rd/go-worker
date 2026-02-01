@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/hyp3rd/ewrap"
 	"github.com/redis/rueidis"
 	"github.com/spf13/cobra"
 )
@@ -188,7 +188,7 @@ func dumpIDs(
 
 		err = encoder.Encode(record)
 		if err != nil {
-			return fmt.Errorf("encode dump: %w", err)
+			return ewrap.Wrap(err, "encode dump")
 		}
 	}
 
@@ -208,7 +208,7 @@ func fetchZSetIDs(ctx context.Context, client rueidis.Client, key string, limit 
 		client.B().Zrange().Key(key).Min(strconv.FormatInt(start, 10)).Max(strconv.FormatInt(stop, 10)).Build(),
 	).AsStrSlice()
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", key, err)
+		return nil, ewrap.Wrapf(err, "read %s", key)
 	}
 
 	return ids, nil
@@ -227,7 +227,7 @@ func fetchListIDs(ctx context.Context, client rueidis.Client, key string, limit 
 		client.B().Lrange().Key(key).Start(start).Stop(stop).Build(),
 	).AsStrSlice()
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", key, err)
+		return nil, ewrap.Wrapf(err, "read %s", key)
 	}
 
 	return ids, nil
@@ -261,7 +261,7 @@ func fetchTaskDump(
 
 	values, err := resp.AsStrSlice()
 	if err != nil {
-		return taskDump{}, fmt.Errorf("read task %s: %w", id, err)
+		return taskDump{}, ewrap.Wrapf(err, "read task %s", id)
 	}
 
 	record := taskDump{
