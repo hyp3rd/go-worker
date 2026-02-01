@@ -357,6 +357,13 @@ Requeue specific tasks by ID:
 ./workerctl durable retry --id 8c0f8b2d-0a4d-4a3b-9ad7-2d2a5b7f5d12 --apply
 ```
 
+Requeue tasks from a source set (DLQ/ready/processing):
+
+```bash
+./workerctl durable retry --source dlq --limit 100 --apply
+./workerctl durable retry --source ready --from-queue default --limit 50 --apply
+```
+
 Purge queues (use with care):
 
 ```bash

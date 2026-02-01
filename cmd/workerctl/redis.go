@@ -28,10 +28,8 @@ func (cfg *redisConfig) client() (rueidis.Client, error) {
 	}
 
 	if cfg.useTLS {
-		options.TLSConfig = &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: cfg.skipTLSVerify, //nolint:gosec
-		}
+		tlsCfg := cfg.tlsConfig()
+		options.TLSConfig = tlsCfg
 	}
 
 	client, err := rueidis.NewClient(options)
@@ -40,6 +38,18 @@ func (cfg *redisConfig) client() (rueidis.Client, error) {
 	}
 
 	return client, nil
+}
+
+func (cfg *redisConfig) tlsConfig() *tls.Config {
+	tlsCfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	if cfg.skipTLSVerify {
+		tlsCfg.InsecureSkipVerify = true
+	}
+
+	return tlsCfg
 }
 
 func (cfg *redisConfig) context() (context.Context, context.CancelFunc) {
