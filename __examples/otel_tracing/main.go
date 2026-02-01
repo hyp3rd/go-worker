@@ -84,14 +84,16 @@ func main() {
 		},
 	}
 
-	if err := tm.RegisterTask(ctx, task); err != nil {
+	err := tm.RegisterTask(ctx, task)
+	if err != nil {
 		log.Fatalf("register task: %v", err)
 	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	if err := tm.Wait(waitCtx); err != nil {
+	err := tm.Wait(waitCtx)
+	if err != nil {
 		log.Fatalf("wait: %v", err)
 	}
 }

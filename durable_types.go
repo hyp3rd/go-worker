@@ -16,6 +16,7 @@ type DurableTask struct {
 	Message    proto.Message
 	Payload    []byte
 	Priority   int
+	RunAt      time.Time
 	Queue      string
 	Weight     int
 	Retries    int

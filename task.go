@@ -115,6 +115,7 @@ type Task struct {
 	Name        string             `json:"name"`        // Name is the name of the task
 	Description string             `json:"description"` // Description is the description of the task
 	Priority    int                `json:"priority"`    // Priority is the priority of the task
+	RunAt       time.Time          `json:"run_at"`      // RunAt is the earliest time the task should execute
 	Queue       string             `json:"queue"`       // Queue is the queue name for scheduling
 	Weight      int                `json:"weight"`      // Weight influences scheduling share within a queue
 	Execute     TaskFunc           `json:"-"`           // Execute is the function that will be executed by the task
@@ -135,6 +136,7 @@ type Task struct {
 	retriesRemaining int
 	retryBackoff     time.Duration
 	index            int
+	delayIndex       int
 	doneOnce         sync.Once
 	durableLease     *DurableTaskLease
 	skipWg           bool
@@ -149,6 +151,7 @@ func NewTask(ctx context.Context, fn TaskFunc) (*Task, error) {
 		Retries:    0,
 		RetryDelay: 0,
 		index:      -1,
+		delayIndex: -1,
 	}
 
 	err := task.IsValid()

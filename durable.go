@@ -25,6 +25,22 @@ func (tm *TaskManager) RegisterDurableTask(ctx context.Context, task DurableTask
 	return tm.durableBackend.Enqueue(ctx, prepared)
 }
 
+// RegisterDurableTaskAt registers a durable task to execute at or after the provided time.
+func (tm *TaskManager) RegisterDurableTaskAt(ctx context.Context, task DurableTask, runAt time.Time) error {
+	task.RunAt = runAt
+
+	return tm.RegisterDurableTask(ctx, task)
+}
+
+// RegisterDurableTaskAfter registers a durable task to execute after the provided delay.
+func (tm *TaskManager) RegisterDurableTaskAfter(ctx context.Context, task DurableTask, delay time.Duration) error {
+	if delay <= 0 {
+		return tm.RegisterDurableTask(ctx, task)
+	}
+
+	return tm.RegisterDurableTaskAt(ctx, task, time.Now().Add(delay))
+}
+
 // RegisterDurableTasks registers multiple durable tasks.
 func (tm *TaskManager) RegisterDurableTasks(ctx context.Context, tasks ...DurableTask) error {
 	var joined error

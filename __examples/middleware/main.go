@@ -86,13 +86,15 @@ func main() {
 		Ctx: context.Background(),
 	}
 
-	if err := srv.RegisterTasks(context.TODO(), task, task1, task2, task3); err != nil {
+	err := srv.RegisterTasks(context.TODO(), task, task1, task2, task3)
+	if err != nil {
 		log.Println("register tasks error", err)
 	}
 
 	_ = srv.CancelTask(task3.ID)
 
-	if err := srv.RegisterTask(context.TODO(), task4); err != nil {
+	err := srv.RegisterTask(context.TODO(), task4)
+	if err != nil {
 		log.Println("unable to register task", err)
 	}
 

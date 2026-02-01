@@ -15,6 +15,17 @@ func newPriorityQueue[T any](less func(a, b T) bool, setIndex func(T, int)) *pri
 // Len returns the number of items in the queue.
 func (pq priorityQueue[T]) Len() int { return len(pq.items) }
 
+// Peek returns the highest priority item without removing it.
+func (pq priorityQueue[T]) Peek() (T, bool) {
+	var zero T
+
+	if pq.Len() == 0 {
+		return zero, false
+	}
+
+	return pq.items[0], true
+}
+
 func (pq *priorityQueue[T]) Push(x T) {
 	pq.items = append(pq.items, x)
 	pq.setIndex(x, pq.Len()-1)
@@ -127,5 +138,25 @@ func newTaskHeap() *priorityQueue[*Task] {
 		return left.ID.String() < right.ID.String()
 	}, func(t *Task, i int) {
 		t.index = i
+	})
+}
+
+func newScheduledTaskHeap() *priorityQueue[*Task] {
+	return newPriorityQueue(func(left, right *Task) bool {
+		if left.RunAt.Equal(right.RunAt) {
+			return left.ID.String() < right.ID.String()
+		}
+
+		if left.RunAt.IsZero() {
+			return true
+		}
+
+		if right.RunAt.IsZero() {
+			return false
+		}
+
+		return left.RunAt.Before(right.RunAt)
+	}, func(task *Task, i int) {
+		task.delayIndex = i
 	})
 }

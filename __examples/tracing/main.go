@@ -71,7 +71,8 @@ func main() {
 		},
 	}
 
-	if err := tm.RegisterTask(ctx, task); err != nil {
+	err := tm.RegisterTask(ctx, task)
+	if err != nil {
 		logger.Error("register task failed", "error", err)
 		return
 	}
@@ -79,7 +80,8 @@ func main() {
 	waitCtx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	if err := tm.Wait(waitCtx); err != nil {
+	err := tm.Wait(waitCtx)
+	if err != nil {
 		logger.Error("wait failed", "error", err)
 	}
 }

@@ -43,7 +43,8 @@ func main() {
 	}()
 
 	tm := worker.NewTaskManager(ctx, maxWorkers, maxTasks, tasksPerSecond, taskTimeout, time.Second, 1)
-	if err := tm.SetMeterProvider(meterProvider); err != nil {
+	err := tm.SetMeterProvider(meterProvider)
+	if err != nil {
 		log.Fatalf("set meter provider: %v", err)
 	}
 
@@ -57,18 +58,21 @@ func main() {
 		},
 	}
 
-	if err := tm.RegisterTask(ctx, task); err != nil {
+	err := tm.RegisterTask(ctx, task)
+	if err != nil {
 		log.Fatalf("register task: %v", err)
 	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	if err := tm.Wait(waitCtx); err != nil {
+	err := tm.Wait(waitCtx)
+	if err != nil {
 		log.Fatalf("wait: %v", err)
 	}
 
-	if err := meterProvider.ForceFlush(ctx); err != nil {
+	err := meterProvider.ForceFlush(ctx)
+	if err != nil {
 		log.Printf("force flush: %v", err)
 	}
 }
