@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/google/uuid"
 	"github.com/hyp3rd/ewrap"
 	"github.com/redis/rueidis"
