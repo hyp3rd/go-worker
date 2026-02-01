@@ -345,6 +345,30 @@ Inspect queues:
 ./workerctl durable inspect --redis-addr localhost:6380 --redis-password supersecret --redis-prefix go-worker --queue default --show-ids --peek 10
 ```
 
+List queues:
+
+```bash
+./workerctl durable queues --with-counts
+```
+
+Requeue specific tasks by ID:
+
+```bash
+./workerctl durable retry --id 8c0f8b2d-0a4d-4a3b-9ad7-2d2a5b7f5d12 --apply
+```
+
+Purge queues (use with care):
+
+```bash
+./workerctl durable purge --ready --processing --queue default --apply
+```
+
+Dump task metadata (JSON lines, no payloads):
+
+```bash
+./workerctl durable dump --queue default --ready --limit 100 > dump.jsonl
+```
+
 Replay DLQ items (dry-run by default):
 
 ```bash

@@ -81,7 +81,8 @@ func main() {
 	})
 
 	if *cleanup {
-		if err := cleanupPrefix(baseCtx, client, redisPrefix, scanCount); err != nil {
+		err := cleanupPrefix(baseCtx, client, redisPrefix, scanCount)
+		if err != nil {
 			log.Fatalf("cleanup failed: %v", err)
 		}
 	}
@@ -115,7 +116,8 @@ func main() {
 	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
-	if err := tm.StopGraceful(shutdownCtx); err != nil {
+	err := tm.StopGraceful(shutdownCtx)
+	if err != nil {
 		log.Printf("shutdown error: %v", err)
 	}
 }
@@ -137,7 +139,8 @@ func cleanupPrefix(ctx context.Context, client rueidis.Client, prefix string, co
 
 		if len(entry.Elements) > 0 {
 			del := client.B().Del().Key(entry.Elements...).Build()
-			if err := client.Do(ctx, del).Error(); err != nil {
+			err := client.Do(ctx, del).Error()
+			if err != nil {
 				return err
 			}
 		}

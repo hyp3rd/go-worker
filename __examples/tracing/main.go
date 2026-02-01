@@ -71,7 +71,8 @@ func main() {
 		},
 	}
 
-	if err := tm.RegisterTask(ctx, task); err != nil {
+	err := tm.RegisterTask(ctx, task)
+	if err != nil {
 		logger.Error("register task failed", "error", err)
 		return
 	}

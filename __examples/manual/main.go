@@ -42,7 +42,8 @@ func main() {
 		Execute:  func(ctx context.Context, args ...any) (val any, err error) { return "Hello, World from Task!", err },
 	}
 
-	if err := srv.RegisterTask(context.Background(), task); err != nil {
+	err := srv.RegisterTask(context.Background(), task)
+	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		return
 	}

@@ -43,7 +43,8 @@ func main() {
 	}()
 
 	tm := worker.NewTaskManager(ctx, maxWorkers, maxTasks, tasksPerSecond, taskTimeout, time.Second, 1)
-	if err := tm.SetMeterProvider(meterProvider); err != nil {
+	err := tm.SetMeterProvider(meterProvider)
+	if err != nil {
 		log.Fatalf("set meter provider: %v", err)
 	}
 
@@ -57,7 +58,8 @@ func main() {
 		},
 	}
 
-	if err := tm.RegisterTask(ctx, task); err != nil {
+	err := tm.RegisterTask(ctx, task)
+	if err != nil {
 		log.Fatalf("register task: %v", err)
 	}
 

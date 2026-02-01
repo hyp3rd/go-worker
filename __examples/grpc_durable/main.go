@@ -90,7 +90,8 @@ func main() {
 	)
 
 	if *cleanup {
-		if err := cleanupPrefix(ctx, client, *redisPrefix, defaultScanCount); err != nil {
+		err := cleanupPrefix(ctx, client, *redisPrefix, defaultScanCount)
+		if err != nil {
 			log.Fatalf("cleanup failed: %v", err)
 		}
 	}
@@ -204,7 +205,8 @@ func cleanupPrefix(ctx context.Context, client rueidis.Client, prefix string, co
 
 		if len(entry.Elements) > 0 {
 			del := client.B().Del().Key(entry.Elements...).Build()
-			if err := client.Do(ctx, del).Error(); err != nil {
+			err := client.Do(ctx, del).Error()
+			if err != nil {
 				return err
 			}
 		}
