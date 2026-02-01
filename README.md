@@ -324,12 +324,34 @@ Queue weights for durable tasks can be configured with `WithRedisDurableQueueWei
 Operational notes (durable Redis):
 
 - **Key hashing**: Redis Lua scripts touch multiple keys; for clustered Redis, all keys must share the same hash slot. The backend auto-wraps the prefix in `{}` to enforce this (e.g., `{go-worker}:ready`).
-- **DLQ**: Failed tasks are pushed to a dead-letter list (`{prefix}:dead`). There is no built-in replay yet; you should build a replay tool or manually re-enqueue as needed.
-- **DLQ replay**: See `__examples/durable_dlq_replay` for a small Lua-based replay utility (dry-run by default; use `-apply` to replay).
+- **DLQ**: Failed tasks are pushed to a dead-letter list (`{prefix}:dead`).
+- **DLQ replay**: Use the `workerctl durable dlq replay` command or the `__examples/durable_dlq_replay` utility (dry-run by default; use `--apply`/`-apply` to replay).
 - **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
 - **Lease renewal**: enable `WithDurableLeaseRenewalInterval` for long-running tasks to extend leases while a task executes.
 - **Visibility**: Ready/processing queues live in per-queue sorted sets: `{prefix}:ready:<queue>` and `{prefix}:processing:<queue>`. Known queues are tracked in `{prefix}:queues`.
-- **Inspect utility**: `__examples/durable_queue_inspect` prints ready/processing/dead counts; use `-show-ids -queue=<name>` to display IDs (hidden by default to avoid leaking sensitive identifiers).
+- **Inspect utility**: `workerctl durable inspect` (or `__examples/durable_queue_inspect`) prints ready/processing/dead counts; use `--show-ids --queue=<name>` (or `-show-ids -queue=<name>`) to display IDs.
+
+### CLI tooling (workerctl)
+
+Build the CLI:
+
+```bash
+go build -o workerctl ./cmd/workerctl
+```
+
+Inspect queues:
+
+```bash
+./workerctl durable inspect --redis-addr localhost:6380 --redis-password supersecret --redis-prefix go-worker --queue default --show-ids --peek 10
+```
+
+Replay DLQ items (dry-run by default):
+
+```bash
+./workerctl durable dlq replay --batch 100 --apply
+```
+
+Use `--tls` (and `--tls-insecure` if needed) for secure Redis connections.
 
 ### Multi-node coordination (durable Redis)
 

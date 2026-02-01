@@ -171,7 +171,7 @@
 ### Gaps vs comparable packages
 
 - **Durability**: Redis-backed at-least-once exists, but no transactional enqueue across services and no exactly-once guarantees.
-- **Operational tooling**: basic CLI tools exist (DLQ replay, queue inspect), but no admin UI or dashboards.
+- **Operational tooling**: `workerctl` CLI exists for queue inspection and DLQ replay; no admin UI or dashboards yet.
 - **Distributed coordination**: multi-node guidance + lease renewal exist; no global rate limiting, leader election, or quorum controls.
 - **Scheduling**: delayed scheduling is now supported; cron‑like schedules are still missing.
 
@@ -186,6 +186,6 @@
 ### Roadmap (future milestones)
 
 1. **Durable backend**: add additional backends (Postgres) and stronger transactional enqueue semantics.
-1. **Operational tooling**: admin UI + CLI for queue inspection, retries, and DLQ.
+1. **Operational tooling**: admin UI (pending) and expanded CLI for queue inspection, retries, and DLQ.
 1. **Scheduled jobs**: cron/delayed scheduling layer.
 1. **Multi‑node coordination**: optional distributed workers via backend.

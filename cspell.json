@@ -159,6 +159,7 @@
     "vettool",
     "Wakeup",
     "Warnf",
+    "workerctl",
     "workerpb",
     "wrapcheck",
     "Wrapf",
