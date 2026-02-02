@@ -76,3 +76,7 @@ func keyPrefix(prefix string) string {
 func queueKey(prefix, base, queue string) string {
 	return prefix + ":" + base + ":" + queue
 }
+
+func pausedKey(prefix string) string {
+	return prefix + ":paused"
+}

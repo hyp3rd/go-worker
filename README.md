@@ -387,6 +387,14 @@ Show stats in JSON:
 
 ```bash
 ./workerctl durable stats --json
+./workerctl durable stats --watch 2s
+```
+
+Pause/resume durable dequeue:
+
+```bash
+./workerctl durable pause --apply
+./workerctl durable resume --apply
 ```
 
 Purge queues (use with care):
@@ -401,6 +409,13 @@ Dump task metadata (JSON lines, no payloads):
 ./workerctl durable dump --queue default --ready --limit 100 > dump.jsonl
 ```
 
+Export/import queue snapshots (JSONL):
+
+```bash
+./workerctl durable snapshot export --out snapshot.jsonl --ready --processing --dlq
+./workerctl durable snapshot import --in snapshot.jsonl --apply
+```
+
 Replay DLQ items (dry-run by default):
 
 ```bash
@@ -408,6 +423,12 @@ Replay DLQ items (dry-run by default):
 ```
 
 Use `--tls` (and `--tls-insecure` if needed) for secure Redis connections.
+
+Generate shell completion:
+
+```bash
+./workerctl completion zsh > "${fpath[1]}/_workerctl"
+```
 
 ### Multi-node coordination (durable Redis)
 

@@ -156,7 +156,7 @@ func resolveTaskQueue(
 			return fallback, nil
 		}
 
-		return "", fmt.Errorf("read task queue: %w", err)
+		return "", ewrap.Wrap(err, "read task queue")
 	}
 
 	queue = strings.TrimSpace(queue)
