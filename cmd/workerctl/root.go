@@ -36,6 +36,7 @@ func newRootCmd() *cobra.Command {
 	flags.BoolVar(&redisCfg.skipTLSVerify, "tls-insecure", false, "skip TLS certificate verification")
 
 	cmd.AddCommand(newDurableCmd(redisCfg))
+	cmd.AddCommand(newCompletionCmd(cmd))
 
 	return cmd
 }

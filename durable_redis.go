@@ -24,6 +24,7 @@ const (
 	redisProcessingKey     = "processing"
 	redisDeadKey           = "dead"
 	redisQueuesKey         = "queues"
+	redisPausedKey         = "paused"
 	redisFieldHandler      = "handler"
 	redisFieldPayload      = "payload"
 	redisFieldPriority     = "priority"
@@ -210,6 +211,15 @@ func (b *RedisDurableBackend) Enqueue(ctx context.Context, task DurableTask) err
 func (b *RedisDurableBackend) Dequeue(ctx context.Context, limit int, lease time.Duration) ([]DurableTaskLease, error) {
 	if ctx == nil {
 		return nil, ErrInvalidTaskContext
+	}
+
+	paused, err := b.isPaused(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if paused {
+		return []DurableTaskLease{}, nil
 	}
 
 	limit = normalizeDequeueLimit(limit)
@@ -536,6 +546,11 @@ func (b *RedisDurableBackend) queuesKey() string {
 	return b.keyPrefix() + redisKVSeparator + redisQueuesKey
 }
 
+// pausedKey returns the Redis key for pause state.
+func (b *RedisDurableBackend) pausedKey() string {
+	return b.keyPrefix() + redisKVSeparator + redisPausedKey
+}
+
 // taskPrefixKey returns the prefix for durable task keys.
 func (b *RedisDurableBackend) taskPrefixKey() string {
 	return b.keyPrefix() + redisKVSeparator + redisTaskKeyPrefix
@@ -595,6 +610,21 @@ func (b *RedisDurableBackend) queueList(ctx context.Context) ([]string, error) {
 	}
 
 	return values, nil
+}
+
+func (b *RedisDurableBackend) isPaused(ctx context.Context) (bool, error) {
+	resp := b.client.Do(ctx, b.client.B().Get().Key(b.pausedKey()).Build())
+
+	value, err := resp.ToString()
+	if err != nil {
+		if rueidis.IsRedisNil(err) {
+			return false, nil
+		}
+
+		return false, ewrap.Wrap(err, "read durable pause state")
+	}
+
+	return value == "1", nil
 }
 
 func containsQueue(queues []string, name string) bool {

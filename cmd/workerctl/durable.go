@@ -10,6 +10,8 @@ func newDurableCmd(cfg *redisConfig) *cobra.Command {
 
 	cmd.AddCommand(
 		newDurableInspectCmd(cfg),
+		newDurablePauseCmd(cfg),
+		newDurableResumeCmd(cfg),
 		newDurableDLQCmd(cfg),
 		newDurableRetryCmd(cfg),
 		newDurableRequeueCmd(cfg),
@@ -18,6 +20,7 @@ func newDurableCmd(cfg *redisConfig) *cobra.Command {
 		newDurableStatsCmd(cfg),
 		newDurableDeleteCmd(cfg),
 		newDurableGetCmd(cfg),
+		newDurableSnapshotCmd(cfg),
 		newDurableDumpCmd(cfg),
 	)
 

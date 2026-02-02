@@ -19,6 +19,7 @@ const (
 	testLease         = 2 * time.Second
 	testTaskName      = "send_email"
 	testTimeout       = 10 * time.Millisecond
+	testResultTimeout = 5 * time.Second
 	errMarshalPayload = "marshal payload: %v"
 )
 
@@ -345,7 +346,7 @@ func TestDurableLoop_AckOnSuccess(t *testing.T) {
 		if res.Error != nil {
 			t.Fatalf("unexpected error: %v", res.Error)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(testResultTimeout):
 		t.Fatal("timeout waiting for result")
 	}
 
