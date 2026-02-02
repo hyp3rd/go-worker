@@ -35,8 +35,11 @@ return 1
 `
 
 type deleteOptions struct {
-	id           string
+	ids          []string
 	queue        string
+	source       string
+	fromQueue    string
+	limit        int
 	deleteHash   bool
 	apply        bool
 	defaultQueue string
@@ -56,8 +59,11 @@ func newDurableDeleteCmd(cfg *redisConfig) *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	flags.StringVar(&opts.id, "id", "", "task ID to delete")
+	flags.StringArrayVar(&opts.ids, "id", nil, "task ID to delete (repeatable)")
 	flags.StringVar(&opts.queue, "queue", "", "queue name override")
+	flags.StringVar(&opts.source, "source", "", "source set: dlq, ready, processing")
+	flags.StringVar(&opts.fromQueue, "from-queue", "", "queue name when using --source ready|processing")
+	flags.IntVar(&opts.limit, "limit", 0, "max items to delete when --id is not set (0 = all)")
 	flags.BoolVar(&opts.deleteHash, "delete-hash", false, "delete the task hash after removal")
 	flags.BoolVar(&opts.apply, "apply", false, "apply delete (default is dry-run)")
 	flags.StringVar(&opts.defaultQueue, "default-queue", opts.defaultQueue, "fallback queue when task queue is missing")
@@ -66,12 +72,15 @@ func newDurableDeleteCmd(cfg *redisConfig) *cobra.Command {
 }
 
 func runDurableDelete(cfg *redisConfig, opts deleteOptions) error {
-	if strings.TrimSpace(opts.id) == "" {
-		return ewrap.New("--id is required")
+	ids := flattenIDs(opts.ids)
+
+	err := validateDeleteOptions(ids, opts)
+	if err != nil {
+		return err
 	}
 
 	if !opts.apply {
-		fmt.Fprintf(os.Stdout, "dry-run: use --apply to delete task %s\n", opts.id)
+		fmt.Fprintf(os.Stdout, "dry-run: use --apply to delete %s\n", deleteTargetLabel(ids, opts))
 
 		return nil
 	}
@@ -86,34 +95,33 @@ func runDurableDelete(cfg *redisConfig, opts deleteOptions) error {
 	defer cancel()
 
 	prefix := keyPrefix(cfg.prefix)
+	queueOverride := strings.TrimSpace(opts.queue)
 
-	queueName, err := resolveTaskQueue(ctx, client, prefix, opts.id, opts.queue, opts.defaultQueue)
-	if err != nil {
-		return err
+	if len(ids) == 0 {
+		ids, err = loadDeleteIDs(ctx, client, prefix, opts)
+		if err != nil {
+			return err
+		}
 	}
 
-	readyKey := queueKey(prefix, "ready", queueName)
-	processingKey := queueKey(prefix, "processing", queueName)
-	deadKey := prefix + ":dead"
-	taskKey := prefix + ":task:" + opts.id
+	if len(ids) == 0 {
+		fmt.Fprintln(os.Stdout, "no tasks found to delete")
 
-	resp := rueidis.NewLuaScript(deleteScript).Exec(
-		ctx,
-		client,
-		[]string{deadKey, readyKey, processingKey, taskKey},
-		[]string{
-			strconv.FormatInt(timeNowMillis(), 10),
-			opts.id,
-			boolToFlag(opts.deleteHash),
-		},
-	)
-
-	err = resp.Error()
-	if err != nil {
-		return ewrap.Wrap(err, "delete task")
+		return nil
 	}
 
-	fmt.Fprintf(os.Stdout, "deleted task %s\n", opts.id)
+	deleted := 0
+
+	for _, id := range ids {
+		err = deleteTaskByID(ctx, client, prefix, id, queueOverride, opts)
+		if err != nil {
+			return err
+		}
+
+		deleted++
+	}
+
+	fmt.Fprintf(os.Stdout, "deleted %d task(s)\n", deleted)
 
 	return nil
 }
@@ -169,4 +177,110 @@ func resolveTaskQueue(
 	}
 
 	return queue, nil
+}
+
+func deleteTaskByID(
+	ctx context.Context,
+	client rueidis.Client,
+	prefix string,
+	id string,
+	queueOverride string,
+	opts deleteOptions,
+) error {
+	queueName, err := resolveTaskQueue(ctx, client, prefix, id, queueOverride, opts.defaultQueue)
+	if err != nil {
+		return err
+	}
+
+	readyKey := queueKey(prefix, "ready", queueName)
+	processingKey := queueKey(prefix, "processing", queueName)
+	deadKey := prefix + ":dead"
+	taskKey := prefix + ":task:" + id
+
+	resp := rueidis.NewLuaScript(deleteScript).Exec(
+		ctx,
+		client,
+		[]string{deadKey, readyKey, processingKey, taskKey},
+		[]string{
+			strconv.FormatInt(timeNowMillis(), 10),
+			id,
+			boolToFlag(opts.deleteHash),
+		},
+	)
+
+	err = resp.Error()
+	if err != nil {
+		return ewrap.Wrap(err, "delete task")
+	}
+
+	return nil
+}
+
+func validateDeleteOptions(ids []string, opts deleteOptions) error {
+	if len(ids) > 0 {
+		return nil
+	}
+
+	if strings.TrimSpace(opts.source) == "" {
+		return ewrap.New("source is required when --id is not set")
+	}
+
+	switch opts.source {
+	case retrySourceDLQ:
+		return nil
+	case retrySourceReady, retrySourceProc:
+		if strings.TrimSpace(opts.fromQueue) == "" {
+			return ewrap.New("--from-queue is required for source ready/processing")
+		}
+
+		return nil
+	default:
+		return ewrap.New("source must be dlq, ready, or processing")
+	}
+}
+
+func deleteTargetLabel(ids []string, opts deleteOptions) string {
+	if len(ids) > 0 {
+		return fmt.Sprintf("%d task(s)", len(ids))
+	}
+
+	limit := normalizeDeleteLimit(opts.limit)
+	if limit <= 0 {
+		return "all matching tasks"
+	}
+
+	return fmt.Sprintf("up to %d task(s)", limit)
+}
+
+func loadDeleteIDs(
+	ctx context.Context,
+	client rueidis.Client,
+	prefix string,
+	opts deleteOptions,
+) ([]string, error) {
+	limit := normalizeDeleteLimit(opts.limit)
+	switch opts.source {
+	case retrySourceDLQ:
+		return fetchListIDs(ctx, client, prefix+":dead", limit)
+	case retrySourceReady:
+		queue := strings.TrimSpace(opts.fromQueue)
+		key := queueKey(prefix, "ready", queue)
+
+		return fetchZSetIDs(ctx, client, key, limit)
+	case retrySourceProc:
+		queue := strings.TrimSpace(opts.fromQueue)
+		key := queueKey(prefix, "processing", queue)
+
+		return fetchZSetIDs(ctx, client, key, limit)
+	default:
+		return nil, ewrap.New("unknown delete source")
+	}
+}
+
+func normalizeDeleteLimit(limit int) int64 {
+	if limit <= 0 {
+		return 0
+	}
+
+	return int64(limit)
 }
