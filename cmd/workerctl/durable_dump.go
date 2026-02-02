@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -37,20 +38,27 @@ type dumpOptions struct {
 	includeProcessing bool
 	includeDLQ        bool
 	includeMetadata   bool
+	handler           string
+	minRetries        int
+	maxRetries        int
+	olderThan         time.Duration
+	newerThan         time.Duration
 }
 
 type taskDump struct {
-	ID        string            `json:"id"`
-	Status    string            `json:"status"`
-	Handler   string            `json:"handler,omitempty"`
-	Queue     string            `json:"queue,omitempty"`
-	Priority  int               `json:"priority,omitempty"`
-	Weight    int               `json:"weight,omitempty"`
-	Retries   int               `json:"retries,omitempty"`
-	Attempts  int               `json:"attempts,omitempty"`
-	ReadyAt   string            `json:"ready_at,omitempty"`
-	UpdatedAt string            `json:"updated_at,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
+	ID          string            `json:"id"`
+	Status      string            `json:"status"`
+	Handler     string            `json:"handler,omitempty"`
+	Queue       string            `json:"queue,omitempty"`
+	Priority    int               `json:"priority,omitempty"`
+	Weight      int               `json:"weight,omitempty"`
+	Retries     int               `json:"retries,omitempty"`
+	Attempts    int               `json:"attempts,omitempty"`
+	ReadyAt     string            `json:"ready_at,omitempty"`
+	UpdatedAt   string            `json:"updated_at,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	readyAtMs   int64
+	updatedAtMs int64
 }
 
 func newDurableDumpCmd(cfg *redisConfig) *cobra.Command {
@@ -74,6 +82,11 @@ func newDurableDumpCmd(cfg *redisConfig) *cobra.Command {
 	flags.BoolVar(&opts.includeProcessing, "processing", false, "include processing tasks")
 	flags.BoolVar(&opts.includeDLQ, "dlq", false, "include dead letter queue items")
 	flags.BoolVar(&opts.includeMetadata, "include-metadata", false, "include metadata payload (JSON)")
+	flags.StringVar(&opts.handler, "handler", "", "filter by handler name")
+	flags.IntVar(&opts.minRetries, "min-retries", 0, "minimum retries to include")
+	flags.IntVar(&opts.maxRetries, "max-retries", 0, "maximum retries to include")
+	flags.DurationVar(&opts.olderThan, "older-than", 0, "include tasks older than this duration")
+	flags.DurationVar(&opts.newerThan, "newer-than", 0, "include tasks newer than this duration")
 
 	return cmd
 }
@@ -82,6 +95,8 @@ func runDurableDump(cfg *redisConfig, opts dumpOptions) error {
 	if !opts.includeReady && !opts.includeProcessing && !opts.includeDLQ {
 		opts.includeReady = true
 	}
+
+	opts.handler = strings.TrimSpace(opts.handler)
 
 	client, err := cfg.client()
 	if err != nil {
@@ -99,25 +114,26 @@ func runDurableDump(cfg *redisConfig, opts dumpOptions) error {
 		return err
 	}
 
-	encoder := json.NewEncoder(os.Stdout)
-	limit := normalizeDumpLimit(opts.limit)
+	dumpCtx := newDumpContext(client, opts, prefix)
+	dumpCtx.encoder = json.NewEncoder(os.Stdout)
+	dumpCtx.limit = normalizeDumpLimit(opts.limit)
 
 	if opts.includeReady {
-		err := dumpQueues(ctx, client, encoder, prefix, queues, "ready", limit, opts)
+		err := dumpQueues(ctx, dumpCtx, queues, "ready")
 		if err != nil {
 			return err
 		}
 	}
 
 	if opts.includeProcessing {
-		err := dumpQueues(ctx, client, encoder, prefix, queues, "processing", limit, opts)
+		err := dumpQueues(ctx, dumpCtx, queues, "processing")
 		if err != nil {
 			return err
 		}
 	}
 
 	if opts.includeDLQ {
-		err := dumpDLQ(ctx, client, encoder, prefix, limit, opts)
+		err := dumpDLQ(ctx, dumpCtx)
 		if err != nil {
 			return err
 		}
@@ -126,25 +142,34 @@ func runDurableDump(cfg *redisConfig, opts dumpOptions) error {
 	return nil
 }
 
-func dumpQueues(
-	ctx context.Context,
-	client rueidis.Client,
-	encoder *json.Encoder,
-	prefix string,
-	queues []string,
-	status string,
-	limit int64,
-	opts dumpOptions,
-) error {
+type dumpContext struct {
+	client    rueidis.Client
+	encoder   *json.Encoder
+	prefix    string
+	opts      dumpOptions
+	limit     int64
+	nowMillis int64
+}
+
+func newDumpContext(client rueidis.Client, opts dumpOptions, prefix string) dumpContext {
+	return dumpContext{
+		client:    client,
+		opts:      opts,
+		prefix:    prefix,
+		nowMillis: time.Now().UnixMilli(),
+	}
+}
+
+func dumpQueues(ctx context.Context, dumpCtx dumpContext, queues []string, status string) error {
 	for _, name := range queues {
-		key := queueKey(prefix, status, name)
+		key := queueKey(dumpCtx.prefix, status, name)
 
-		ids, err := fetchZSetIDs(ctx, client, key, limit)
+		ids, err := fetchZSetIDs(ctx, dumpCtx.client, key, dumpCtx.limit)
 		if err != nil {
 			return err
 		}
 
-		err = dumpIDs(ctx, client, encoder, prefix, ids, status, opts)
+		err = dumpIDs(ctx, dumpCtx, ids, status)
 		if err != nil {
 			return err
 		}
@@ -153,40 +178,29 @@ func dumpQueues(
 	return nil
 }
 
-func dumpDLQ(
-	ctx context.Context,
-	client rueidis.Client,
-	encoder *json.Encoder,
-	prefix string,
-	limit int64,
-	opts dumpOptions,
-) error {
-	deadKey := prefix + ":dead"
+func dumpDLQ(ctx context.Context, dumpCtx dumpContext) error {
+	deadKey := dumpCtx.prefix + ":dead"
 
-	ids, err := fetchListIDs(ctx, client, deadKey, limit)
+	ids, err := fetchListIDs(ctx, dumpCtx.client, deadKey, dumpCtx.limit)
 	if err != nil {
 		return err
 	}
 
-	return dumpIDs(ctx, client, encoder, prefix, ids, "dead", opts)
+	return dumpIDs(ctx, dumpCtx, ids, "dead")
 }
 
-func dumpIDs(
-	ctx context.Context,
-	client rueidis.Client,
-	encoder *json.Encoder,
-	prefix string,
-	ids []string,
-	status string,
-	opts dumpOptions,
-) error {
+func dumpIDs(ctx context.Context, dumpCtx dumpContext, ids []string, status string) error {
 	for _, id := range ids {
-		record, err := fetchTaskDump(ctx, client, prefix, id, status, opts)
+		record, err := fetchTaskDump(ctx, dumpCtx.client, dumpCtx.prefix, id, status, dumpCtx.opts)
 		if err != nil {
 			return err
 		}
 
-		err = encoder.Encode(record)
+		if !shouldIncludeDump(record, dumpCtx) {
+			continue
+		}
+
+		err = dumpCtx.encoder.Encode(record)
 		if err != nil {
 			return ewrap.Wrap(err, "encode dump")
 		}
@@ -293,12 +307,79 @@ func assignTaskFields(record *taskDump, values []string, opts dumpOptions) {
 	record.Weight = parseInt(get(dumpFieldWeight))
 	record.Retries = parseInt(get(dumpFieldRetries))
 	record.Attempts = parseInt(get(dumpFieldAttempts))
-	record.ReadyAt = parseMillis(get(dumpFieldReadyAt))
-	record.UpdatedAt = parseMillis(get(dumpFieldUpdatedAt))
+	record.readyAtMs = parseMillisInt(get(dumpFieldReadyAt))
+	record.updatedAtMs = parseMillisInt(get(dumpFieldUpdatedAt))
+	record.ReadyAt = formatMillis(record.readyAtMs)
+	record.UpdatedAt = formatMillis(record.updatedAtMs)
 
 	if opts.includeMetadata && len(values) > dumpFieldMetadata {
 		record.Metadata = parseMetadata(get(dumpFieldMetadata))
 	}
+}
+
+func shouldIncludeDump(record taskDump, dumpCtx dumpContext) bool {
+	if !matchesHandler(record, dumpCtx.opts) {
+		return false
+	}
+
+	if !matchesRetryBounds(record, dumpCtx.opts) {
+		return false
+	}
+
+	return matchesAgeWindow(record, dumpCtx)
+}
+
+func matchesHandler(record taskDump, opts dumpOptions) bool {
+	if opts.handler == "" {
+		return true
+	}
+
+	return record.Handler == opts.handler
+}
+
+func matchesRetryBounds(record taskDump, opts dumpOptions) bool {
+	if opts.minRetries > 0 && record.Retries < opts.minRetries {
+		return false
+	}
+
+	if opts.maxRetries > 0 && record.Retries > opts.maxRetries {
+		return false
+	}
+
+	return true
+}
+
+func matchesAgeWindow(record taskDump, dumpCtx dumpContext) bool {
+	timestamp := record.updatedAtMs
+	if timestamp == 0 {
+		timestamp = record.readyAtMs
+	}
+
+	if !withinOlderThan(timestamp, dumpCtx) {
+		return false
+	}
+
+	return withinNewerThan(timestamp, dumpCtx)
+}
+
+func withinOlderThan(timestamp int64, dumpCtx dumpContext) bool {
+	if dumpCtx.opts.olderThan <= 0 || timestamp <= 0 {
+		return true
+	}
+
+	cutoff := dumpCtx.nowMillis - dumpCtx.opts.olderThan.Milliseconds()
+
+	return timestamp <= cutoff
+}
+
+func withinNewerThan(timestamp int64, dumpCtx dumpContext) bool {
+	if dumpCtx.opts.newerThan <= 0 || timestamp <= 0 {
+		return true
+	}
+
+	cutoff := dumpCtx.nowMillis - dumpCtx.opts.newerThan.Milliseconds()
+
+	return timestamp >= cutoff
 }
 
 func parseInt(raw string) int {
@@ -314,13 +395,21 @@ func parseInt(raw string) int {
 	return value
 }
 
-func parseMillis(raw string) string {
+func parseMillisInt(raw string) int64 {
 	if raw == "" {
-		return ""
+		return 0
 	}
 
 	value, err := strconv.ParseInt(raw, parseIntBase10, parseIntBitSize)
 	if err != nil || value <= 0 {
+		return 0
+	}
+
+	return value
+}
+
+func formatMillis(value int64) string {
+	if value <= 0 {
 		return ""
 	}
 

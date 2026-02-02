@@ -395,6 +395,7 @@ Pause/resume durable dequeue:
 ```bash
 ./workerctl durable pause --apply
 ./workerctl durable resume --apply
+./workerctl durable paused
 ```
 
 Purge queues (use with care):
