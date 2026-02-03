@@ -31,6 +31,9 @@ test-race:
 bench:
 	go test -bench=. -benchtime=$(BENCHTIME) -benchmem -run=^-memprofile=mem.out ./...
 
+workerctl:
+	go build -trimpath -o bin/workerctl ./cmd/workerctl
+
 update-deps:
 	go get -v -u ./...
 	go mod tidy

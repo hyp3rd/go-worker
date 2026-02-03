@@ -98,5 +98,6 @@ tags
 # Local example
 *.bak
 .dccache
-./examples/
+./__examples/
 ./tests/
+bin/*
