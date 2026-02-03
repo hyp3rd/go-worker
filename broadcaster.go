@@ -7,13 +7,14 @@ import (
 
 // resultBroadcaster fans out results to multiple subscribers.
 type resultBroadcaster struct {
-	input  chan Result
-	mu     sync.RWMutex
-	subs   map[uint64]chan Result
-	nextID uint64
-	closed atomic.Bool
-	drops  atomic.Int64
-	policy atomic.Uint32
+	input   chan Result
+	inputMu sync.Mutex
+	mu      sync.RWMutex
+	subs    map[uint64]chan Result
+	nextID  uint64
+	closed  atomic.Bool
+	drops   atomic.Int64
+	policy  atomic.Uint32
 }
 
 func newResultBroadcaster(buffer int) *resultBroadcaster {
@@ -74,13 +75,12 @@ func (b *resultBroadcaster) Publish(res Result) {
 		return
 	}
 
-	defer func() {
-		err := recover()
-		if err != nil {
-			// broadcaster is closed
-			b.drops.Add(1)
-		}
-	}()
+	b.inputMu.Lock()
+	defer b.inputMu.Unlock()
+
+	if b.closed.Load() {
+		return
+	}
 
 	b.input <- res
 }
@@ -91,7 +91,9 @@ func (b *resultBroadcaster) Close() {
 		return
 	}
 
+	b.inputMu.Lock()
 	close(b.input)
+	b.inputMu.Unlock()
 }
 
 func (b *resultBroadcaster) Drops() int64 {

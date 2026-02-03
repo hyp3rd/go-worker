@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyp3rd/ewrap"
+	"github.com/robfig/cron/v3"
 	"golang.org/x/time/rate"
 )
 
@@ -93,6 +94,11 @@ type TaskManager struct {
 	retentionLastCheck atomic.Int64
 	retentionPrune     atomic.Bool
 	retentionOnce      sync.Once
+
+	cronMu      sync.Mutex
+	cron        *cron.Cron
+	cronEntries map[string]cron.EntryID
+	cronLoc     *time.Location
 }
 
 // NewTaskManagerWithDefaults creates a new task manager with default values.
@@ -215,10 +221,13 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 		durableBatchSize:    cfg.durableBatchSize,
 		durableLeaseRenewal: cfg.durableLeaseRenewal,
 		durableEnabled:      durableEnabled,
+		cronLoc:             cfg.cronLocation,
+		cronEntries:         map[string]cron.EntryID{},
 	}
 
 	tm.queueCond = sync.NewCond(&tm.queueMu)
 	tm.accepting.Store(true)
+	tm.initCron()
 
 	if configurable, ok := tm.durableBackend.(QueueConfigurableBackend); ok {
 		configurable.ConfigureQueues(defaultQueue, queueWeights)
@@ -294,6 +303,8 @@ func (tm *TaskManager) StartWorkers(ctx context.Context) {
 		} else {
 			go tm.schedulerLoop(workerCtx)
 		}
+
+		tm.startCron()
 	})
 }
 
@@ -445,6 +456,7 @@ func (tm *TaskManager) StopNow() {
 		tm.queueCond.Broadcast()
 		tm.cancelAllInternal()
 		tm.results.Close()
+		tm.stopCron()
 	})
 }
 

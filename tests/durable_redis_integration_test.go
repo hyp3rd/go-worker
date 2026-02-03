@@ -378,6 +378,140 @@ func TestRedisDurableBackend_FailMovesToDLQ(t *testing.T) {
 	}
 }
 
+func TestRedisDurableBackend_GlobalRateLimit(t *testing.T) {
+	t.Parallel()
+
+	addr := os.Getenv(redisEnvAddr)
+	if addr == "" {
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
+	}
+
+	password := os.Getenv(redisEnvPassword)
+	prefix := redisTestPrefix(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTestTimeout)
+	defer cancel()
+
+	client := newRedisClient(t, addr, password)
+	defer client.Close()
+
+	cleanupRedisPrefix(ctx, t, client, prefix)
+
+	backend := newRedisBackendWithOptions(
+		t,
+		client,
+		prefix,
+		worker.WithRedisDurableGlobalRateLimit(1, 1),
+	)
+
+	taskIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	for _, taskID := range taskIDs {
+		task := worker.DurableTask{
+			ID:         taskID,
+			Handler:    redisHandler,
+			Payload:    []byte(redisPayload),
+			Priority:   1,
+			Retries:    0,
+			RetryDelay: redisRetryDelay,
+		}
+
+		err := backend.Enqueue(ctx, task)
+		if err != nil {
+			t.Fatalf(redisErrEnqueue, err)
+		}
+	}
+
+	leases, err := backend.Dequeue(ctx, 2, redisLease)
+	if err != nil {
+		t.Fatalf(redisErrDequeue, err)
+	}
+
+	if len(leases) != 1 {
+		t.Fatalf("expected 1 lease due to global limit, got %d", len(leases))
+	}
+
+	leases, err = backend.Dequeue(ctx, 2, redisLease)
+	if err != nil {
+		t.Fatalf("dequeue after limit: %v", err)
+	}
+
+	if len(leases) != 0 {
+		t.Fatalf("expected no leases immediately after limit, got %d", len(leases))
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+
+	leases, err = backend.Dequeue(ctx, 2, redisLease)
+	if err != nil {
+		t.Fatalf("dequeue after refill: %v", err)
+	}
+
+	if len(leases) != 1 {
+		t.Fatalf("expected 1 lease after refill, got %d", len(leases))
+	}
+}
+
+func TestRedisDurableBackend_LeaderLock(t *testing.T) {
+	t.Parallel()
+
+	addr := os.Getenv(redisEnvAddr)
+	if addr == "" {
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
+	}
+
+	password := os.Getenv(redisEnvPassword)
+	prefix := redisTestPrefix(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTestTimeout)
+	defer cancel()
+
+	client := newRedisClient(t, addr, password)
+	defer client.Close()
+
+	cleanupRedisPrefix(ctx, t, client, prefix)
+
+	backendA := newRedisBackendWithOptions(
+		t,
+		client,
+		prefix,
+		worker.WithRedisDurableLeaderLock(2*time.Second),
+	)
+	backendB := newRedisBackendWithOptions(
+		t,
+		client,
+		prefix,
+		worker.WithRedisDurableLeaderLock(2*time.Second),
+	)
+
+	task := worker.DurableTask{
+		ID:         uuid.New(),
+		Handler:    redisHandler,
+		Payload:    []byte(redisPayload),
+		Priority:   1,
+		Retries:    0,
+		RetryDelay: redisRetryDelay,
+	}
+
+	err := backendA.Enqueue(ctx, task)
+	if err != nil {
+		t.Fatalf(redisErrEnqueue, err)
+	}
+
+	leasesA, err := backendA.Dequeue(ctx, 1, redisLease)
+	if err != nil {
+		t.Fatalf("dequeue A: %v", err)
+	}
+
+	leasesB, err := backendB.Dequeue(ctx, 1, redisLease)
+	if err != nil {
+		t.Fatalf("dequeue B: %v", err)
+	}
+
+	if len(leasesA)+len(leasesB) != 1 {
+		t.Fatalf("expected exactly one leader to dequeue, got %d", len(leasesA)+len(leasesB))
+	}
+}
+
 func newRedisClient(t *testing.T, addr, password string) rueidis.Client {
 	t.Helper()
 
@@ -396,6 +530,24 @@ func newRedisBackend(t *testing.T, client rueidis.Client, prefix string) *worker
 	t.Helper()
 
 	backend, err := worker.NewRedisDurableBackend(client, worker.WithRedisDurablePrefix(prefix))
+	if err != nil {
+		t.Fatalf("redis backend: %v", err)
+	}
+
+	return backend
+}
+
+func newRedisBackendWithOptions(
+	t *testing.T,
+	client rueidis.Client,
+	prefix string,
+	opts ...worker.RedisDurableOption,
+) *worker.RedisDurableBackend {
+	t.Helper()
+
+	all := append([]worker.RedisDurableOption{worker.WithRedisDurablePrefix(prefix)}, opts...)
+
+	backend, err := worker.NewRedisDurableBackend(client, all...)
 	if err != nil {
 		t.Fatalf("redis backend: %v", err)
 	}

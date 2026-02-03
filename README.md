@@ -321,6 +321,35 @@ tm := worker.NewTaskManagerWithOptions(
 Defaults: lease is 30s, poll interval is 200ms, Redis dequeue batch is 50, and lease renewal is disabled (configurable via options).
 Queue weights for durable tasks can be configured with `WithRedisDurableQueueWeights`, and the default queue via `WithRedisDurableDefaultQueue`.
 
+### Scheduled jobs (cron)
+
+You can register cron-based jobs that enqueue tasks on a schedule. Both 5-field and 6-field (seconds) cron expressions are supported.
+
+```go
+tm := worker.NewTaskManagerWithDefaults(context.Background())
+
+err := tm.RegisterCronTask(context.Background(), "hourly-report", "0 * * * *", func(ctx context.Context) (*worker.Task, error) {
+ return worker.NewTask(ctx, func(ctx context.Context, _ ...any) (any, error) {
+  // do work
+  return "ok", nil
+ })
+})
+if err != nil {
+ panic(err)
+}
+```
+
+For durable backends, use:
+
+```go
+_ = tm.RegisterDurableCronTask(context.Background(), "daily-email", "0 0 * * *", func(ctx context.Context) (worker.DurableTask, error) {
+ return worker.DurableTask{
+  Handler: "send_email",
+  Payload: []byte("..."),
+ }, nil
+})
+```
+
 Operational notes (durable Redis):
 
 - **Key hashing**: Redis Lua scripts touch multiple keys; for clustered Redis, all keys must share the same hash slot. The backend auto-wraps the prefix in `{}` to enforce this (e.g., `{go-worker}:ready`).
@@ -328,6 +357,7 @@ Operational notes (durable Redis):
 - **DLQ replay**: Use the `workerctl durable dlq replay` command or the `__examples/durable_dlq_replay` utility (dry-run by default; use `--apply`/`-apply` to replay).
 - **Multi-node workers**: Multiple workers can safely dequeue from the same backend. Lease timeouts handle worker crashes, but tune `WithDurableLease` for your workload.
 - **Lease renewal**: enable `WithDurableLeaseRenewalInterval` for long-running tasks to extend leases while a task executes.
+- **Global coordination**: optional global rate limiting (`WithRedisDurableGlobalRateLimit`) and leader lock (`WithRedisDurableLeaderLock`) can limit dequeue rate or enforce a single active leader.
 - **Visibility**: Ready/processing queues live in per-queue sorted sets: `{prefix}:ready:<queue>` and `{prefix}:processing:<queue>`. Known queues are tracked in `{prefix}:queues`.
 - **Inspect utility**: `workerctl durable inspect` (or `__examples/durable_queue_inspect`) prints ready/processing/dead counts; use `--show-ids --queue=<name>` (or `-show-ids -queue=<name>`) to display IDs.
 
@@ -375,6 +405,16 @@ Fetch a task by ID:
 ```bash
 ./workerctl durable get --id 8c0f8b2d-0a4d-4a3b-9ad7-2d2a5b7f5d12
 ```
+
+Enqueue a durable task from JSON/YAML payload:
+
+```bash
+./workerctl durable enqueue --handler send_email --queue default --payload '{"to":"ops@example.com","subject":"Hello","body":"Hi"}' --apply
+./workerctl durable enqueue --handler send_email --payload-file payload.yaml --payload-format yaml --apply
+./workerctl durable enqueue --handler send_email --payload-b64 "$(base64 -w0 payload.bin)" --apply
+```
+
+Note: the payload is stored as raw bytes. JSON/YAML are encoded to JSON bytes. Make sure the bytes match your durable codec (default is protobuf).
 
 Delete a task (and optionally its hash):
 
