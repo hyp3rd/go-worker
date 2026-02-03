@@ -106,6 +106,8 @@
 
 ## Status vs Repo (January 30, 2026)
 
+Status updated: **_February 3, 2026_**
+
 ### Functional Requirements (January 30, 2026)
 
 - **Task lifecycle correctness**: Done for in-memory tasks; durable tasks are at-least-once by design.
@@ -120,6 +122,7 @@
 ### Non-Functional Requirements (January 30, 2026)
 
 - **Safety**: Partial; panic recovery in hooks/tracer/broadcaster exists, but `go test -race ./...` still needs to be validated on your machine.
+- **Safety**: Partial; panic recovery in hooks/tracer/broadcaster exists, but `go test -race ./...` still needs to be validated on your machine (race fix landed in `resultBroadcaster`).
 - **Reliability**: Done; stop paths are idempotent and workers/scheduler loops are tracked via WaitGroups.
 - **Performance**: Done; queue scheduling avoids global locks in steady state beyond the queue/registry.
 - **Observability**: Done; metrics snapshot + OpenTelemetry metrics/tracing and examples.
@@ -143,7 +146,7 @@
 
 - **Redis durable backend**: Done (leases, DLQ, replay/inspect tools, gRPC durable API).
 - **Multi-backend support**: Not started.
-- **Global coordination**: Partial; lease renewal + guidance exist, but no global rate limiting/leader election.
+- **Global coordination**: Done; global rate limiting (`WithRedisDurableGlobalRateLimit`) and leader lock (`WithRedisDurableLeaderLock`) added with tests and docs.
 
 ## Milestones
 
@@ -172,7 +175,7 @@
 
 - **Durability**: Redis-backed at-least-once exists, but no transactional enqueue across services and no exactly-once guarantees.
 - **Operational tooling**: `workerctl` CLI exists for queue inspection and DLQ replay; no admin UI or dashboards yet.
-- **Distributed coordination**: multi-node guidance + lease renewal exist; no global rate limiting, leader election, or quorum controls.
+- **Distributed coordination**: multi-node guidance + lease renewal exist; global rate limiting and leader lock now exist; no quorum controls.
 - **Scheduling**: delayed scheduling is now supported; cron‑like schedules are still missing.
 
 ### Nice‑to‑have improvements
@@ -187,5 +190,5 @@
 
 1. **Durable backend**: add additional backends (Postgres) and stronger transactional enqueue semantics.
 1. **Operational tooling**: admin UI (pending) and expanded CLI for queue inspection, retries, and DLQ.
-1. **Scheduled jobs**: cron/delayed scheduling layer.
-1. **Multi‑node coordination**: optional distributed workers via backend.
+1. **Scheduled jobs**: cron/delayed scheduling layer (cron now implemented; cron UX improvements TBD).
+1. **Multi‑node coordination**: optional distributed workers via backend (global rate limit/leader lock implemented; quorum/leader election improvements TBD).
