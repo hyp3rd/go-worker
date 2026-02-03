@@ -58,8 +58,28 @@ jobs:
                   # This will handover control about PR rejection to the GitHub side
                   max-allowed-issues: 2147483647
 
+            - name: Split SARIF runs
+              run: |
+                  set -euo pipefail
+                  python - <<'PY'
+                  import json, os
+                  with open("results.sarif", "r", encoding="utf-8") as f:
+                      sarif = json.load(f)
+                  runs = sarif.get("runs", [])
+                  if not runs:
+                      raise SystemExit("results.sarif has no runs")
+                  out_dir = "sarif-out"
+                  os.makedirs(out_dir, exist_ok=True)
+                  for idx, run in enumerate(runs):
+                      out = dict(sarif)
+                      out["runs"] = [run]
+                      out_path = os.path.join(out_dir, f"results-{idx}.sarif")
+                      with open(out_path, "w", encoding="utf-8") as f:
+                          json.dump(out, f)
+                  PY
+
             # Upload the SARIF file generated in the previous step
             - name: Upload SARIF results file
               uses: github/codeql-action/upload-sarif@v4
               with:
-                  sarif_file: results.sarif
+                  sarif_file: sarif-out
