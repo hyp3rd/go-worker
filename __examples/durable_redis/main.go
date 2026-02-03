@@ -109,14 +109,14 @@ func main() {
 		if res.Error != nil {
 			log.Fatalf("task failed: %v", res.Error)
 		}
-		log.Printf("task completed: %v", res.Result)
+		log.Printf("task completed with status=%s", res.Task.Status())
 	case <-time.After(resultTimeout):
 		log.Fatal("timed out waiting for result")
 	}
 	cancel()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
-	err := tm.StopGraceful(shutdownCtx)
+	err = tm.StopGraceful(shutdownCtx)
 	if err != nil {
 		log.Printf("shutdown error: %v", err)
 	}
