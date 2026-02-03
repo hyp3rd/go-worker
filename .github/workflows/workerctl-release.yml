@@ -53,9 +53,14 @@ jobs:
           go build -trimpath -ldflags "-s -w -X main.version=${{ steps.meta.outputs.version }} -X main.commit=${{ steps.meta.outputs.commit }} -X main.date=${{ steps.meta.outputs.date }}" -o "${OUT}" ./cmd/workerctl
 
       - name: Checksums
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          EXT: ${{ matrix.ext }}
         run: |
           set -euo pipefail
-          (cd dist && sha256sum * > checksums.txt)
+          BIN="workerctl-${GOOS}-${GOARCH}${EXT}"
+          (cd dist && sha256sum "${BIN}" > "${BIN}.sha256")
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -69,4 +74,4 @@ jobs:
         with:
           files: |
             dist/workerctl-${{ matrix.os }}-${{ matrix.arch }}*
-            dist/checksums.txt
+            dist/workerctl-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256
