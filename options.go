@@ -27,6 +27,8 @@ type taskManagerConfig struct {
 	durablePollInterval time.Duration
 	durableBatchSize    int
 	durableLeaseRenewal time.Duration
+
+	cronLocation *time.Location
 }
 
 func defaultTaskManagerConfig() taskManagerConfig {
@@ -44,6 +46,7 @@ func defaultTaskManagerConfig() taskManagerConfig {
 		durableBatchSize:    1,
 		durableLeaseRenewal: 0,
 		durableCodec:        ProtoDurableCodec{},
+		cronLocation:        time.UTC,
 	}
 }
 
@@ -158,5 +161,14 @@ func WithDurableBatchSize(size int) TaskManagerOption {
 func WithDurableLeaseRenewalInterval(interval time.Duration) TaskManagerOption {
 	return func(cfg *taskManagerConfig) {
 		cfg.durableLeaseRenewal = interval
+	}
+}
+
+// WithCronLocation sets the time zone for cron schedules.
+func WithCronLocation(location *time.Location) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		if location != nil {
+			cfg.cronLocation = location
+		}
 	}
 }

@@ -25,6 +25,8 @@ const (
 	redisDeadKey           = "dead"
 	redisQueuesKey         = "queues"
 	redisPausedKey         = "paused"
+	redisGlobalRateKey     = "global_rate"
+	redisLeaderKey         = "leader"
 	redisFieldHandler      = "handler"
 	redisFieldPayload      = "payload"
 	redisFieldPriority     = "priority"
@@ -43,6 +45,9 @@ const (
 	redisDefaultBatchSize  = 50
 	redisLeaseDefault      = 30 * time.Second
 	redisLeasePayloadSize  = 10
+	redisRateTokensField   = "tokens"
+	redisRateTsField       = "ts"
+	redisRateMinTTL        = 1 * time.Second
 )
 
 // RedisDurableBackend implements a durable task backend using Redis.
@@ -60,6 +65,23 @@ type RedisDurableBackend struct {
 	nack         *rueidis.Lua
 	fail         *rueidis.Lua
 	extend       *rueidis.Lua
+	rateLimit    *redisRateLimit
+	leader       *redisLeader
+}
+
+type redisRateLimit struct {
+	rate     float64
+	burst    int
+	ttlMs    int64
+	lua      *rueidis.Lua
+	keyCache string
+}
+
+type redisLeader struct {
+	id    string
+	lease time.Duration
+	lua   *rueidis.Lua
+	key   string
 }
 
 // RedisDurableOption defines an option for configuring RedisDurableBackend.
@@ -97,6 +119,37 @@ func WithRedisDurableQueueWeights(weights map[string]int) RedisDurableOption {
 	}
 }
 
+// WithRedisDurableGlobalRateLimit enables a Redis-based global rate limit for dequeue.
+// The rate is tokens per second and burst is the max token bucket size.
+func WithRedisDurableGlobalRateLimit(rate float64, burst int) RedisDurableOption {
+	return func(b *RedisDurableBackend) {
+		if rate <= 0 || burst <= 0 {
+			return
+		}
+
+		b.rateLimit = &redisRateLimit{
+			rate:  rate,
+			burst: burst,
+			lua:   rueidis.NewLuaScript(redisGlobalRateScript),
+		}
+	}
+}
+
+// WithRedisDurableLeaderLock enables a Redis-based leader lock for dequeue coordination.
+func WithRedisDurableLeaderLock(lease time.Duration) RedisDurableOption {
+	return func(b *RedisDurableBackend) {
+		if lease <= 0 {
+			return
+		}
+
+		b.leader = &redisLeader{
+			id:    uuid.NewString(),
+			lease: lease,
+			lua:   rueidis.NewLuaScript(redisLeaderScript),
+		}
+	}
+}
+
 // NewRedisDurableBackend creates a new RedisDurableBackend with the given Redis client and options.
 func NewRedisDurableBackend(client rueidis.Client, opts ...RedisDurableOption) (*RedisDurableBackend, error) {
 	if client == nil {
@@ -122,6 +175,8 @@ func NewRedisDurableBackend(client rueidis.Client, opts ...RedisDurableOption) (
 			opt(backend)
 		}
 	}
+
+	backend.initCoordination()
 
 	return backend, nil
 }
@@ -225,28 +280,21 @@ func (b *RedisDurableBackend) Dequeue(ctx context.Context, limit int, lease time
 	limit = normalizeDequeueLimit(limit)
 	lease = normalizeDequeueLease(lease)
 
+	limit, err = b.applyCoordination(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit <= 0 {
+		return []DurableTaskLease{}, nil
+	}
+
 	queues, weights, err := b.dequeueQueues(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	return b.dequeueFromQueues(ctx, queues, weights, limit, lease)
-}
-
-func normalizeDequeueLimit(limit int) int {
-	if limit <= 0 {
-		return 1
-	}
-
-	return limit
-}
-
-func normalizeDequeueLease(lease time.Duration) time.Duration {
-	if lease <= 0 {
-		return redisLeaseDefault
-	}
-
-	return lease
 }
 
 // Ack acknowledges the successful processing of a durable task.
@@ -738,6 +786,143 @@ func decodeMetadata(raw string) (map[string]string, error) {
 	return out, nil
 }
 
+func (b *RedisDurableBackend) initCoordination() {
+	if b.rateLimit != nil {
+		b.rateLimit.keyCache = b.globalRateKey()
+		b.rateLimit.ttlMs = computeRateTTL(b.rateLimit.rate, b.rateLimit.burst)
+	}
+
+	if b.leader != nil {
+		b.leader.key = b.leaderKey()
+	}
+}
+
+func (b *RedisDurableBackend) globalRateKey() string {
+	return b.prefix + redisKVSeparator + redisGlobalRateKey
+}
+
+func (b *RedisDurableBackend) leaderKey() string {
+	return b.prefix + redisKVSeparator + redisLeaderKey
+}
+
+func computeRateTTL(rate float64, burst int) int64 {
+	if rate <= 0 || burst <= 0 {
+		return int64(redisRateMinTTL / time.Millisecond)
+	}
+
+	window := max(time.Duration(float64(burst)/rate*float64(time.Second))*2, redisRateMinTTL)
+
+	return window.Milliseconds()
+}
+
+func (b *RedisDurableBackend) acquireGlobalTokens(ctx context.Context, limit int) (int, error) {
+	rate := b.rateLimit.rate
+
+	burst := b.rateLimit.burst
+	if rate <= 0 || burst <= 0 {
+		return limit, nil
+	}
+
+	ttlMs := b.rateLimit.ttlMs
+	if ttlMs <= 0 {
+		ttlMs = computeRateTTL(rate, burst)
+	}
+
+	resp := b.rateLimit.lua.Exec(
+		ctx,
+		b.client,
+		[]string{b.rateLimit.keyCache},
+		[]string{
+			strconv.FormatInt(time.Now().UnixMilli(), 10),
+			strconv.FormatFloat(rate, 'f', -1, 64),
+			strconv.Itoa(burst),
+			strconv.Itoa(limit),
+			strconv.FormatInt(ttlMs, 10),
+		},
+	)
+
+	err := resp.Error()
+	if err != nil {
+		return 0, ewrap.Wrap(err, "global rate limit")
+	}
+
+	allowed, err := resp.AsInt64()
+	if err != nil {
+		return 0, ewrap.Wrap(err, "global rate limit result")
+	}
+
+	return int(allowed), nil
+}
+
+func (b *RedisDurableBackend) ensureLeader(ctx context.Context) (bool, error) {
+	lease := b.leader.lease
+	if lease <= 0 {
+		return true, nil
+	}
+
+	resp := b.leader.lua.Exec(
+		ctx,
+		b.client,
+		[]string{b.leader.key},
+		[]string{
+			b.leader.id,
+			strconv.FormatInt(lease.Milliseconds(), 10),
+		},
+	)
+
+	err := resp.Error()
+	if err != nil {
+		return false, ewrap.Wrap(err, "leader lock")
+	}
+
+	ok, err := resp.AsInt64()
+	if err != nil {
+		return false, ewrap.Wrap(err, "leader lock result")
+	}
+
+	return ok == 1, nil
+}
+
+func (b *RedisDurableBackend) applyCoordination(ctx context.Context, limit int) (int, error) {
+	if b.leader != nil {
+		ok, err := b.ensureLeader(ctx)
+		if err != nil {
+			return 0, err
+		}
+
+		if !ok {
+			return 0, nil
+		}
+	}
+
+	if b.rateLimit == nil {
+		return limit, nil
+	}
+
+	allowed, err := b.acquireGlobalTokens(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+
+	return min(limit, allowed), nil
+}
+
+func normalizeDequeueLimit(limit int) int {
+	if limit <= 0 {
+		return 1
+	}
+
+	return limit
+}
+
+func normalizeDequeueLease(lease time.Duration) time.Duration {
+	if lease <= 0 {
+		return redisLeaseDefault
+	}
+
+	return lease
+}
+
 const redisEnqueueScript = `
 local ready = KEYS[1]
 local taskKey = KEYS[2]
@@ -928,4 +1113,64 @@ redis.call("HSET", taskKey,
   "` + redisFieldUpdatedAtMs + `", now
 )
 return 1
+`
+
+const redisGlobalRateScript = `
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local rate = tonumber(ARGV[2])
+local burst = tonumber(ARGV[3])
+local requested = tonumber(ARGV[4])
+local ttlMs = tonumber(ARGV[5])
+
+if rate <= 0 or burst <= 0 or requested <= 0 then
+  return 0
+end
+
+local tokens = tonumber(redis.call("HGET", key, "` + redisRateTokensField + `"))
+local last = tonumber(redis.call("HGET", key, "` + redisRateTsField + `"))
+
+if tokens == nil then
+  tokens = burst
+end
+if last == nil then
+  last = now
+end
+
+local delta = now - last
+if delta < 0 then
+  delta = 0
+end
+
+local refill = (delta / 1000) * rate
+tokens = math.min(burst, tokens + refill)
+
+local allowed = math.min(requested, math.floor(tokens))
+tokens = tokens - allowed
+
+redis.call("HSET", key, "` + redisRateTokensField + `", tokens, "` + redisRateTsField + `", now)
+if ttlMs ~= nil and ttlMs > 0 then
+  redis.call("PEXPIRE", key, ttlMs)
+end
+
+return allowed
+`
+
+const redisLeaderScript = `
+local key = KEYS[1]
+local owner = ARGV[1]
+local ttl = tonumber(ARGV[2])
+
+local existing = redis.call("GET", key)
+if existing == owner then
+  redis.call("PEXPIRE", key, ttl)
+  return 1
+end
+
+local ok = redis.call("SET", key, owner, "NX", "PX", ttl)
+if ok then
+  return 1
+end
+
+return 0
 `
