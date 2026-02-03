@@ -25,6 +25,7 @@ func newRootCmd() *cobra.Command {
 		Use:          "workerctl",
 		Short:        "go-worker admin CLI",
 		SilenceUsage: true,
+		Version:      versionString(),
 	}
 
 	flags := cmd.PersistentFlags()
@@ -37,6 +38,7 @@ func newRootCmd() *cobra.Command {
 
 	cmd.AddCommand(newDurableCmd(redisCfg))
 	cmd.AddCommand(newCompletionCmd(cmd))
+	cmd.AddCommand(newVersionCmd())
 
 	return cmd
 }

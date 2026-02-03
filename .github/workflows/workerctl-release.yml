@@ -1,0 +1,72 @@
+---
+name: workerctl-release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        include:
+          - os: windows
+            arch: amd64
+            ext: .exe
+        exclude:
+          - os: windows
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Set build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" != "release" ]; then
+            version="dev-${GITHUB_SHA:0:7}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build workerctl
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          EXT: ${{ matrix.ext }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          OUT="dist/workerctl-${GOOS}-${GOARCH}${EXT}"
+          go build -trimpath -ldflags "-s -w -X main.version=${{ steps.meta.outputs.version }} -X main.commit=${{ steps.meta.outputs.commit }} -X main.date=${{ steps.meta.outputs.date }}" -o "${OUT}" ./cmd/workerctl
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum * > checksums.txt)
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: workerctl-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/workerctl-${{ matrix.os }}-${{ matrix.arch }}*
+
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/workerctl-${{ matrix.os }}-${{ matrix.arch }}*
+            dist/checksums.txt
