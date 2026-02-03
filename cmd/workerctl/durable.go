@@ -21,6 +21,7 @@ func newDurableCmd(cfg *redisConfig) *cobra.Command {
 		newDurableStatsCmd(cfg),
 		newDurableDeleteCmd(cfg),
 		newDurableGetCmd(cfg),
+		newDurableEnqueueCmd(cfg),
 		newDurableSnapshotCmd(cfg),
 		newDurableDumpCmd(cfg),
 	)

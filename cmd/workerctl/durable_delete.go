@@ -245,11 +245,34 @@ func deleteTargetLabel(ids []string, opts deleteOptions) string {
 	}
 
 	limit := normalizeDeleteLimit(opts.limit)
+
+	source := deleteSourceLabel(opts)
 	if limit <= 0 {
-		return "all matching tasks"
+		return "all tasks from " + source
 	}
 
-	return fmt.Sprintf("up to %d task(s)", limit)
+	return fmt.Sprintf("up to %d task(s) from %s", limit, source)
+}
+
+func deleteSourceLabel(opts deleteOptions) string {
+	switch opts.source {
+	case retrySourceReady:
+		if strings.TrimSpace(opts.fromQueue) == "" {
+			return "ready"
+		}
+
+		return "ready:" + strings.TrimSpace(opts.fromQueue)
+	case retrySourceProc:
+		if strings.TrimSpace(opts.fromQueue) == "" {
+			return "processing"
+		}
+
+		return "processing:" + strings.TrimSpace(opts.fromQueue)
+	case retrySourceDLQ:
+		return "dlq"
+	default:
+		return "unknown"
+	}
 }
 
 func loadDeleteIDs(

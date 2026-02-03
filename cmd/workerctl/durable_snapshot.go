@@ -34,6 +34,8 @@ const (
 	parseFloatBitSize       = 64
 	snapshotParseIntBase10  = 10
 	snapshotParseIntBitSize = 64
+	snapshotMaxLineBytes    = 10 << 20
+	snapshotScanBufSize     = 64 * 1024
 )
 
 type snapshotExportOptions struct {
@@ -147,6 +149,7 @@ func runSnapshotImport(cfg *redisConfig, opts snapshotImportOptions) error {
 	defer closeFn()
 
 	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, snapshotScanBufSize), snapshotMaxLineBytes)
 	entries := make([]snapshotEntry, 0, snapshotEntriesInitCap)
 
 	for scanner.Scan() {
@@ -534,7 +537,7 @@ func openOutput(path string) (*os.File, func(), error) {
 		return os.Stdout, func() {}, nil
 	}
 
-	file, err := os.Create(filepath.Base(path))
+	file, err := os.Create(filepath.Clean(path))
 	if err != nil {
 		return nil, nil, ewrap.Wrap(err, "open output")
 	}
@@ -552,7 +555,7 @@ func openInput(path string) (*os.File, func(), error) {
 		return os.Stdin, func() {}, nil
 	}
 
-	file, err := os.Open(filepath.Base(path))
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, nil, ewrap.Wrap(err, "open input")
 	}

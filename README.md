@@ -376,6 +376,16 @@ Fetch a task by ID:
 ./workerctl durable get --id 8c0f8b2d-0a4d-4a3b-9ad7-2d2a5b7f5d12
 ```
 
+Enqueue a durable task from JSON/YAML payload:
+
+```bash
+./workerctl durable enqueue --handler send_email --queue default --payload '{"to":"ops@example.com","subject":"Hello","body":"Hi"}' --apply
+./workerctl durable enqueue --handler send_email --payload-file payload.yaml --payload-format yaml --apply
+./workerctl durable enqueue --handler send_email --payload-b64 "$(base64 -w0 payload.bin)" --apply
+```
+
+Note: the payload is stored as raw bytes. JSON/YAML are encoded to JSON bytes. Make sure the bytes match your durable codec (default is protobuf).
+
 Delete a task (and optionally its hash):
 
 ```bash
