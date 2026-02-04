@@ -73,7 +73,7 @@ jobs:
                       base = auto.get("id") or "codacy"
                       auto["id"] = f"{base}-{idx}"
                       run["automationDetails"] = auto
-                  with open("results.sarif", "w", encoding="utf-8") as f:
+                  with open("results-normalized.sarif", "w", encoding="utf-8") as f:
                       json.dump(sarif, f)
                   PY
 
@@ -81,4 +81,4 @@ jobs:
             - name: Upload SARIF results file
               uses: github/codeql-action/upload-sarif@v4
               with:
-                  sarif_file: results.sarif
+                  sarif_file: results-normalized.sarif
