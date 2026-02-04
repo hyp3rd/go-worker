@@ -8,7 +8,6 @@ package workerpb
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -126,19 +125,15 @@ type UnimplementedWorkerServiceServer struct{}
 func (UnimplementedWorkerServiceServer) RegisterTasks(context.Context, *RegisterTasksRequest) (*RegisterTasksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterTasks not implemented")
 }
-
 func (UnimplementedWorkerServiceServer) RegisterDurableTasks(context.Context, *RegisterDurableTasksRequest) (*RegisterDurableTasksResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RegisterDurableTasks not implemented")
 }
-
 func (UnimplementedWorkerServiceServer) StreamResults(*StreamResultsRequest, grpc.ServerStreamingServer[StreamResultsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamResults not implemented")
 }
-
 func (UnimplementedWorkerServiceServer) CancelTask(context.Context, *CancelTaskRequest) (*CancelTaskResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelTask not implemented")
 }
-
 func (UnimplementedWorkerServiceServer) GetTask(context.Context, *GetTaskRequest) (*GetTaskResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTask not implemented")
 }
