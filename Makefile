@@ -1,7 +1,7 @@
 include .project-settings.env
 
 GOLANGCI_LINT_VERSION ?= v2.8.0
-BUF_VERSION ?= v1.64.0
+BUF_VERSION ?= v1.65.0
 GO_VERSION ?= 1.25.6
 GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true
@@ -30,6 +30,9 @@ test-race:
 
 bench:
 	go test -bench=. -benchtime=$(BENCHTIME) -benchmem -run=^-memprofile=mem.out ./...
+
+workerctl:
+	go build -trimpath -o bin/workerctl ./cmd/workerctl
 
 update-deps:
 	go get -v -u ./...

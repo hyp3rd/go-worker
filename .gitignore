@@ -119,4 +119,5 @@ $RECYCLE.BIN/
 *.bak
 *.now
 examples/multi/res/*.txt
+bin/*
 .dccache

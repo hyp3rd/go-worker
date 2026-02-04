@@ -7,12 +7,11 @@
 package workerpb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -107,12 +106,10 @@ func file_worker_v1_payload_proto_rawDescGZIP() []byte {
 	return file_worker_v1_payload_proto_rawDescData
 }
 
-var (
-	file_worker_v1_payload_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-	file_worker_v1_payload_proto_goTypes  = []any{
-		(*SendEmailPayload)(nil), // 0: worker.v1.SendEmailPayload
-	}
-)
+var file_worker_v1_payload_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_worker_v1_payload_proto_goTypes = []any{
+	(*SendEmailPayload)(nil), // 0: worker.v1.SendEmailPayload
+}
 var file_worker_v1_payload_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
