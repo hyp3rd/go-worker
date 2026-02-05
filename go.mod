@@ -1,6 +1,6 @@
 module github.com/hyp3rd/go-worker
 
-go 1.25.6
+go 1.25.7
 
 require (
 	github.com/goccy/go-json v0.10.5

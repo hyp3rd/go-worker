@@ -2,7 +2,7 @@ include .project-settings.env
 
 GOLANGCI_LINT_VERSION ?= v2.8.0
 BUF_VERSION ?= v1.65.0
-GO_VERSION ?= 1.25.6
+GO_VERSION ?= 1.25.7
 GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true
 BENCHTIME ?= 1s
