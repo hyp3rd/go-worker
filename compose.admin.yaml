@@ -1,0 +1,75 @@
+---
+services:
+  worker-redis:
+    hostname: worker-example-redis
+    container_name: worker-example-redis
+    image: redis/redis-stack-server:latest
+    environment:
+      - REDIS_ARGS=--requirepass supersecret
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "supersecret", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+      - "8001:8001"
+    volumes:
+      - redis-worker-stack_data:/data
+    networks:
+      redis-worker-net:
+        ipv4_address: 100.10.10.15
+
+  worker-admin:
+    build:
+      context: .
+    environment:
+      WORKER_REDIS_ADDR: worker-redis:6379
+      WORKER_REDIS_PASSWORD: supersecret
+      WORKER_REDIS_PREFIX: go-worker
+      WORKER_ADMIN_GRPC_ADDR: 0.0.0.0:50052
+      WORKER_ADMIN_HTTP_ADDR: 0.0.0.0:8081
+      WORKER_ADMIN_TLS_CERT: /certs/server.crt
+      WORKER_ADMIN_TLS_KEY: /certs/server.key
+      WORKER_ADMIN_TLS_CA: /certs/ca.crt
+    volumes:
+      - ./certs:/certs:ro
+    ports:
+      - "50052:50052"
+      - "8081:8081"
+    depends_on:
+      - worker-redis
+    networks:
+      - redis-worker-net
+
+  admin-ui:
+    build:
+      context: ./admin-ui
+    environment:
+      WORKER_ADMIN_API_URL: https://worker-admin:8081
+      WORKER_ADMIN_MTLS_CERT: /certs/client.crt
+      WORKER_ADMIN_MTLS_KEY: /certs/client.key
+      WORKER_ADMIN_MTLS_CA: /certs/ca.crt
+      WORKER_ADMIN_PASSWORD: change-me
+    volumes:
+      - ./certs:/certs:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - worker-admin
+    networks:
+      - redis-worker-net
+
+volumes:
+  redis-worker-stack_data:
+    driver: local
+
+networks:
+  redis-worker-net:
+    name: redis-worker-net
+    driver: bridge
+    attachable: true
+    ipam:
+      config:
+        - subnet: 100.10.10.0/24

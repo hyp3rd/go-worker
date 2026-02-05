@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package worker.v1;
+
+option go_package = "github.com/hyp3rd/go-worker/pkg/worker/v1;workerpb";
+
+message GetOverviewRequest {}
+
+message OverviewStats {
+  int32 active_workers = 1;
+  int64 queued_tasks = 2;
+  int32 queues = 3;
+  int64 avg_latency_ms = 4;
+  int64 p95_latency_ms = 5;
+}
+
+message CoordinationStatus {
+  string global_rate_limit = 1;
+  string leader_lock = 2;
+  string lease = 3;
+  bool paused = 4;
+}
+
+message GetOverviewResponse {
+  OverviewStats stats = 1;
+  CoordinationStatus coordination = 2;
+}
+
+message QueueSummary {
+  string name = 1;
+  int64 ready = 2;
+  int64 processing = 3;
+  int64 dead = 4;
+  int32 weight = 5;
+}
+
+message ListQueuesRequest {}
+
+message ListQueuesResponse {
+  repeated QueueSummary queues = 1;
+}
+
+message DLQEntry {
+  string id = 1;
+  string queue = 2;
+  string handler = 3;
+  int32 attempts = 4;
+  int64 age_ms = 5;
+}
+
+message ListDLQRequest {
+  int32 limit = 1;
+}
+
+message ListDLQResponse {
+  repeated DLQEntry entries = 1;
+}
+
+message PauseDequeueRequest {}
+
+message PauseDequeueResponse {
+  bool paused = 1;
+}
+
+message ResumeDequeueRequest {}
+
+message ResumeDequeueResponse {
+  bool paused = 1;
+}
+
+message ReplayDLQRequest {
+  int32 limit = 1;
+}
+
+message ReplayDLQResponse {
+  int32 moved = 1;
+}
+
+service AdminService {
+  rpc GetOverview(GetOverviewRequest) returns (GetOverviewResponse);
+  rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
+  rpc ListDLQ(ListDLQRequest) returns (ListDLQResponse);
+  rpc PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse);
+  rpc ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse);
+  rpc ReplayDLQ(ReplayDLQRequest) returns (ReplayDLQResponse);
+}

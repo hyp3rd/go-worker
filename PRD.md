@@ -106,7 +106,7 @@
 
 ## Status vs Repo (January 30, 2026)
 
-Status updated: **_February 3, 2026_**
+Status updated: **_February 5, 2026_**
 
 ### Functional Requirements (January 30, 2026)
 
@@ -148,6 +148,13 @@ Status updated: **_February 3, 2026_**
 - **Multi-backend support**: Not started.
 - **Global coordination**: Done; global rate limiting (`WithRedisDurableGlobalRateLimit`) and leader lock (`WithRedisDurableLeaderLock`) added with tests and docs.
 
+### Admin Service & Admin UI
+
+- **Admin Service (gRPC + HTTP gateway)**: Done (mTLS required, request IDs, timeouts, and consistent error envelope).
+- **Admin UI (Next.js + Tailwind)**: Done (overview/queues/DLQ/schedules, runbook actions, session auth, audit banner).
+- **Docker/Compose**: Done (`Dockerfile` + `compose.admin.yaml` + cert generation script).
+- **UI polish**: In progress (settings metadata panel added; continued UX refinements ongoing).
+
 ## Milestones
 
 1. **Stability Patch**: Fix critical panics, timeout propagation, cancellation correctness, and shutdown deadlocks.
@@ -174,9 +181,9 @@ Status updated: **_February 3, 2026_**
 ### Gaps vs comparable packages
 
 - **Durability**: Redis-backed at-least-once exists, but no transactional enqueue across services and no exactly-once guarantees.
-- **Operational tooling**: `workerctl` CLI exists for queue inspection and DLQ replay; no admin UI or dashboards yet.
+- **Operational tooling**: `workerctl` CLI exists for queue inspection and DLQ replay; admin UI and admin service are now implemented (ongoing polish and feature depth).
 - **Distributed coordination**: multi-node guidance + lease renewal exist; global rate limiting and leader lock now exist; no quorum controls.
-- **Scheduling**: delayed scheduling is now supported; cron‑like schedules are still missing.
+- **Scheduling**: delayed scheduling and cron are implemented; UX and admin controls still need refinement.
 
 ### Nice‑to‑have improvements
 
@@ -189,6 +196,6 @@ Status updated: **_February 3, 2026_**
 ### Roadmap (future milestones)
 
 1. **Durable backend**: add additional backends (Postgres) and stronger transactional enqueue semantics.
-1. **Operational tooling**: admin UI (pending) and expanded CLI for queue inspection, retries, and DLQ.
+1. **Operational tooling**: admin UI and admin service implemented; expand CLI release workflow and deep admin features (filters, export, advanced replay).
 1. **Scheduled jobs**: cron/delayed scheduling layer (cron now implemented; cron UX improvements TBD).
 1. **Multi‑node coordination**: optional distributed workers via backend (global rate limit/leader lock implemented; quorum/leader election improvements TBD).

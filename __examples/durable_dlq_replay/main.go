@@ -111,7 +111,7 @@ func main() {
 			defaultQueueName,
 		},
 	)
-	err := resp.Error()
+	err = resp.Error()
 	if err != nil {
 		log.Fatal(err)
 	}

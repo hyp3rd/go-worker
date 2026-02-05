@@ -6,7 +6,13 @@ repos:
       - id: check-merge-conflict
       - id: check-json
       - id: pretty-format-json
-        exclude: cspell.json
+        exclude: |
+          (?x)^(
+            cspell.json |
+            admin-ui/package.json |
+            admin-ui/package-lock.json |
+            admin-ui/tsconfig.json
+          )$
       - id: end-of-file-fixer
       - id: mixed-line-ending
       - id: trailing-whitespace

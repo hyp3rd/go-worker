@@ -38,7 +38,8 @@ type GRPCServer struct {
 	idempotencyMu sync.Mutex
 	idempotency   map[string]*idempotencyRecord
 
-	auth GRPCAuthFunc
+	auth  GRPCAuthFunc
+	admin AdminBackend
 }
 
 // GRPCAuthFunc authorizes a gRPC request before handling it.
@@ -55,6 +56,13 @@ func WithGRPCAuth(auth GRPCAuthFunc) GRPCServerOption {
 	}
 }
 
+// WithAdminBackend sets the admin backend for AdminService.
+func WithAdminBackend(backend AdminBackend) GRPCServerOption {
+	return func(s *GRPCServer) {
+		s.admin = backend
+	}
+}
+
 // NewGRPCServer creates a new gRPC server backed by the provided Service.
 func NewGRPCServer(svc Service, handlers map[string]HandlerSpec, opts ...GRPCServerOption) *GRPCServer {
 	server := &GRPCServer{
@@ -66,6 +74,12 @@ func NewGRPCServer(svc Service, handlers map[string]HandlerSpec, opts ...GRPCSer
 	for _, opt := range opts {
 		if opt != nil {
 			opt(server)
+		}
+	}
+
+	if server.admin == nil {
+		if backend, ok := svc.(AdminBackend); ok {
+			server.admin = backend
 		}
 	}
 
