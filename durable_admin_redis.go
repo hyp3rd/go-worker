@@ -3,9 +3,11 @@ package worker
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hyp3rd/ewrap"
+	sectconv "github.com/hyp3rd/sectools/pkg/converters"
 	"github.com/redis/rueidis"
 )
 
@@ -23,8 +25,8 @@ const (
 	parseIntBitSize        = 64
 )
 
-//nolint:revive
-const adminDLQReplayScript = "\nlocal dead = KEYS[1]\nlocal taskPrefix = KEYS[2]\nlocal queuesKey = KEYS[3]\nlocal now = tonumber(ARGV[1])\nlocal limit = tonumber(ARGV[2])\nlocal prefix = ARGV[3]\nlocal defaultQueue = ARGV[4]\n\nlocal moved = 0\nfor i = 1, limit do\n  local id = redis.call(\"RPOP\", dead)\n  if not id then\n    break\n  end\n  local taskKey = taskPrefix .. id\n  if redis.call(\"EXISTS\", taskKey) == 1 then\n    local queue = redis.call(\"HGET\", taskKey, \"queue\")\n    if queue == false or queue == \"\" then\n      queue = defaultQueue\n    end\n    local readyKey = prefix .. \":ready:\" .. queue\n    redis.call(\"HSET\", taskKey, \"ready_at_ms\", now, \"updated_at_ms\", now)\n    redis.call(\"ZADD\", readyKey, now, id)\n    redis.call(\"SADD\", queuesKey, queue)\n    moved = moved + 1\n  end\nreturn moved"
+//nolint:revive,dupword
+const adminDLQReplayScript = "\nlocal dead = KEYS[1]\nlocal taskPrefix = KEYS[2]\nlocal queuesKey = KEYS[3]\nlocal now = tonumber(ARGV[1])\nlocal limit = tonumber(ARGV[2])\nlocal prefix = ARGV[3]\nlocal defaultQueue = ARGV[4]\n\nlocal moved = 0\nfor i = 1, limit do\n  local id = redis.call(\"RPOP\", dead)\n  if not id then\n    break\n  end\n  local taskKey = taskPrefix .. id\n  if redis.call(\"EXISTS\", taskKey) == 1 then\n    local queue = redis.call(\"HGET\", taskKey, \"queue\")\n    if queue == false or queue == \"\" then\n      queue = defaultQueue\n    end\n    local readyKey = prefix .. \":ready:\" .. queue\n    redis.call(\"HSET\", taskKey, \"ready_at_ms\", now, \"updated_at_ms\", now)\n    redis.call(\"ZADD\", readyKey, now, id)\n    redis.call(\"SADD\", queuesKey, queue)\n    moved = moved + 1\n  end\nend\nreturn moved"
 
 // AdminOverview retrieves an overview of the durable backend status.
 func (b *RedisDurableBackend) AdminOverview(ctx context.Context) (AdminOverview, error) {
@@ -72,7 +74,7 @@ func (b *RedisDurableBackend) AdminOverview(ctx context.Context) (AdminOverview,
 	}
 
 	leaderLock := "disabled"
-	lease := "n/a"
+	lease := adminNotAvailable
 
 	if b.leader != nil {
 		ttl, err := b.keyTTL(ctx, b.leaderKey())
@@ -143,36 +145,85 @@ func (b *RedisDurableBackend) AdminQueues(ctx context.Context) ([]AdminQueueSumm
 	return results, nil
 }
 
-// AdminDLQ returns entries from the dead letter queue.
-func (b *RedisDurableBackend) AdminDLQ(ctx context.Context, limit int) ([]AdminDLQEntry, error) {
+// AdminQueue returns a summary for a single queue.
+func (b *RedisDurableBackend) AdminQueue(ctx context.Context, name string) (AdminQueueSummary, error) {
+	if ctx == nil {
+		return AdminQueueSummary{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminQueueSummary{}, ErrAdminQueueNameRequired
+	}
+
+	name = normalizeQueueName(name)
+
+	queues, weights, err := b.dequeueQueues(ctx)
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	if !containsQueue(queues, name) {
+		if _, ok := weights[name]; !ok {
+			return AdminQueueSummary{}, ErrAdminQueueNotFound
+		}
+	}
+
+	readyCount, processingCount, err := b.queueCounts(ctx, name)
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	deadCounts, err := b.deadCountsByQueue(ctx, []string{name}, adminDLQScanLimit)
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	deadCount, ok := deadCounts[name]
+	if !ok {
+		deadCount = -1
+	}
+
+	return AdminQueueSummary{
+		Name:       name,
+		Ready:      readyCount,
+		Processing: processingCount,
+		Dead:       deadCount,
+		Weight:     b.queueWeight(weights, name),
+	}, nil
+}
+
+// AdminSchedules returns cron schedule data if supported.
+func (*RedisDurableBackend) AdminSchedules(ctx context.Context) ([]AdminSchedule, error) {
 	if ctx == nil {
 		return nil, ErrInvalidTaskContext
 	}
 
-	if limit <= 0 {
-		limit = adminDLQDefaultSize
+	return nil, ErrAdminUnsupported
+}
+
+// AdminDLQ returns entries from the dead letter queue.
+func (b *RedisDurableBackend) AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error) {
+	if ctx == nil {
+		return AdminDLQPage{}, ErrInvalidTaskContext
 	}
 
-	ids, err := b.deadIDs(ctx, limit)
+	filters := normalizeAdminDLQFilter(filter)
+
+	total, err := b.dlqTotal(ctx)
 	if err != nil {
-		return nil, err
+		return AdminDLQPage{}, err
 	}
 
-	if len(ids) == 0 {
-		return []AdminDLQEntry{}, nil
+	if total <= 0 {
+		return AdminDLQPage{Entries: []AdminDLQEntry{}, Total: 0}, nil
 	}
 
-	entries := make([]AdminDLQEntry, 0, len(ids))
-	for _, id := range ids {
-		entry, err := b.dlqEntry(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-
-		entries = append(entries, entry)
+	if !filters.hasFilters() {
+		return b.dlqPageNoFilters(ctx, filters, total)
 	}
 
-	return entries, nil
+	return b.dlqPageWithFilters(ctx, filters, total)
 }
 
 // AdminPause pauses dequeueing of tasks.
@@ -255,8 +306,19 @@ func (b *RedisDurableBackend) queueCounts(ctx context.Context, queue string) (re
 	return readyCount, processingCount, nil
 }
 
-func (b *RedisDurableBackend) deadIDs(ctx context.Context, limit int) ([]string, error) {
-	resp := b.client.Do(ctx, b.client.B().Lrange().Key(b.deadKey()).Start(0).Stop(int64(limit-1)).Build())
+func (b *RedisDurableBackend) deadIDs(ctx context.Context, offset, limit int) ([]string, error) {
+	if limit <= 0 {
+		return []string{}, nil
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+
+	start := int64(offset)
+	stop := start + int64(limit) - 1
+
+	resp := b.client.Do(ctx, b.client.B().Lrange().Key(b.deadKey()).Start(start).Stop(stop).Build())
 
 	values, err := resp.AsStrSlice()
 	if err != nil {
@@ -334,7 +396,12 @@ func (b *RedisDurableBackend) deadCountsByQueue(
 		return out, nil
 	}
 
-	ids, err := b.deadIDs(ctx, int(total))
+	totalInt, err := sectconv.ToInt(total)
+	if err != nil {
+		return nil, ewrap.Wrap(err, "convert DLQ size")
+	}
+
+	ids, err := b.deadIDs(ctx, 0, totalInt)
 	if err != nil {
 		return nil, err
 	}
@@ -385,9 +452,160 @@ func (b *RedisDurableBackend) keyTTL(ctx context.Context, key string) (time.Dura
 	return time.Duration(ttlMs) * time.Millisecond, nil
 }
 
+type adminDLQFilters struct {
+	limit   int
+	offset  int
+	queue   string
+	handler string
+	query   string
+}
+
+func normalizeAdminDLQFilter(filter AdminDLQFilter) adminDLQFilters {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = adminDLQDefaultSize
+	}
+
+	offset := max(filter.Offset, 0)
+
+	queueFilter := strings.TrimSpace(filter.Queue)
+	if queueFilter != "" {
+		queueFilter = normalizeQueueName(queueFilter)
+	}
+
+	handlerFilter := strings.TrimSpace(filter.Handler)
+	queryFilter := strings.ToLower(strings.TrimSpace(filter.Query))
+
+	return adminDLQFilters{
+		limit:   limit,
+		offset:  offset,
+		queue:   queueFilter,
+		handler: handlerFilter,
+		query:   queryFilter,
+	}
+}
+
+func (filter adminDLQFilters) hasFilters() bool {
+	return filter.queue != "" || filter.handler != "" || filter.query != ""
+}
+
+func (b *RedisDurableBackend) dlqTotal(ctx context.Context) (int64, error) {
+	countResp := b.client.Do(ctx, b.client.B().Llen().Key(b.deadKey()).Build())
+
+	total, err := countResp.AsInt64()
+	if err != nil {
+		return 0, ewrap.Wrap(err, "read DLQ size")
+	}
+
+	return total, nil
+}
+
+func (b *RedisDurableBackend) dlqPageNoFilters(
+	ctx context.Context,
+	filter adminDLQFilters,
+	total int64,
+) (AdminDLQPage, error) {
+	ids, err := b.deadIDs(ctx, filter.offset, filter.limit)
+	if err != nil {
+		return AdminDLQPage{}, err
+	}
+
+	if len(ids) == 0 {
+		return AdminDLQPage{Entries: []AdminDLQEntry{}, Total: total}, nil
+	}
+
+	entries, err := b.dlqEntries(ctx, ids)
+	if err != nil {
+		return AdminDLQPage{}, err
+	}
+
+	return AdminDLQPage{Entries: entries, Total: total}, nil
+}
+
+func (b *RedisDurableBackend) dlqPageWithFilters(
+	ctx context.Context,
+	filter adminDLQFilters,
+	total int64,
+) (AdminDLQPage, error) {
+	if total > adminDLQScanLimit {
+		return AdminDLQPage{}, ErrAdminDLQFilterTooLarge
+	}
+
+	totalInt, err := sectconv.ToInt(total)
+	if err != nil {
+		return AdminDLQPage{}, ewrap.Wrap(err, "convert DLQ size")
+	}
+
+	ids, err := b.deadIDs(ctx, 0, totalInt)
+	if err != nil {
+		return AdminDLQPage{}, err
+	}
+
+	filtered := make([]AdminDLQEntry, 0, len(ids))
+	for _, id := range ids {
+		entry, err := b.dlqEntry(ctx, id)
+		if err != nil {
+			return AdminDLQPage{}, err
+		}
+
+		if !matchAdminDLQFilter(entry, filter) {
+			continue
+		}
+
+		filtered = append(filtered, entry)
+	}
+
+	return paginateAdminDLQ(filtered, filter.offset, filter.limit), nil
+}
+
+func (b *RedisDurableBackend) dlqEntries(ctx context.Context, ids []string) ([]AdminDLQEntry, error) {
+	entries := make([]AdminDLQEntry, 0, len(ids))
+	for _, id := range ids {
+		entry, err := b.dlqEntry(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+
+		entries = append(entries, entry)
+	}
+
+	return entries, nil
+}
+
+func matchAdminDLQFilter(entry AdminDLQEntry, filter adminDLQFilters) bool {
+	if filter.queue != "" && entry.Queue != filter.queue {
+		return false
+	}
+
+	if filter.handler != "" && entry.Handler != filter.handler {
+		return false
+	}
+
+	if filter.query == "" {
+		return true
+	}
+
+	query := filter.query
+
+	return strings.Contains(strings.ToLower(entry.ID), query) ||
+		strings.Contains(strings.ToLower(entry.Queue), query) ||
+		strings.Contains(strings.ToLower(entry.Handler), query)
+}
+
+func paginateAdminDLQ(entries []AdminDLQEntry, offset, limit int) AdminDLQPage {
+	total := len(entries)
+	if total == 0 || offset >= total {
+		return AdminDLQPage{Entries: []AdminDLQEntry{}, Total: int64(total)}
+	}
+
+	end := min(offset+limit, total)
+
+	return AdminDLQPage{Entries: entries[offset:end], Total: int64(total)}
+}
+
 func formatAdminDuration(duration time.Duration) string {
 	if duration <= 0 {
-		return "n/a"
+		return adminNotAvailable
 	}
 
 	if duration < time.Second {

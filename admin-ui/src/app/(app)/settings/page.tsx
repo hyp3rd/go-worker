@@ -1,5 +1,5 @@
 import { SectionHeader } from "@/components/section-header";
-import { getCoordinationStatus, getOverviewStats } from "@/lib/data";
+import { getCoordinationStatus, getHealthInfo, getOverviewStats } from "@/lib/data";
 import {
   sessionMaxAgeSeconds,
   sessionRefreshAfterSeconds,
@@ -25,9 +25,10 @@ const formatSeconds = (value: number) => {
 const envValue = (value?: string) => (value && value.length > 0 ? value : "not set");
 
 export default async function SettingsPage() {
-  const [coordination, stats] = await Promise.all([
+  const [coordination, stats, health] = await Promise.all([
     getCoordinationStatus(),
     getOverviewStats(),
+    getHealthInfo(),
   ]);
 
   const adminApiUrl = envValue(process.env.WORKER_ADMIN_API_URL);
@@ -58,6 +59,14 @@ export default async function SettingsPage() {
     { label: "mTLS key", value: mtlsKey },
     { label: "mTLS CA", value: mtlsCa },
     { label: "Mock data", value: mockEnabled },
+  ];
+
+  const service = [
+    { label: "Status", value: health.status || "unknown" },
+    { label: "Version", value: health.version || "dev" },
+    { label: "Commit", value: health.commit || "n/a" },
+    { label: "Build time", value: health.buildTime || "n/a" },
+    { label: "Go version", value: health.goVersion || "n/a" },
   ];
 
   return (
@@ -91,6 +100,28 @@ export default async function SettingsPage() {
         />
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           {gateway.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl border border-soft bg-[var(--card)] p-4"
+            >
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">
+                {item.label}
+              </p>
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-soft bg-white/90 p-6 shadow-soft">
+        <SectionHeader
+          title="Admin Service"
+          description="Health and build information reported by the gateway."
+        />
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {service.map((item) => (
             <div
               key={item.label}
               className="rounded-2xl border border-soft bg-[var(--card)] p-4"

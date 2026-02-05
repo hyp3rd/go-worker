@@ -31,8 +31,27 @@ const formatAge = (ageMs: number) => {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
+    const params = new URLSearchParams();
     const limitParam = url.searchParams.get("limit");
-    const limit = limitParam ? Number(limitParam) : undefined;
+    const offsetParam = url.searchParams.get("offset");
+    const queue = url.searchParams.get("queue");
+    const handler = url.searchParams.get("handler");
+    const query = url.searchParams.get("query");
+    if (limitParam) {
+      params.set("limit", limitParam);
+    }
+    if (offsetParam) {
+      params.set("offset", offsetParam);
+    }
+    if (queue) {
+      params.set("queue", queue);
+    }
+    if (handler) {
+      params.set("handler", handler);
+    }
+    if (query) {
+      params.set("query", query);
+    }
 
     const payload = await gatewayRequest<{
       entries: Array<{
@@ -42,9 +61,10 @@ export async function GET(request: Request) {
         attempts: number;
         ageMs: number;
       }>;
+      total: number;
     }>({
       method: "GET",
-      path: `/admin/v1/dlq${limit ? `?limit=${limit}` : ""}`,
+      path: `/admin/v1/dlq${params.toString() ? `?${params.toString()}` : ""}`,
     });
 
     const entries: DlqEntry[] = payload.entries.map((entry) => ({
@@ -55,7 +75,7 @@ export async function GET(request: Request) {
       age: formatAge(entry.ageMs),
     }));
 
-    return NextResponse.json({ entries });
+    return NextResponse.json({ entries, total: payload.total });
   } catch (error) {
     return NextResponse.json(
       { error: (error as Error).message ?? "admin_gateway_unavailable" },

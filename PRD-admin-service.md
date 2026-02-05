@@ -24,8 +24,13 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
          - Return coordination state (global rate limit, leader lock, pause state).
 1. **Queue data**
          - Return per-queue ready/processing/dead counts and weights.
+         - Return queue detail by name (single-queue view).
+1. **Schedules**
+         - List cron schedules with spec and next/previous run.
+1. **Health**
+         - Report service health and build information (version, commit, Go version).
 1. **DLQ**
-         - List DLQ entries (bounded, paginated by limit).
+         - List DLQ entries (bounded, paginated by limit/offset, with optional filters).
          - Replay DLQ entries (bounded limit).
 1. **Actions**
          - Pause durable dequeue.
@@ -47,7 +52,10 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
 Service: `worker.v1.AdminService`
 
 - `GetOverview(GetOverviewRequest) returns (GetOverviewResponse)`
+- `GetHealth(GetHealthRequest) returns (GetHealthResponse)`
 - `ListQueues(ListQueuesRequest) returns (ListQueuesResponse)`
+- `GetQueue(GetQueueRequest) returns (GetQueueResponse)`
+- `ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse)`
 - `ListDLQ(ListDLQRequest) returns (ListDLQResponse)`
 - `PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse)`
 - `ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse)`
@@ -55,9 +63,12 @@ Service: `worker.v1.AdminService`
 
 ### HTTP Gateway
 
+- `GET /admin/v1/health`
 - `GET /admin/v1/overview`
 - `GET /admin/v1/queues`
-- `GET /admin/v1/dlq?limit=100`
+- `GET /admin/v1/queues/{name}`
+- `GET /admin/v1/schedules`
+- `GET /admin/v1/dlq?limit=100&offset=0&queue=default&handler=send_email&query=oops`
 - `POST /admin/v1/pause`
 - `POST /admin/v1/resume`
 - `POST /admin/v1/dlq/replay` (body: `{ "limit": 100 }`)

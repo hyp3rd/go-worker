@@ -6,6 +6,8 @@ export type QueueSummary = {
   weight: number;
 };
 
+export type QueueDetail = QueueSummary;
+
 export type JobSchedule = {
   name: string;
   schedule: string;
@@ -34,4 +36,12 @@ export type CoordinationStatus = {
   leaderLock: string;
   lease: string;
   paused: boolean;
+};
+
+export type HealthInfo = {
+  status: string;
+  version: string;
+  commit: string;
+  buildTime: string;
+  goVersion: string;
 };

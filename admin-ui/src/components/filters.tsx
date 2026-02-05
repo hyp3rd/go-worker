@@ -5,18 +5,24 @@ import { useMemo, useState } from "react";
 export function FilterBar({
   placeholder,
   statusOptions,
+  initialQuery,
+  initialStatus,
   onQuery,
   onStatus,
   rightSlot,
 }: {
   placeholder: string;
   statusOptions?: string[];
+  initialQuery?: string;
+  initialStatus?: string;
   onQuery: (value: string) => void;
   onStatus?: (value: string) => void;
   rightSlot?: React.ReactNode;
 }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState(statusOptions?.[0] ?? "all");
+  const [query, setQuery] = useState(initialQuery ?? "");
+  const [status, setStatus] = useState(
+    initialStatus ?? statusOptions?.[0] ?? "all"
+  );
 
   useMemo(() => {
     onQuery(query);

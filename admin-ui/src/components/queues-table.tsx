@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { QueueSummary } from "@/lib/types";
 import { formatNumber } from "@/lib/format";
@@ -44,7 +45,12 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
         {paged.map((queue) => (
           <TableRow key={queue.name}>
             <TableCell>
-              <span className="font-semibold">{queue.name}</span>
+              <Link
+                href={`/queues/${encodeURIComponent(queue.name)}`}
+                className="font-semibold text-black hover:text-black/70"
+              >
+                {queue.name}
+              </Link>
             </TableCell>
             <TableCell>{formatNumber(queue.ready)}</TableCell>
             <TableCell>{formatNumber(queue.processing)}</TableCell>

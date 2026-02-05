@@ -150,8 +150,8 @@ Status updated: **_February 5, 2026_**
 
 ### Admin Service & Admin UI
 
-- **Admin Service (gRPC + HTTP gateway)**: Done (mTLS required, request IDs, timeouts, and consistent error envelope).
-- **Admin UI (Next.js + Tailwind)**: Done (overview/queues/DLQ/schedules, runbook actions, session auth, audit banner).
+- **Admin Service (gRPC + HTTP gateway)**: Done (mTLS required, request IDs, timeouts, consistent error envelope, queue detail, DLQ pagination/filters, schedules, health/version).
+- **Admin UI (Next.js + Tailwind)**: Done (overview/queues/DLQ/schedules, queue detail page, server-side DLQ paging, runbook actions, session auth, audit banner).
 - **Docker/Compose**: Done (`Dockerfile` + `compose.admin.yaml` + cert generation script).
 - **UI polish**: In progress (settings metadata panel added; continued UX refinements ongoing).
 

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"time"
 
 	"github.com/hyp3rd/ewrap"
 )
@@ -11,6 +12,12 @@ var (
 	ErrAdminBackendUnavailable = ewrap.New("admin backend unavailable")
 	// ErrAdminUnsupported indicates the backend does not support the admin operation.
 	ErrAdminUnsupported = ewrap.New("admin operation unsupported")
+	// ErrAdminQueueNotFound indicates the queue was not found.
+	ErrAdminQueueNotFound = ewrap.New("admin queue not found")
+	// ErrAdminQueueNameRequired indicates a queue name is required.
+	ErrAdminQueueNameRequired = ewrap.New("admin queue name is required")
+	// ErrAdminDLQFilterTooLarge indicates the DLQ is too large for filtered queries.
+	ErrAdminDLQFilterTooLarge = ewrap.New("DLQ too large for filtered query")
 )
 
 // AdminOverview describes the admin overview snapshot.
@@ -49,11 +56,37 @@ type AdminDLQEntry struct {
 	AgeMs    int64
 }
 
+// AdminSchedule represents a cron schedule entry.
+type AdminSchedule struct {
+	Name    string
+	Spec    string
+	NextRun time.Time
+	LastRun time.Time
+	Durable bool
+}
+
+// AdminDLQFilter controls DLQ listing.
+type AdminDLQFilter struct {
+	Limit   int
+	Offset  int
+	Queue   string
+	Handler string
+	Query   string
+}
+
+// AdminDLQPage represents a page of DLQ entries.
+type AdminDLQPage struct {
+	Entries []AdminDLQEntry
+	Total   int64
+}
+
 // AdminBackend provides admin data and actions for a backend.
 type AdminBackend interface {
 	AdminOverview(ctx context.Context) (AdminOverview, error)
 	AdminQueues(ctx context.Context) ([]AdminQueueSummary, error)
-	AdminDLQ(ctx context.Context, limit int) ([]AdminDLQEntry, error)
+	AdminQueue(ctx context.Context, name string) (AdminQueueSummary, error)
+	AdminSchedules(ctx context.Context) ([]AdminSchedule, error)
+	AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error)
 	AdminPause(ctx context.Context) error
 	AdminResume(ctx context.Context) error
 	AdminReplayDLQ(ctx context.Context, limit int) (int, error)

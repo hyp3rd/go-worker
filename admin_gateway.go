@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -39,6 +40,7 @@ const (
 	adminRequestTimeout   = 5 * time.Second
 	adminRequestIDHeader  = "X-Request-Id"
 	adminRequestIDMetaKey = "x-request-id"
+	adminScheduleLag      = 2 * time.Minute
 )
 
 // AdminGatewayConfig configures the admin HTTP gateway.
@@ -147,8 +149,11 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	handler := &adminGatewayHandler{client: client}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/admin/v1/health", handler.handleHealth)
 	mux.HandleFunc("/admin/v1/overview", handler.handleOverview)
 	mux.HandleFunc("/admin/v1/queues", handler.handleQueues)
+	mux.HandleFunc("/admin/v1/queues/", handler.handleQueue)
+	mux.HandleFunc("/admin/v1/schedules", handler.handleSchedules)
 	mux.HandleFunc("/admin/v1/dlq", handler.handleDLQ)
 	mux.HandleFunc("/admin/v1/pause", handler.handlePause)
 	mux.HandleFunc("/admin/v1/resume", handler.handleResume)
@@ -173,6 +178,37 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 
 type adminGatewayHandler struct {
 	client workerpb.AdminServiceClient
+}
+
+func (h *adminGatewayHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetHealth(ctx, &workerpb.GetHealthRequest{})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	payload := adminHealthJSON{
+		Status:    resp.GetStatus(),
+		Version:   resp.GetVersion(),
+		Commit:    resp.GetCommit(),
+		BuildTime: resp.GetBuildTime(),
+		GoVersion: resp.GetGoVersion(),
+	}
+
+	writeAdminJSON(w, http.StatusOK, payload)
 }
 
 func (h *adminGatewayHandler) handleOverview(w http.ResponseWriter, r *http.Request) {
@@ -248,14 +284,28 @@ func (h *adminGatewayHandler) handleQueues(w http.ResponseWriter, r *http.Reques
 	writeAdminJSON(w, http.StatusOK, adminQueuesJSON{Queues: queues})
 }
 
-func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) {
+func (h *adminGatewayHandler) handleQueue(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
 
 		return
 	}
 
-	limit := parseIntParam(r.URL.Query().Get("limit"), defaultAdminDLQLimit)
+	name := strings.TrimPrefix(r.URL.Path, "/admin/v1/queues/")
+
+	name = strings.Trim(name, "/")
+	if name == "" {
+		writeAdminError(w, http.StatusBadRequest, "missing_queue", "Queue name is required", requestID(r, w))
+
+		return
+	}
+
+	name, err := url.PathUnescape(name)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_queue", "Invalid queue name", requestID(r, w))
+
+		return
+	}
 
 	reqID := requestID(r, w)
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
@@ -263,7 +313,54 @@ func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) 
 
 	defer cancel()
 
-	resp, err := h.client.ListDLQ(ctx, &workerpb.ListDLQRequest{Limit: clampLimit32(limit)})
+	resp, err := h.client.GetQueue(ctx, &workerpb.GetQueueRequest{Name: name})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	queue := resp.GetQueue()
+	payload := adminQueueJSON{
+		Queue: queueSummaryJSON{
+			Name:       queue.GetName(),
+			Ready:      queue.GetReady(),
+			Processing: queue.GetProcessing(),
+			Dead:       queue.GetDead(),
+			Weight:     queue.GetWeight(),
+		},
+	}
+
+	writeAdminJSON(w, http.StatusOK, payload)
+}
+
+func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	queryValues := r.URL.Query()
+	limit := parseIntParam(queryValues.Get("limit"), defaultAdminDLQLimit)
+	offset := parseOffsetParam(queryValues.Get("offset"))
+	queueFilter := strings.TrimSpace(queryValues.Get("queue"))
+	handlerFilter := strings.TrimSpace(queryValues.Get("handler"))
+	queryFilter := strings.TrimSpace(queryValues.Get("query"))
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListDLQ(ctx, &workerpb.ListDLQRequest{
+		Limit:   clampLimit32(limit),
+		Offset:  clampLimit32(offset),
+		Queue:   queueFilter,
+		Handler: handlerFilter,
+		Query:   queryFilter,
+	})
 	if err != nil {
 		writeAdminGRPCError(w, reqID, err)
 
@@ -281,7 +378,7 @@ func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	writeAdminJSON(w, http.StatusOK, adminDLQJSON{Entries: entries})
+	writeAdminJSON(w, http.StatusOK, adminDLQJSON{Entries: entries, Total: resp.GetTotal()})
 }
 
 func (h *adminGatewayHandler) handlePause(w http.ResponseWriter, r *http.Request) {
@@ -373,6 +470,52 @@ func (h *adminGatewayHandler) handleReplay(w http.ResponseWriter, r *http.Reques
 	writeAdminJSON(w, http.StatusOK, adminReplayJSON{Moved: resp.GetMoved()})
 }
 
+func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListSchedules(ctx, &workerpb.ListSchedulesRequest{})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	schedules := make([]scheduleJSON, 0, len(resp.GetSchedules()))
+	for _, schedule := range resp.GetSchedules() {
+		nextRunMs := schedule.GetNextRunMs()
+		nextRun := time.Time{}
+		scheduleStatus := "healthy"
+
+		if nextRunMs <= 0 {
+			scheduleStatus = "paused"
+		} else {
+			nextRun = time.UnixMilli(nextRunMs)
+			if nextRun.Before(time.Now().Add(-adminScheduleLag)) {
+				scheduleStatus = "lagging"
+			}
+		}
+
+		schedules = append(schedules, scheduleJSON{
+			Name:     schedule.GetName(),
+			Schedule: schedule.GetSpec(),
+			NextRun:  formatScheduleNext(nextRun),
+			Status:   scheduleStatus,
+		})
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminSchedulesJSON{Schedules: schedules})
+}
+
 type adminOverviewJSON struct {
 	Stats        overviewStatsJSON `json:"stats"`
 	Coordination coordinationJSON  `json:"coordination"`
@@ -397,6 +540,21 @@ type adminQueuesJSON struct {
 	Queues []queueSummaryJSON `json:"queues"`
 }
 
+type adminQueueJSON struct {
+	Queue queueSummaryJSON `json:"queue"`
+}
+
+type adminSchedulesJSON struct {
+	Schedules []scheduleJSON `json:"schedules"`
+}
+
+type scheduleJSON struct {
+	Name     string `json:"name"`
+	Schedule string `json:"schedule"`
+	NextRun  string `json:"nextRun"`
+	Status   string `json:"status"`
+}
+
 type queueSummaryJSON struct {
 	Name       string `json:"name"`
 	Ready      int64  `json:"ready"`
@@ -407,6 +565,7 @@ type queueSummaryJSON struct {
 
 type adminDLQJSON struct {
 	Entries []dlqEntryJSON `json:"entries"`
+	Total   int64          `json:"total"`
 }
 
 type dlqEntryJSON struct {
@@ -427,6 +586,14 @@ type adminResumeJSON struct {
 
 type adminReplayJSON struct {
 	Moved int32 `json:"moved"`
+}
+
+type adminHealthJSON struct {
+	Status    string `json:"status"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildTime string `json:"buildTime"`
+	GoVersion string `json:"goVersion"`
 }
 
 func writeAdminJSON(w http.ResponseWriter, statusCode int, payload any) {
@@ -477,6 +644,19 @@ func parseIntParam(raw string, fallback int) int {
 	value, err := strconv.Atoi(raw)
 	if err != nil || value <= 0 {
 		return fallback
+	}
+
+	return value
+}
+
+func parseOffsetParam(raw string) int {
+	if raw == "" {
+		return 0
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		return 0
 	}
 
 	return value
@@ -562,6 +742,19 @@ func grpcToHTTPStatus() map[codes.Code]int {
 		codes.Canceled:           http.StatusRequestTimeout,
 		codes.Unknown:            http.StatusBadGateway,
 	}
+}
+
+func formatScheduleNext(next time.Time) string {
+	if next.IsZero() {
+		return adminNotAvailable
+	}
+
+	now := time.Now()
+	if next.Before(now) {
+		return "overdue"
+	}
+
+	return "in " + formatAdminDuration(next.Sub(now))
 }
 
 type adminErrorEnvelope struct {

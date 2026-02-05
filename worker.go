@@ -99,6 +99,7 @@ type TaskManager struct {
 	cron        *cron.Cron
 	cronEntries map[string]cron.EntryID
 	cronLoc     *time.Location
+	cronSpecs   map[string]cronSpec
 }
 
 // NewTaskManagerWithDefaults creates a new task manager with default values.
@@ -223,6 +224,7 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 		durableEnabled:      durableEnabled,
 		cronLoc:             cfg.cronLocation,
 		cronEntries:         map[string]cron.EntryID{},
+		cronSpecs:           map[string]cronSpec{},
 	}
 
 	tm.queueCond = sync.NewCond(&tm.queueMu)

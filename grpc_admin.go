@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/hyp3rd/ewrap"
 	"google.golang.org/grpc/codes"
@@ -19,6 +20,24 @@ func (s *GRPCServer) adminBackend() (AdminBackend, error) {
 	}
 
 	return s.admin, nil
+}
+
+// GetHealth returns build and runtime info for the admin service.
+func (s *GRPCServer) GetHealth(ctx context.Context, req *workerpb.GetHealthRequest) (*workerpb.GetHealthResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_GetHealth_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	info := readBuildInfo()
+
+	return &workerpb.GetHealthResponse{
+		Status:    "ok",
+		Version:   info.Version,
+		Commit:    info.Commit,
+		BuildTime: info.BuildTime,
+		GoVersion: info.GoVersion,
+	}, nil
 }
 
 // GetOverview returns the admin overview snapshot.
@@ -93,6 +112,80 @@ func (s *GRPCServer) ListQueues(ctx context.Context, req *workerpb.ListQueuesReq
 	return resp, nil
 }
 
+// GetQueue returns a queue summary by name.
+func (s *GRPCServer) GetQueue(ctx context.Context, req *workerpb.GetQueueRequest) (*workerpb.GetQueueResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_GetQueue_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	name := strings.TrimSpace(req.GetName())
+
+	queue, err := backend.AdminQueue(ctx, name)
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.GetQueueResponse{
+		Queue: &workerpb.QueueSummary{
+			Name:       queue.Name,
+			Ready:      queue.Ready,
+			Processing: queue.Processing,
+			Dead:       queue.Dead,
+			Weight:     clampInt32(queue.Weight),
+		},
+	}, nil
+}
+
+// ListSchedules returns cron schedule summaries.
+func (s *GRPCServer) ListSchedules(ctx context.Context, req *workerpb.ListSchedulesRequest) (*workerpb.ListSchedulesResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_ListSchedules_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	schedules, err := backend.AdminSchedules(ctx)
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	resp := &workerpb.ListSchedulesResponse{
+		Schedules: make([]*workerpb.ScheduleEntry, 0, len(schedules)),
+	}
+
+	for _, schedule := range schedules {
+		nextRun := int64(0)
+		if !schedule.NextRun.IsZero() {
+			nextRun = schedule.NextRun.UnixMilli()
+		}
+
+		lastRun := int64(0)
+		if !schedule.LastRun.IsZero() {
+			lastRun = schedule.LastRun.UnixMilli()
+		}
+
+		resp.Schedules = append(resp.Schedules, &workerpb.ScheduleEntry{
+			Name:      schedule.Name,
+			Spec:      schedule.Spec,
+			NextRunMs: nextRun,
+			LastRunMs: lastRun,
+			Durable:   schedule.Durable,
+		})
+	}
+
+	return resp, nil
+}
+
 // ListDLQ returns DLQ entries.
 func (s *GRPCServer) ListDLQ(ctx context.Context, req *workerpb.ListDLQRequest) (*workerpb.ListDLQResponse, error) {
 	err := s.authorize(ctx, workerpb.AdminService_ListDLQ_FullMethodName, req)
@@ -110,16 +203,27 @@ func (s *GRPCServer) ListDLQ(ctx context.Context, req *workerpb.ListDLQRequest) 
 		limit = defaultAdminDLQLimit
 	}
 
-	entries, err := backend.AdminDLQ(ctx, limit)
+	offset := max(int(req.GetOffset()), 0)
+
+	filter := AdminDLQFilter{
+		Limit:   limit,
+		Offset:  offset,
+		Queue:   strings.TrimSpace(req.GetQueue()),
+		Handler: strings.TrimSpace(req.GetHandler()),
+		Query:   strings.TrimSpace(req.GetQuery()),
+	}
+
+	page, err := backend.AdminDLQ(ctx, filter)
 	if err != nil {
 		return nil, toAdminStatus(err)
 	}
 
 	resp := &workerpb.ListDLQResponse{
-		Entries: make([]*workerpb.DLQEntry, 0, len(entries)),
+		Entries: make([]*workerpb.DLQEntry, 0, len(page.Entries)),
+		Total:   page.Total,
 	}
 
-	for _, entry := range entries {
+	for _, entry := range page.Entries {
 		resp.Entries = append(resp.Entries, &workerpb.DLQEntry{
 			Id:       entry.ID,
 			Queue:    entry.Queue,
@@ -220,6 +324,18 @@ func toAdminStatus(err error) error {
 
 	if errors.Is(err, ErrInvalidTaskContext) {
 		return ewrap.Wrap(status.Error(codes.InvalidArgument, err.Error()), "invalid task context")
+	}
+
+	if errors.Is(err, ErrAdminQueueNameRequired) {
+		return ewrap.Wrap(status.Error(codes.InvalidArgument, err.Error()), "queue name required")
+	}
+
+	if errors.Is(err, ErrAdminQueueNotFound) {
+		return ewrap.Wrap(status.Error(codes.NotFound, err.Error()), "queue not found")
+	}
+
+	if errors.Is(err, ErrAdminDLQFilterTooLarge) {
+		return ewrap.Wrap(status.Error(codes.ResourceExhausted, err.Error()), "dlq filter too large")
 	}
 
 	if _, ok := status.FromError(err); ok {

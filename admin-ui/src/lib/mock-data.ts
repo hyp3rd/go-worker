@@ -1,6 +1,7 @@
 import type {
   CoordinationStatus,
   DlqEntry,
+  HealthInfo,
   JobSchedule,
   OverviewStats,
   QueueSummary,
@@ -82,3 +83,11 @@ export const dlqEntries: DlqEntry[] = [
     attempts: 5,
   },
 ];
+
+export const healthInfo: HealthInfo = {
+  status: "ok",
+  version: "dev",
+  commit: "",
+  buildTime: "",
+  goVersion: "go",
+};

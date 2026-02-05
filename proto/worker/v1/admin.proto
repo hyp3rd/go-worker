@@ -26,6 +26,16 @@ message GetOverviewResponse {
   CoordinationStatus coordination = 2;
 }
 
+message GetHealthRequest {}
+
+message GetHealthResponse {
+  string status = 1;
+  string version = 2;
+  string commit = 3;
+  string build_time = 4;
+  string go_version = 5;
+}
+
 message QueueSummary {
   string name = 1;
   int64 ready = 2;
@@ -40,6 +50,28 @@ message ListQueuesResponse {
   repeated QueueSummary queues = 1;
 }
 
+message GetQueueRequest {
+  string name = 1;
+}
+
+message GetQueueResponse {
+  QueueSummary queue = 1;
+}
+
+message ScheduleEntry {
+  string name = 1;
+  string spec = 2;
+  int64 next_run_ms = 3;
+  int64 last_run_ms = 4;
+  bool durable = 5;
+}
+
+message ListSchedulesRequest {}
+
+message ListSchedulesResponse {
+  repeated ScheduleEntry schedules = 1;
+}
+
 message DLQEntry {
   string id = 1;
   string queue = 2;
@@ -50,10 +82,15 @@ message DLQEntry {
 
 message ListDLQRequest {
   int32 limit = 1;
+  int32 offset = 2;
+  string queue = 3;
+  string handler = 4;
+  string query = 5;
 }
 
 message ListDLQResponse {
   repeated DLQEntry entries = 1;
+  int64 total = 2;
 }
 
 message PauseDequeueRequest {}
@@ -77,8 +114,11 @@ message ReplayDLQResponse {
 }
 
 service AdminService {
+  rpc GetHealth(GetHealthRequest) returns (GetHealthResponse);
   rpc GetOverview(GetOverviewRequest) returns (GetOverviewResponse);
   rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
+  rpc GetQueue(GetQueueRequest) returns (GetQueueResponse);
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
   rpc ListDLQ(ListDLQRequest) returns (ListDLQResponse);
   rpc PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse);
   rpc ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse);

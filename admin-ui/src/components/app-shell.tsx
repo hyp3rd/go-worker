@@ -1,6 +1,7 @@
 import { Nav } from "@/components/nav";
 import { SessionActions } from "@/components/session-actions";
 import { SessionExpiry } from "@/components/session-expiry";
+import { StatusBanner } from "@/components/status-banner";
 import type { CoordinationStatus } from "@/lib/types";
 
 type AuditNotice = {
@@ -99,6 +100,8 @@ export function AppShell({
               <SessionActions />
             </div>
           </header>
+
+          <StatusBanner initialCoordination={coordination ?? null} />
 
           {audit ? (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">

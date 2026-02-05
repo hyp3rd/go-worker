@@ -2,8 +2,10 @@ import { headers } from "next/headers";
 import type {
   CoordinationStatus,
   DlqEntry,
+  HealthInfo,
   JobSchedule,
   OverviewStats,
+  QueueDetail,
   QueueSummary,
 } from "@/lib/types";
 
@@ -59,14 +61,49 @@ export async function fetchOverview(): Promise<{
   return fetchJson("/api/overview");
 }
 
+export async function fetchHealth(): Promise<HealthInfo> {
+  return fetchJson("/api/health");
+}
+
 export async function fetchQueues(): Promise<{ queues: QueueSummary[] }> {
   return fetchJson("/api/queues");
+}
+
+export async function fetchQueueDetail(
+  name: string
+): Promise<{ queue: QueueDetail }> {
+  const encoded = encodeURIComponent(name);
+  return fetchJson(`/api/queues/${encoded}`);
 }
 
 export async function fetchSchedules(): Promise<{ schedules: JobSchedule[] }> {
   return fetchJson("/api/schedules");
 }
 
-export async function fetchDlq(): Promise<{ entries: DlqEntry[] }> {
-  return fetchJson("/api/dlq");
+export async function fetchDlq(params?: {
+  limit?: number;
+  offset?: number;
+  queue?: string;
+  handler?: string;
+  query?: string;
+}): Promise<{ entries: DlqEntry[]; total: number }> {
+  const search = new URLSearchParams();
+  if (params?.limit) {
+    search.set("limit", String(params.limit));
+  }
+  if (params?.offset) {
+    search.set("offset", String(params.offset));
+  }
+  if (params?.queue) {
+    search.set("queue", params.queue);
+  }
+  if (params?.handler) {
+    search.set("handler", params.handler);
+  }
+  if (params?.query) {
+    search.set("query", params.query);
+  }
+  const suffix = search.toString();
+  const path = suffix ? `/api/dlq?${suffix}` : "/api/dlq";
+  return fetchJson(path);
 }

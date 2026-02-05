@@ -2,6 +2,7 @@ import { SectionHeader } from "@/components/section-header";
 import { StatCard } from "@/components/stat-card";
 import { StatusPill } from "@/components/status-pill";
 import { RunbookActions } from "@/components/runbook-actions";
+import { RefreshControls } from "@/components/refresh-controls";
 import {
   getCoordinationStatus,
   getJobSchedules,
@@ -46,9 +47,12 @@ export default async function Home() {
             title="Queue health"
             description="Weighted queues with deterministic scheduling."
             action={
-              <button className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white">
-                Add queue
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <RefreshControls />
+                <button className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white">
+                  Add queue
+                </button>
+              </div>
             }
           />
           <div className="mt-6 space-y-4">

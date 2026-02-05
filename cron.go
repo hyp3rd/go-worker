@@ -18,6 +18,11 @@ type CronTaskFactory func(ctx context.Context) (*Task, error)
 // CronDurableFactory builds a durable task when a cron schedule fires.
 type CronDurableFactory func(ctx context.Context) (DurableTask, error)
 
+type cronSpec struct {
+	Spec    string
+	Durable bool
+}
+
 // RegisterCronTask registers a cron job that enqueues a task on each tick.
 func (tm *TaskManager) RegisterCronTask(
 	ctx context.Context,
@@ -66,6 +71,7 @@ func (tm *TaskManager) RegisterCronTask(
 	}))
 
 	tm.cronEntries[normalized] = entryID
+	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: false}
 
 	return nil
 }
@@ -112,6 +118,7 @@ func (tm *TaskManager) RegisterDurableCronTask(
 	}))
 
 	tm.cronEntries[normalized] = entryID
+	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: true}
 
 	return nil
 }
@@ -177,6 +184,7 @@ func (tm *TaskManager) UnregisterCronTask(name string) bool {
 
 	tm.cron.Remove(entryID)
 	delete(tm.cronEntries, name)
+	delete(tm.cronSpecs, name)
 
 	return true
 }

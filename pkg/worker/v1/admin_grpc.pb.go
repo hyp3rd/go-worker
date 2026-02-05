@@ -8,7 +8,6 @@ package workerpb
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -20,8 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	AdminService_GetHealth_FullMethodName     = "/worker.v1.AdminService/GetHealth"
 	AdminService_GetOverview_FullMethodName   = "/worker.v1.AdminService/GetOverview"
 	AdminService_ListQueues_FullMethodName    = "/worker.v1.AdminService/ListQueues"
+	AdminService_GetQueue_FullMethodName      = "/worker.v1.AdminService/GetQueue"
+	AdminService_ListSchedules_FullMethodName = "/worker.v1.AdminService/ListSchedules"
 	AdminService_ListDLQ_FullMethodName       = "/worker.v1.AdminService/ListDLQ"
 	AdminService_PauseDequeue_FullMethodName  = "/worker.v1.AdminService/PauseDequeue"
 	AdminService_ResumeDequeue_FullMethodName = "/worker.v1.AdminService/ResumeDequeue"
@@ -32,8 +34,11 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AdminServiceClient interface {
+	GetHealth(ctx context.Context, in *GetHealthRequest, opts ...grpc.CallOption) (*GetHealthResponse, error)
 	GetOverview(ctx context.Context, in *GetOverviewRequest, opts ...grpc.CallOption) (*GetOverviewResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
+	GetQueue(ctx context.Context, in *GetQueueRequest, opts ...grpc.CallOption) (*GetQueueResponse, error)
+	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
 	ListDLQ(ctx context.Context, in *ListDLQRequest, opts ...grpc.CallOption) (*ListDLQResponse, error)
 	PauseDequeue(ctx context.Context, in *PauseDequeueRequest, opts ...grpc.CallOption) (*PauseDequeueResponse, error)
 	ResumeDequeue(ctx context.Context, in *ResumeDequeueRequest, opts ...grpc.CallOption) (*ResumeDequeueResponse, error)
@@ -46,6 +51,16 @@ type adminServiceClient struct {
 
 func NewAdminServiceClient(cc grpc.ClientConnInterface) AdminServiceClient {
 	return &adminServiceClient{cc}
+}
+
+func (c *adminServiceClient) GetHealth(ctx context.Context, in *GetHealthRequest, opts ...grpc.CallOption) (*GetHealthResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetHealthResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetHealth_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *adminServiceClient) GetOverview(ctx context.Context, in *GetOverviewRequest, opts ...grpc.CallOption) (*GetOverviewResponse, error) {
@@ -62,6 +77,26 @@ func (c *adminServiceClient) ListQueues(ctx context.Context, in *ListQueuesReque
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListQueuesResponse)
 	err := c.cc.Invoke(ctx, AdminService_ListQueues_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) GetQueue(ctx context.Context, in *GetQueueRequest, opts ...grpc.CallOption) (*GetQueueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetQueueResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetQueue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSchedulesResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListSchedules_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +147,11 @@ func (c *adminServiceClient) ReplayDLQ(ctx context.Context, in *ReplayDLQRequest
 // All implementations should embed UnimplementedAdminServiceServer
 // for forward compatibility.
 type AdminServiceServer interface {
+	GetHealth(context.Context, *GetHealthRequest) (*GetHealthResponse, error)
 	GetOverview(context.Context, *GetOverviewRequest) (*GetOverviewResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
+	GetQueue(context.Context, *GetQueueRequest) (*GetQueueResponse, error)
+	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
 	ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error)
 	PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error)
 	ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error)
@@ -127,26 +165,30 @@ type AdminServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAdminServiceServer struct{}
 
+func (UnimplementedAdminServiceServer) GetHealth(context.Context, *GetHealthRequest) (*GetHealthResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetHealth not implemented")
+}
 func (UnimplementedAdminServiceServer) GetOverview(context.Context, *GetOverviewRequest) (*GetOverviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOverview not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListQueues not implemented")
 }
-
+func (UnimplementedAdminServiceServer) GetQueue(context.Context, *GetQueueRequest) (*GetQueueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetQueue not implemented")
+}
+func (UnimplementedAdminServiceServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSchedules not implemented")
+}
 func (UnimplementedAdminServiceServer) ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDLQ not implemented")
 }
-
 func (UnimplementedAdminServiceServer) PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseDequeue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeDequeue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ReplayDLQ(context.Context, *ReplayDLQRequest) (*ReplayDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReplayDLQ not implemented")
 }
@@ -168,6 +210,24 @@ func RegisterAdminServiceServer(s grpc.ServiceRegistrar, srv AdminServiceServer)
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&AdminService_ServiceDesc, srv)
+}
+
+func _AdminService_GetHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetHealthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetHealth_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetHealth(ctx, req.(*GetHealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _AdminService_GetOverview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -202,6 +262,42 @@ func _AdminService_ListQueues_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).ListQueues(ctx, req.(*ListQueuesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_GetQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetQueue(ctx, req.(*GetQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListSchedules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSchedulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListSchedules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListSchedules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListSchedules(ctx, req.(*ListSchedulesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -286,12 +382,24 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*AdminServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "GetHealth",
+			Handler:    _AdminService_GetHealth_Handler,
+		},
+		{
 			MethodName: "GetOverview",
 			Handler:    _AdminService_GetOverview_Handler,
 		},
 		{
 			MethodName: "ListQueues",
 			Handler:    _AdminService_ListQueues_Handler,
+		},
+		{
+			MethodName: "GetQueue",
+			Handler:    _AdminService_GetQueue_Handler,
+		},
+		{
+			MethodName: "ListSchedules",
+			Handler:    _AdminService_ListSchedules_Handler,
 		},
 		{
 			MethodName: "ListDLQ",

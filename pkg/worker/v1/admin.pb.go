@@ -7,12 +7,11 @@
 package workerpb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -254,6 +253,118 @@ func (x *GetOverviewResponse) GetCoordination() *CoordinationStatus {
 	return nil
 }
 
+type GetHealthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHealthRequest) Reset() {
+	*x = GetHealthRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHealthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHealthRequest) ProtoMessage() {}
+
+func (x *GetHealthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHealthRequest.ProtoReflect.Descriptor instead.
+func (*GetHealthRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{4}
+}
+
+type GetHealthResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Commit        string                 `protobuf:"bytes,3,opt,name=commit,proto3" json:"commit,omitempty"`
+	BuildTime     string                 `protobuf:"bytes,4,opt,name=build_time,json=buildTime,proto3" json:"build_time,omitempty"`
+	GoVersion     string                 `protobuf:"bytes,5,opt,name=go_version,json=goVersion,proto3" json:"go_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHealthResponse) Reset() {
+	*x = GetHealthResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHealthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHealthResponse) ProtoMessage() {}
+
+func (x *GetHealthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHealthResponse.ProtoReflect.Descriptor instead.
+func (*GetHealthResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetHealthResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *GetHealthResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *GetHealthResponse) GetCommit() string {
+	if x != nil {
+		return x.Commit
+	}
+	return ""
+}
+
+func (x *GetHealthResponse) GetBuildTime() string {
+	if x != nil {
+		return x.BuildTime
+	}
+	return ""
+}
+
+func (x *GetHealthResponse) GetGoVersion() string {
+	if x != nil {
+		return x.GoVersion
+	}
+	return ""
+}
+
 type QueueSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -267,7 +378,7 @@ type QueueSummary struct {
 
 func (x *QueueSummary) Reset() {
 	*x = QueueSummary{}
-	mi := &file_worker_v1_admin_proto_msgTypes[4]
+	mi := &file_worker_v1_admin_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -279,7 +390,7 @@ func (x *QueueSummary) String() string {
 func (*QueueSummary) ProtoMessage() {}
 
 func (x *QueueSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[4]
+	mi := &file_worker_v1_admin_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -292,7 +403,7 @@ func (x *QueueSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueSummary.ProtoReflect.Descriptor instead.
 func (*QueueSummary) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{4}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *QueueSummary) GetName() string {
@@ -338,7 +449,7 @@ type ListQueuesRequest struct {
 
 func (x *ListQueuesRequest) Reset() {
 	*x = ListQueuesRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[5]
+	mi := &file_worker_v1_admin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -350,7 +461,7 @@ func (x *ListQueuesRequest) String() string {
 func (*ListQueuesRequest) ProtoMessage() {}
 
 func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[5]
+	mi := &file_worker_v1_admin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -363,7 +474,7 @@ func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesRequest.ProtoReflect.Descriptor instead.
 func (*ListQueuesRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{5}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{7}
 }
 
 type ListQueuesResponse struct {
@@ -375,7 +486,7 @@ type ListQueuesResponse struct {
 
 func (x *ListQueuesResponse) Reset() {
 	*x = ListQueuesResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[6]
+	mi := &file_worker_v1_admin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -387,7 +498,7 @@ func (x *ListQueuesResponse) String() string {
 func (*ListQueuesResponse) ProtoMessage() {}
 
 func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[6]
+	mi := &file_worker_v1_admin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -400,12 +511,256 @@ func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesResponse.ProtoReflect.Descriptor instead.
 func (*ListQueuesResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{6}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListQueuesResponse) GetQueues() []*QueueSummary {
 	if x != nil {
 		return x.Queues
+	}
+	return nil
+}
+
+type GetQueueRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetQueueRequest) Reset() {
+	*x = GetQueueRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetQueueRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetQueueRequest) ProtoMessage() {}
+
+func (x *GetQueueRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetQueueRequest.ProtoReflect.Descriptor instead.
+func (*GetQueueRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetQueueRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetQueueResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Queue         *QueueSummary          `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetQueueResponse) Reset() {
+	*x = GetQueueResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetQueueResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetQueueResponse) ProtoMessage() {}
+
+func (x *GetQueueResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetQueueResponse.ProtoReflect.Descriptor instead.
+func (*GetQueueResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetQueueResponse) GetQueue() *QueueSummary {
+	if x != nil {
+		return x.Queue
+	}
+	return nil
+}
+
+type ScheduleEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Spec          string                 `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
+	NextRunMs     int64                  `protobuf:"varint,3,opt,name=next_run_ms,json=nextRunMs,proto3" json:"next_run_ms,omitempty"`
+	LastRunMs     int64                  `protobuf:"varint,4,opt,name=last_run_ms,json=lastRunMs,proto3" json:"last_run_ms,omitempty"`
+	Durable       bool                   `protobuf:"varint,5,opt,name=durable,proto3" json:"durable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ScheduleEntry) Reset() {
+	*x = ScheduleEntry{}
+	mi := &file_worker_v1_admin_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScheduleEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScheduleEntry) ProtoMessage() {}
+
+func (x *ScheduleEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScheduleEntry.ProtoReflect.Descriptor instead.
+func (*ScheduleEntry) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ScheduleEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ScheduleEntry) GetSpec() string {
+	if x != nil {
+		return x.Spec
+	}
+	return ""
+}
+
+func (x *ScheduleEntry) GetNextRunMs() int64 {
+	if x != nil {
+		return x.NextRunMs
+	}
+	return 0
+}
+
+func (x *ScheduleEntry) GetLastRunMs() int64 {
+	if x != nil {
+		return x.LastRunMs
+	}
+	return 0
+}
+
+func (x *ScheduleEntry) GetDurable() bool {
+	if x != nil {
+		return x.Durable
+	}
+	return false
+}
+
+type ListSchedulesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSchedulesRequest) Reset() {
+	*x = ListSchedulesRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSchedulesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSchedulesRequest) ProtoMessage() {}
+
+func (x *ListSchedulesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSchedulesRequest.ProtoReflect.Descriptor instead.
+func (*ListSchedulesRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{12}
+}
+
+type ListSchedulesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schedules     []*ScheduleEntry       `protobuf:"bytes,1,rep,name=schedules,proto3" json:"schedules,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSchedulesResponse) Reset() {
+	*x = ListSchedulesResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSchedulesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSchedulesResponse) ProtoMessage() {}
+
+func (x *ListSchedulesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSchedulesResponse.ProtoReflect.Descriptor instead.
+func (*ListSchedulesResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListSchedulesResponse) GetSchedules() []*ScheduleEntry {
+	if x != nil {
+		return x.Schedules
 	}
 	return nil
 }
@@ -423,7 +778,7 @@ type DLQEntry struct {
 
 func (x *DLQEntry) Reset() {
 	*x = DLQEntry{}
-	mi := &file_worker_v1_admin_proto_msgTypes[7]
+	mi := &file_worker_v1_admin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +790,7 @@ func (x *DLQEntry) String() string {
 func (*DLQEntry) ProtoMessage() {}
 
 func (x *DLQEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[7]
+	mi := &file_worker_v1_admin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +803,7 @@ func (x *DLQEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DLQEntry.ProtoReflect.Descriptor instead.
 func (*DLQEntry) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{7}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DLQEntry) GetId() string {
@@ -489,13 +844,17 @@ func (x *DLQEntry) GetAgeMs() int64 {
 type ListDLQRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Queue         string                 `protobuf:"bytes,3,opt,name=queue,proto3" json:"queue,omitempty"`
+	Handler       string                 `protobuf:"bytes,4,opt,name=handler,proto3" json:"handler,omitempty"`
+	Query         string                 `protobuf:"bytes,5,opt,name=query,proto3" json:"query,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListDLQRequest) Reset() {
 	*x = ListDLQRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[8]
+	mi := &file_worker_v1_admin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +866,7 @@ func (x *ListDLQRequest) String() string {
 func (*ListDLQRequest) ProtoMessage() {}
 
 func (x *ListDLQRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[8]
+	mi := &file_worker_v1_admin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +879,7 @@ func (x *ListDLQRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDLQRequest.ProtoReflect.Descriptor instead.
 func (*ListDLQRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{8}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListDLQRequest) GetLimit() int32 {
@@ -530,16 +889,45 @@ func (x *ListDLQRequest) GetLimit() int32 {
 	return 0
 }
 
+func (x *ListDLQRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ListDLQRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *ListDLQRequest) GetHandler() string {
+	if x != nil {
+		return x.Handler
+	}
+	return ""
+}
+
+func (x *ListDLQRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
 type ListDLQResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Entries       []*DLQEntry            `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	Total         int64                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListDLQResponse) Reset() {
 	*x = ListDLQResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[9]
+	mi := &file_worker_v1_admin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -551,7 +939,7 @@ func (x *ListDLQResponse) String() string {
 func (*ListDLQResponse) ProtoMessage() {}
 
 func (x *ListDLQResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[9]
+	mi := &file_worker_v1_admin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -564,7 +952,7 @@ func (x *ListDLQResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDLQResponse.ProtoReflect.Descriptor instead.
 func (*ListDLQResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{9}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListDLQResponse) GetEntries() []*DLQEntry {
@@ -572,6 +960,13 @@ func (x *ListDLQResponse) GetEntries() []*DLQEntry {
 		return x.Entries
 	}
 	return nil
+}
+
+func (x *ListDLQResponse) GetTotal() int64 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type PauseDequeueRequest struct {
@@ -582,7 +977,7 @@ type PauseDequeueRequest struct {
 
 func (x *PauseDequeueRequest) Reset() {
 	*x = PauseDequeueRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[10]
+	mi := &file_worker_v1_admin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +989,7 @@ func (x *PauseDequeueRequest) String() string {
 func (*PauseDequeueRequest) ProtoMessage() {}
 
 func (x *PauseDequeueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[10]
+	mi := &file_worker_v1_admin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +1002,7 @@ func (x *PauseDequeueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseDequeueRequest.ProtoReflect.Descriptor instead.
 func (*PauseDequeueRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{10}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{17}
 }
 
 type PauseDequeueResponse struct {
@@ -619,7 +1014,7 @@ type PauseDequeueResponse struct {
 
 func (x *PauseDequeueResponse) Reset() {
 	*x = PauseDequeueResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[11]
+	mi := &file_worker_v1_admin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +1026,7 @@ func (x *PauseDequeueResponse) String() string {
 func (*PauseDequeueResponse) ProtoMessage() {}
 
 func (x *PauseDequeueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[11]
+	mi := &file_worker_v1_admin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +1039,7 @@ func (x *PauseDequeueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseDequeueResponse.ProtoReflect.Descriptor instead.
 func (*PauseDequeueResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{11}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PauseDequeueResponse) GetPaused() bool {
@@ -662,7 +1057,7 @@ type ResumeDequeueRequest struct {
 
 func (x *ResumeDequeueRequest) Reset() {
 	*x = ResumeDequeueRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[12]
+	mi := &file_worker_v1_admin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -674,7 +1069,7 @@ func (x *ResumeDequeueRequest) String() string {
 func (*ResumeDequeueRequest) ProtoMessage() {}
 
 func (x *ResumeDequeueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[12]
+	mi := &file_worker_v1_admin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -687,7 +1082,7 @@ func (x *ResumeDequeueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeDequeueRequest.ProtoReflect.Descriptor instead.
 func (*ResumeDequeueRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{12}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{19}
 }
 
 type ResumeDequeueResponse struct {
@@ -699,7 +1094,7 @@ type ResumeDequeueResponse struct {
 
 func (x *ResumeDequeueResponse) Reset() {
 	*x = ResumeDequeueResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[13]
+	mi := &file_worker_v1_admin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -711,7 +1106,7 @@ func (x *ResumeDequeueResponse) String() string {
 func (*ResumeDequeueResponse) ProtoMessage() {}
 
 func (x *ResumeDequeueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[13]
+	mi := &file_worker_v1_admin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -724,7 +1119,7 @@ func (x *ResumeDequeueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeDequeueResponse.ProtoReflect.Descriptor instead.
 func (*ResumeDequeueResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{13}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ResumeDequeueResponse) GetPaused() bool {
@@ -743,7 +1138,7 @@ type ReplayDLQRequest struct {
 
 func (x *ReplayDLQRequest) Reset() {
 	*x = ReplayDLQRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[14]
+	mi := &file_worker_v1_admin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -755,7 +1150,7 @@ func (x *ReplayDLQRequest) String() string {
 func (*ReplayDLQRequest) ProtoMessage() {}
 
 func (x *ReplayDLQRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[14]
+	mi := &file_worker_v1_admin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -768,7 +1163,7 @@ func (x *ReplayDLQRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplayDLQRequest.ProtoReflect.Descriptor instead.
 func (*ReplayDLQRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{14}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ReplayDLQRequest) GetLimit() int32 {
@@ -787,7 +1182,7 @@ type ReplayDLQResponse struct {
 
 func (x *ReplayDLQResponse) Reset() {
 	*x = ReplayDLQResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[15]
+	mi := &file_worker_v1_admin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -799,7 +1194,7 @@ func (x *ReplayDLQResponse) String() string {
 func (*ReplayDLQResponse) ProtoMessage() {}
 
 func (x *ReplayDLQResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[15]
+	mi := &file_worker_v1_admin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -812,7 +1207,7 @@ func (x *ReplayDLQResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplayDLQResponse.ProtoReflect.Descriptor instead.
 func (*ReplayDLQResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{15}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ReplayDLQResponse) GetMoved() int32 {
@@ -842,7 +1237,16 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\x06paused\x18\x04 \x01(\bR\x06paused\"\x88\x01\n" +
 	"\x13GetOverviewResponse\x12.\n" +
 	"\x05stats\x18\x01 \x01(\v2\x18.worker.v1.OverviewStatsR\x05stats\x12A\n" +
-	"\fcoordination\x18\x02 \x01(\v2\x1d.worker.v1.CoordinationStatusR\fcoordination\"\x84\x01\n" +
+	"\fcoordination\x18\x02 \x01(\v2\x1d.worker.v1.CoordinationStatusR\fcoordination\"\x12\n" +
+	"\x10GetHealthRequest\"\x9b\x01\n" +
+	"\x11GetHealthResponse\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
+	"\x06commit\x18\x03 \x01(\tR\x06commit\x12\x1d\n" +
+	"\n" +
+	"build_time\x18\x04 \x01(\tR\tbuildTime\x12\x1d\n" +
+	"\n" +
+	"go_version\x18\x05 \x01(\tR\tgoVersion\"\x84\x01\n" +
 	"\fQueueSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05ready\x18\x02 \x01(\x03R\x05ready\x12\x1e\n" +
@@ -853,17 +1257,35 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\x06weight\x18\x05 \x01(\x05R\x06weight\"\x13\n" +
 	"\x11ListQueuesRequest\"E\n" +
 	"\x12ListQueuesResponse\x12/\n" +
-	"\x06queues\x18\x01 \x03(\v2\x17.worker.v1.QueueSummaryR\x06queues\"}\n" +
+	"\x06queues\x18\x01 \x03(\v2\x17.worker.v1.QueueSummaryR\x06queues\"%\n" +
+	"\x0fGetQueueRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"A\n" +
+	"\x10GetQueueResponse\x12-\n" +
+	"\x05queue\x18\x01 \x01(\v2\x17.worker.v1.QueueSummaryR\x05queue\"\x91\x01\n" +
+	"\rScheduleEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04spec\x18\x02 \x01(\tR\x04spec\x12\x1e\n" +
+	"\vnext_run_ms\x18\x03 \x01(\x03R\tnextRunMs\x12\x1e\n" +
+	"\vlast_run_ms\x18\x04 \x01(\x03R\tlastRunMs\x12\x18\n" +
+	"\adurable\x18\x05 \x01(\bR\adurable\"\x16\n" +
+	"\x14ListSchedulesRequest\"O\n" +
+	"\x15ListSchedulesResponse\x126\n" +
+	"\tschedules\x18\x01 \x03(\v2\x18.worker.v1.ScheduleEntryR\tschedules\"}\n" +
 	"\bDLQEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05queue\x18\x02 \x01(\tR\x05queue\x12\x18\n" +
 	"\ahandler\x18\x03 \x01(\tR\ahandler\x12\x1a\n" +
 	"\battempts\x18\x04 \x01(\x05R\battempts\x12\x15\n" +
-	"\x06age_ms\x18\x05 \x01(\x03R\x05ageMs\"&\n" +
+	"\x06age_ms\x18\x05 \x01(\x03R\x05ageMs\"\x84\x01\n" +
 	"\x0eListDLQRequest\x12\x14\n" +
-	"\x05limit\x18\x01 \x01(\x05R\x05limit\"@\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12\x14\n" +
+	"\x05queue\x18\x03 \x01(\tR\x05queue\x12\x18\n" +
+	"\ahandler\x18\x04 \x01(\tR\ahandler\x12\x14\n" +
+	"\x05query\x18\x05 \x01(\tR\x05query\"V\n" +
 	"\x0fListDLQResponse\x12-\n" +
-	"\aentries\x18\x01 \x03(\v2\x13.worker.v1.DLQEntryR\aentries\"\x15\n" +
+	"\aentries\x18\x01 \x03(\v2\x13.worker.v1.DLQEntryR\aentries\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\x03R\x05total\"\x15\n" +
 	"\x13PauseDequeueRequest\".\n" +
 	"\x14PauseDequeueResponse\x12\x16\n" +
 	"\x06paused\x18\x01 \x01(\bR\x06paused\"\x16\n" +
@@ -873,11 +1295,14 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\x10ReplayDLQRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\")\n" +
 	"\x11ReplayDLQResponse\x12\x14\n" +
-	"\x05moved\x18\x01 \x01(\x05R\x05moved2\xd6\x03\n" +
-	"\fAdminService\x12L\n" +
+	"\x05moved\x18\x01 \x01(\x05R\x05moved2\xb7\x05\n" +
+	"\fAdminService\x12F\n" +
+	"\tGetHealth\x12\x1b.worker.v1.GetHealthRequest\x1a\x1c.worker.v1.GetHealthResponse\x12L\n" +
 	"\vGetOverview\x12\x1d.worker.v1.GetOverviewRequest\x1a\x1e.worker.v1.GetOverviewResponse\x12I\n" +
 	"\n" +
-	"ListQueues\x12\x1c.worker.v1.ListQueuesRequest\x1a\x1d.worker.v1.ListQueuesResponse\x12@\n" +
+	"ListQueues\x12\x1c.worker.v1.ListQueuesRequest\x1a\x1d.worker.v1.ListQueuesResponse\x12C\n" +
+	"\bGetQueue\x12\x1a.worker.v1.GetQueueRequest\x1a\x1b.worker.v1.GetQueueResponse\x12R\n" +
+	"\rListSchedules\x12\x1f.worker.v1.ListSchedulesRequest\x1a .worker.v1.ListSchedulesResponse\x12@\n" +
 	"\aListDLQ\x12\x19.worker.v1.ListDLQRequest\x1a\x1a.worker.v1.ListDLQResponse\x12O\n" +
 	"\fPauseDequeue\x12\x1e.worker.v1.PauseDequeueRequest\x1a\x1f.worker.v1.PauseDequeueResponse\x12R\n" +
 	"\rResumeDequeue\x12\x1f.worker.v1.ResumeDequeueRequest\x1a .worker.v1.ResumeDequeueResponse\x12F\n" +
@@ -898,50 +1323,62 @@ func file_worker_v1_admin_proto_rawDescGZIP() []byte {
 	return file_worker_v1_admin_proto_rawDescData
 }
 
-var (
-	file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
-	file_worker_v1_admin_proto_goTypes  = []any{
-		(*GetOverviewRequest)(nil),    // 0: worker.v1.GetOverviewRequest
-		(*OverviewStats)(nil),         // 1: worker.v1.OverviewStats
-		(*CoordinationStatus)(nil),    // 2: worker.v1.CoordinationStatus
-		(*GetOverviewResponse)(nil),   // 3: worker.v1.GetOverviewResponse
-		(*QueueSummary)(nil),          // 4: worker.v1.QueueSummary
-		(*ListQueuesRequest)(nil),     // 5: worker.v1.ListQueuesRequest
-		(*ListQueuesResponse)(nil),    // 6: worker.v1.ListQueuesResponse
-		(*DLQEntry)(nil),              // 7: worker.v1.DLQEntry
-		(*ListDLQRequest)(nil),        // 8: worker.v1.ListDLQRequest
-		(*ListDLQResponse)(nil),       // 9: worker.v1.ListDLQResponse
-		(*PauseDequeueRequest)(nil),   // 10: worker.v1.PauseDequeueRequest
-		(*PauseDequeueResponse)(nil),  // 11: worker.v1.PauseDequeueResponse
-		(*ResumeDequeueRequest)(nil),  // 12: worker.v1.ResumeDequeueRequest
-		(*ResumeDequeueResponse)(nil), // 13: worker.v1.ResumeDequeueResponse
-		(*ReplayDLQRequest)(nil),      // 14: worker.v1.ReplayDLQRequest
-		(*ReplayDLQResponse)(nil),     // 15: worker.v1.ReplayDLQResponse
-	}
-)
-
+var file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_worker_v1_admin_proto_goTypes = []any{
+	(*GetOverviewRequest)(nil),    // 0: worker.v1.GetOverviewRequest
+	(*OverviewStats)(nil),         // 1: worker.v1.OverviewStats
+	(*CoordinationStatus)(nil),    // 2: worker.v1.CoordinationStatus
+	(*GetOverviewResponse)(nil),   // 3: worker.v1.GetOverviewResponse
+	(*GetHealthRequest)(nil),      // 4: worker.v1.GetHealthRequest
+	(*GetHealthResponse)(nil),     // 5: worker.v1.GetHealthResponse
+	(*QueueSummary)(nil),          // 6: worker.v1.QueueSummary
+	(*ListQueuesRequest)(nil),     // 7: worker.v1.ListQueuesRequest
+	(*ListQueuesResponse)(nil),    // 8: worker.v1.ListQueuesResponse
+	(*GetQueueRequest)(nil),       // 9: worker.v1.GetQueueRequest
+	(*GetQueueResponse)(nil),      // 10: worker.v1.GetQueueResponse
+	(*ScheduleEntry)(nil),         // 11: worker.v1.ScheduleEntry
+	(*ListSchedulesRequest)(nil),  // 12: worker.v1.ListSchedulesRequest
+	(*ListSchedulesResponse)(nil), // 13: worker.v1.ListSchedulesResponse
+	(*DLQEntry)(nil),              // 14: worker.v1.DLQEntry
+	(*ListDLQRequest)(nil),        // 15: worker.v1.ListDLQRequest
+	(*ListDLQResponse)(nil),       // 16: worker.v1.ListDLQResponse
+	(*PauseDequeueRequest)(nil),   // 17: worker.v1.PauseDequeueRequest
+	(*PauseDequeueResponse)(nil),  // 18: worker.v1.PauseDequeueResponse
+	(*ResumeDequeueRequest)(nil),  // 19: worker.v1.ResumeDequeueRequest
+	(*ResumeDequeueResponse)(nil), // 20: worker.v1.ResumeDequeueResponse
+	(*ReplayDLQRequest)(nil),      // 21: worker.v1.ReplayDLQRequest
+	(*ReplayDLQResponse)(nil),     // 22: worker.v1.ReplayDLQResponse
+}
 var file_worker_v1_admin_proto_depIdxs = []int32{
 	1,  // 0: worker.v1.GetOverviewResponse.stats:type_name -> worker.v1.OverviewStats
 	2,  // 1: worker.v1.GetOverviewResponse.coordination:type_name -> worker.v1.CoordinationStatus
-	4,  // 2: worker.v1.ListQueuesResponse.queues:type_name -> worker.v1.QueueSummary
-	7,  // 3: worker.v1.ListDLQResponse.entries:type_name -> worker.v1.DLQEntry
-	0,  // 4: worker.v1.AdminService.GetOverview:input_type -> worker.v1.GetOverviewRequest
-	5,  // 5: worker.v1.AdminService.ListQueues:input_type -> worker.v1.ListQueuesRequest
-	8,  // 6: worker.v1.AdminService.ListDLQ:input_type -> worker.v1.ListDLQRequest
-	10, // 7: worker.v1.AdminService.PauseDequeue:input_type -> worker.v1.PauseDequeueRequest
-	12, // 8: worker.v1.AdminService.ResumeDequeue:input_type -> worker.v1.ResumeDequeueRequest
-	14, // 9: worker.v1.AdminService.ReplayDLQ:input_type -> worker.v1.ReplayDLQRequest
-	3,  // 10: worker.v1.AdminService.GetOverview:output_type -> worker.v1.GetOverviewResponse
-	6,  // 11: worker.v1.AdminService.ListQueues:output_type -> worker.v1.ListQueuesResponse
-	9,  // 12: worker.v1.AdminService.ListDLQ:output_type -> worker.v1.ListDLQResponse
-	11, // 13: worker.v1.AdminService.PauseDequeue:output_type -> worker.v1.PauseDequeueResponse
-	13, // 14: worker.v1.AdminService.ResumeDequeue:output_type -> worker.v1.ResumeDequeueResponse
-	15, // 15: worker.v1.AdminService.ReplayDLQ:output_type -> worker.v1.ReplayDLQResponse
-	10, // [10:16] is the sub-list for method output_type
-	4,  // [4:10] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	6,  // 2: worker.v1.ListQueuesResponse.queues:type_name -> worker.v1.QueueSummary
+	6,  // 3: worker.v1.GetQueueResponse.queue:type_name -> worker.v1.QueueSummary
+	11, // 4: worker.v1.ListSchedulesResponse.schedules:type_name -> worker.v1.ScheduleEntry
+	14, // 5: worker.v1.ListDLQResponse.entries:type_name -> worker.v1.DLQEntry
+	4,  // 6: worker.v1.AdminService.GetHealth:input_type -> worker.v1.GetHealthRequest
+	0,  // 7: worker.v1.AdminService.GetOverview:input_type -> worker.v1.GetOverviewRequest
+	7,  // 8: worker.v1.AdminService.ListQueues:input_type -> worker.v1.ListQueuesRequest
+	9,  // 9: worker.v1.AdminService.GetQueue:input_type -> worker.v1.GetQueueRequest
+	12, // 10: worker.v1.AdminService.ListSchedules:input_type -> worker.v1.ListSchedulesRequest
+	15, // 11: worker.v1.AdminService.ListDLQ:input_type -> worker.v1.ListDLQRequest
+	17, // 12: worker.v1.AdminService.PauseDequeue:input_type -> worker.v1.PauseDequeueRequest
+	19, // 13: worker.v1.AdminService.ResumeDequeue:input_type -> worker.v1.ResumeDequeueRequest
+	21, // 14: worker.v1.AdminService.ReplayDLQ:input_type -> worker.v1.ReplayDLQRequest
+	5,  // 15: worker.v1.AdminService.GetHealth:output_type -> worker.v1.GetHealthResponse
+	3,  // 16: worker.v1.AdminService.GetOverview:output_type -> worker.v1.GetOverviewResponse
+	8,  // 17: worker.v1.AdminService.ListQueues:output_type -> worker.v1.ListQueuesResponse
+	10, // 18: worker.v1.AdminService.GetQueue:output_type -> worker.v1.GetQueueResponse
+	13, // 19: worker.v1.AdminService.ListSchedules:output_type -> worker.v1.ListSchedulesResponse
+	16, // 20: worker.v1.AdminService.ListDLQ:output_type -> worker.v1.ListDLQResponse
+	18, // 21: worker.v1.AdminService.PauseDequeue:output_type -> worker.v1.PauseDequeueResponse
+	20, // 22: worker.v1.AdminService.ResumeDequeue:output_type -> worker.v1.ResumeDequeueResponse
+	22, // 23: worker.v1.AdminService.ReplayDLQ:output_type -> worker.v1.ReplayDLQResponse
+	15, // [15:24] is the sub-list for method output_type
+	6,  // [6:15] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_worker_v1_admin_proto_init() }
@@ -955,7 +1392,7 @@ func file_worker_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_worker_v1_admin_proto_rawDesc), len(file_worker_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

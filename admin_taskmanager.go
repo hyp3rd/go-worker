@@ -1,6 +1,11 @@
 package worker
 
-import "context"
+import (
+	"context"
+	"sort"
+
+	"github.com/robfig/cron/v3"
+)
 
 func (tm *TaskManager) adminBackend() (AdminBackend, error) {
 	if tm == nil {
@@ -48,14 +53,70 @@ func (tm *TaskManager) AdminQueues(ctx context.Context) ([]AdminQueueSummary, er
 	return backend.AdminQueues(ctx)
 }
 
-// AdminDLQ lists DLQ entries.
-func (tm *TaskManager) AdminDLQ(ctx context.Context, limit int) ([]AdminDLQEntry, error) {
+// AdminQueue returns a queue summary by name.
+func (tm *TaskManager) AdminQueue(ctx context.Context, name string) (AdminQueueSummary, error) {
 	backend, err := tm.adminBackend()
 	if err != nil {
-		return nil, err
+		return AdminQueueSummary{}, err
 	}
 
-	return backend.AdminDLQ(ctx, limit)
+	return backend.AdminQueue(ctx, name)
+}
+
+// AdminSchedules lists cron schedules.
+func (tm *TaskManager) AdminSchedules(ctx context.Context) ([]AdminSchedule, error) {
+	if tm == nil {
+		return nil, ErrAdminBackendUnavailable
+	}
+
+	if ctx == nil {
+		return nil, ErrInvalidTaskContext
+	}
+
+	tm.cronMu.Lock()
+	defer tm.cronMu.Unlock()
+
+	if tm.cron == nil {
+		return []AdminSchedule{}, nil
+	}
+
+	nameByID := make(map[cron.EntryID]string, len(tm.cronEntries))
+	for name, id := range tm.cronEntries {
+		nameByID[id] = name
+	}
+
+	results := make([]AdminSchedule, 0, len(tm.cronEntries))
+	for _, entry := range tm.cron.Entries() {
+		name := nameByID[entry.ID]
+		if name == "" {
+			continue
+		}
+
+		spec := tm.cronSpecs[name]
+		results = append(results, AdminSchedule{
+			Name:    name,
+			Spec:    spec.Spec,
+			NextRun: entry.Next,
+			LastRun: entry.Prev,
+			Durable: spec.Durable,
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
+
+	return results, nil
+}
+
+// AdminDLQ lists DLQ entries.
+func (tm *TaskManager) AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return AdminDLQPage{}, err
+	}
+
+	return backend.AdminDLQ(ctx, filter)
 }
 
 // AdminPause pauses durable dequeue.

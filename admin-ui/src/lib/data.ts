@@ -1,13 +1,16 @@
 import { cache } from "react";
 import {
   fetchDlq,
+  fetchHealth,
   fetchOverview,
   fetchQueues,
+  fetchQueueDetail,
   fetchSchedules,
 } from "@/lib/api";
 import {
   coordinationStatus,
   dlqEntries,
+  healthInfo,
   jobSchedules,
   overviewStats,
   queueSummaries,
@@ -29,6 +32,24 @@ export const getOverviewStats = cache(async () => {
     const detail =
       error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to load overview stats: ${detail}`);
+  }
+});
+
+export const getHealthInfo = cache(async () => {
+  try {
+    return await fetchHealth();
+  } catch (error) {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
+        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
+    ) {
+      return healthInfo;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load health info: ${detail}`);
   }
 });
 
@@ -70,6 +91,34 @@ export const getQueueSummaries = cache(async () => {
   }
 });
 
+export const getQueueDetail = cache(async (name: string) => {
+  if (!name) {
+    throw new Error("Queue name is required");
+  }
+
+  try {
+    const { queue } = await fetchQueueDetail(name);
+    return queue;
+  } catch (error) {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
+        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
+    ) {
+      const fallback =
+        queueSummaries.find((queue) => queue.name === name) ??
+        queueSummaries[0];
+      if (fallback) {
+        return fallback;
+      }
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load queue detail: ${detail}`);
+  }
+});
+
 export const getJobSchedules = cache(async () => {
   try {
     const { schedules } = await fetchSchedules();
@@ -89,17 +138,23 @@ export const getJobSchedules = cache(async () => {
   }
 });
 
-export const getDlqEntries = cache(async () => {
+export const getDlqEntries = cache(async (params?: {
+  limit?: number;
+  offset?: number;
+  queue?: string;
+  handler?: string;
+  query?: string;
+}) => {
   try {
-    const { entries } = await fetchDlq();
-    return entries;
+    const { entries, total } = await fetchDlq(params);
+    return { entries, total };
   } catch (error) {
     if (
       process.env.NODE_ENV !== "production" &&
       (process.env.WORKER_ADMIN_ALLOW_MOCK ??
         process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
     ) {
-      return dlqEntries;
+      return { entries: dlqEntries, total: dlqEntries.length };
     }
 
     const detail =
