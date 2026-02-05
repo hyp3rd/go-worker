@@ -44,6 +44,9 @@ export function SchedulesGrid({ schedules }: { schedules: JobSchedule[] }) {
             <p className="mt-4 text-sm font-medium">
               Next run <span className="text-muted">{job.nextRun}</span>
             </p>
+            <p className="mt-1 text-xs text-muted">
+              Last run {job.lastRun}
+            </p>
           </div>
         ))}
       </div>

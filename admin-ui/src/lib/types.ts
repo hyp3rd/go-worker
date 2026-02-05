@@ -12,6 +12,7 @@ export type JobSchedule = {
   name: string;
   schedule: string;
   nextRun: string;
+  lastRun: string;
   status: "healthy" | "lagging" | "paused";
 };
 

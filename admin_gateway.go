@@ -494,6 +494,7 @@ func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Req
 	for _, schedule := range resp.GetSchedules() {
 		nextRunMs := schedule.GetNextRunMs()
 		nextRun := time.Time{}
+		lastRun := time.Time{}
 		scheduleStatus := "healthy"
 
 		if nextRunMs <= 0 {
@@ -505,10 +506,16 @@ func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Req
 			}
 		}
 
+		lastRunMs := schedule.GetLastRunMs()
+		if lastRunMs > 0 {
+			lastRun = time.UnixMilli(lastRunMs)
+		}
+
 		schedules = append(schedules, scheduleJSON{
 			Name:     schedule.GetName(),
 			Schedule: schedule.GetSpec(),
 			NextRun:  formatScheduleNext(nextRun),
+			LastRun:  formatScheduleLast(lastRun),
 			Status:   scheduleStatus,
 		})
 	}
@@ -552,6 +559,7 @@ type scheduleJSON struct {
 	Name     string `json:"name"`
 	Schedule string `json:"schedule"`
 	NextRun  string `json:"nextRun"`
+	LastRun  string `json:"lastRun"`
 	Status   string `json:"status"`
 }
 
@@ -755,6 +763,19 @@ func formatScheduleNext(next time.Time) string {
 	}
 
 	return "in " + formatAdminDuration(next.Sub(now))
+}
+
+func formatScheduleLast(last time.Time) string {
+	if last.IsZero() {
+		return adminNotAvailable
+	}
+
+	now := time.Now()
+	if last.After(now) {
+		return adminNotAvailable
+	}
+
+	return formatAdminDuration(now.Sub(last)) + " ago"
 }
 
 type adminErrorEnvelope struct {

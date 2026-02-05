@@ -17,6 +17,12 @@ export default async function DlqPage({ searchParams }: DlqPageProps) {
   const queryParam = Array.isArray(params.query)
     ? params.query[0]
     : params.query;
+  const queueParam = Array.isArray(params.queue)
+    ? params.queue[0]
+    : params.queue;
+  const handlerParam = Array.isArray(params.handler)
+    ? params.handler[0]
+    : params.handler;
   const limitParam = Array.isArray(params.limit)
     ? params.limit[0]
     : params.limit;
@@ -32,6 +38,8 @@ export default async function DlqPage({ searchParams }: DlqPageProps) {
     limit: pageSize,
     offset,
     query: queryParam ?? "",
+    queue: queueParam ?? "",
+    handler: handlerParam ?? "",
   });
 
   return (
@@ -47,6 +55,8 @@ export default async function DlqPage({ searchParams }: DlqPageProps) {
         page={page}
         pageSize={pageSize}
         query={queryParam ?? ""}
+        queueFilter={queueParam ?? ""}
+        handlerFilter={handlerParam ?? ""}
       />
     </section>
   );

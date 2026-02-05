@@ -94,6 +94,15 @@ Service: `worker.v1.AdminService`
 - Log errors and action outcomes at INFO/WARN levels.
 - Add counters for admin actions (pause/resume/replay).
 
+## Implementation Status (February 5, 2026)
+
+- **Overview/Queues/Queue detail**: Implemented (gRPC + gateway + UI).
+- **DLQ pagination + filters**: Implemented in API; UI supports search + queue/handler filters with paging.
+- **DLQ replay**: Implemented (bulk replay by limit). Replay-by-ID/selection is still a TODO.
+- **Schedules**: Implemented from in-memory cron registry; UI shows next/last run. Durable backends report schedules via TaskManager.
+- **Health/version**: Implemented (gateway + UI).
+- **Observability counters**: Not implemented.
+
 ## Milestones
 
 1. Add AdminService proto + gateway routes.

@@ -8,6 +8,7 @@ package workerpb
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -168,27 +169,35 @@ type UnimplementedAdminServiceServer struct{}
 func (UnimplementedAdminServiceServer) GetHealth(context.Context, *GetHealthRequest) (*GetHealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHealth not implemented")
 }
+
 func (UnimplementedAdminServiceServer) GetOverview(context.Context, *GetOverviewRequest) (*GetOverviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOverview not implemented")
 }
+
 func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListQueues not implemented")
 }
+
 func (UnimplementedAdminServiceServer) GetQueue(context.Context, *GetQueueRequest) (*GetQueueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetQueue not implemented")
 }
+
 func (UnimplementedAdminServiceServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSchedules not implemented")
 }
+
 func (UnimplementedAdminServiceServer) ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDLQ not implemented")
 }
+
 func (UnimplementedAdminServiceServer) PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseDequeue not implemented")
 }
+
 func (UnimplementedAdminServiceServer) ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeDequeue not implemented")
 }
+
 func (UnimplementedAdminServiceServer) ReplayDLQ(context.Context, *ReplayDLQRequest) (*ReplayDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReplayDLQ not implemented")
 }

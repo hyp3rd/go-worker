@@ -51,18 +51,21 @@ export const jobSchedules: JobSchedule[] = [
     name: "hourly-report",
     schedule: "0 * * * *",
     nextRun: "in 12m",
+    lastRun: "48m ago",
     status: "healthy",
   },
   {
     name: "daily-email",
     schedule: "0 0 * * *",
     nextRun: "in 6h",
+    lastRun: "18h ago",
     status: "healthy",
   },
   {
     name: "ledger-sync",
     schedule: "*/5 * * * *",
     nextRun: "in 3m",
+    lastRun: "7m ago",
     status: "lagging",
   },
 ];

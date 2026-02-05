@@ -7,11 +7,12 @@
 package workerpb
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1323,32 +1324,34 @@ func file_worker_v1_admin_proto_rawDescGZIP() []byte {
 	return file_worker_v1_admin_proto_rawDescData
 }
 
-var file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
-var file_worker_v1_admin_proto_goTypes = []any{
-	(*GetOverviewRequest)(nil),    // 0: worker.v1.GetOverviewRequest
-	(*OverviewStats)(nil),         // 1: worker.v1.OverviewStats
-	(*CoordinationStatus)(nil),    // 2: worker.v1.CoordinationStatus
-	(*GetOverviewResponse)(nil),   // 3: worker.v1.GetOverviewResponse
-	(*GetHealthRequest)(nil),      // 4: worker.v1.GetHealthRequest
-	(*GetHealthResponse)(nil),     // 5: worker.v1.GetHealthResponse
-	(*QueueSummary)(nil),          // 6: worker.v1.QueueSummary
-	(*ListQueuesRequest)(nil),     // 7: worker.v1.ListQueuesRequest
-	(*ListQueuesResponse)(nil),    // 8: worker.v1.ListQueuesResponse
-	(*GetQueueRequest)(nil),       // 9: worker.v1.GetQueueRequest
-	(*GetQueueResponse)(nil),      // 10: worker.v1.GetQueueResponse
-	(*ScheduleEntry)(nil),         // 11: worker.v1.ScheduleEntry
-	(*ListSchedulesRequest)(nil),  // 12: worker.v1.ListSchedulesRequest
-	(*ListSchedulesResponse)(nil), // 13: worker.v1.ListSchedulesResponse
-	(*DLQEntry)(nil),              // 14: worker.v1.DLQEntry
-	(*ListDLQRequest)(nil),        // 15: worker.v1.ListDLQRequest
-	(*ListDLQResponse)(nil),       // 16: worker.v1.ListDLQResponse
-	(*PauseDequeueRequest)(nil),   // 17: worker.v1.PauseDequeueRequest
-	(*PauseDequeueResponse)(nil),  // 18: worker.v1.PauseDequeueResponse
-	(*ResumeDequeueRequest)(nil),  // 19: worker.v1.ResumeDequeueRequest
-	(*ResumeDequeueResponse)(nil), // 20: worker.v1.ResumeDequeueResponse
-	(*ReplayDLQRequest)(nil),      // 21: worker.v1.ReplayDLQRequest
-	(*ReplayDLQResponse)(nil),     // 22: worker.v1.ReplayDLQResponse
-}
+var (
+	file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+	file_worker_v1_admin_proto_goTypes  = []any{
+		(*GetOverviewRequest)(nil),    // 0: worker.v1.GetOverviewRequest
+		(*OverviewStats)(nil),         // 1: worker.v1.OverviewStats
+		(*CoordinationStatus)(nil),    // 2: worker.v1.CoordinationStatus
+		(*GetOverviewResponse)(nil),   // 3: worker.v1.GetOverviewResponse
+		(*GetHealthRequest)(nil),      // 4: worker.v1.GetHealthRequest
+		(*GetHealthResponse)(nil),     // 5: worker.v1.GetHealthResponse
+		(*QueueSummary)(nil),          // 6: worker.v1.QueueSummary
+		(*ListQueuesRequest)(nil),     // 7: worker.v1.ListQueuesRequest
+		(*ListQueuesResponse)(nil),    // 8: worker.v1.ListQueuesResponse
+		(*GetQueueRequest)(nil),       // 9: worker.v1.GetQueueRequest
+		(*GetQueueResponse)(nil),      // 10: worker.v1.GetQueueResponse
+		(*ScheduleEntry)(nil),         // 11: worker.v1.ScheduleEntry
+		(*ListSchedulesRequest)(nil),  // 12: worker.v1.ListSchedulesRequest
+		(*ListSchedulesResponse)(nil), // 13: worker.v1.ListSchedulesResponse
+		(*DLQEntry)(nil),              // 14: worker.v1.DLQEntry
+		(*ListDLQRequest)(nil),        // 15: worker.v1.ListDLQRequest
+		(*ListDLQResponse)(nil),       // 16: worker.v1.ListDLQResponse
+		(*PauseDequeueRequest)(nil),   // 17: worker.v1.PauseDequeueRequest
+		(*PauseDequeueResponse)(nil),  // 18: worker.v1.PauseDequeueResponse
+		(*ResumeDequeueRequest)(nil),  // 19: worker.v1.ResumeDequeueRequest
+		(*ResumeDequeueResponse)(nil), // 20: worker.v1.ResumeDequeueResponse
+		(*ReplayDLQRequest)(nil),      // 21: worker.v1.ReplayDLQRequest
+		(*ReplayDLQResponse)(nil),     // 22: worker.v1.ReplayDLQResponse
+	}
+)
 var file_worker_v1_admin_proto_depIdxs = []int32{
 	1,  // 0: worker.v1.GetOverviewResponse.stats:type_name -> worker.v1.OverviewStats
 	2,  // 1: worker.v1.GetOverviewResponse.coordination:type_name -> worker.v1.CoordinationStatus
