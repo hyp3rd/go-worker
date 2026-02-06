@@ -301,6 +301,26 @@ func (s *GRPCServer) ReplayDLQ(ctx context.Context, req *workerpb.ReplayDLQReque
 	return &workerpb.ReplayDLQResponse{Moved: clampInt32(moved)}, nil
 }
 
+// ReplayDLQByID replays DLQ entries by ID.
+func (s *GRPCServer) ReplayDLQByID(ctx context.Context, req *workerpb.ReplayDLQByIDRequest) (*workerpb.ReplayDLQByIDResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_ReplayDLQByID_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	moved, err := backend.AdminReplayDLQByID(ctx, req.GetIds())
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.ReplayDLQByIDResponse{Moved: clampInt32(moved)}, nil
+}
+
 func clampInt32(value int) int32 {
 	if value > int(^uint32(0)>>1) {
 		return int32(^uint32(0) >> 1)
@@ -336,6 +356,14 @@ func toAdminStatus(err error) error {
 
 	if errors.Is(err, ErrAdminDLQFilterTooLarge) {
 		return ewrap.Wrap(status.Error(codes.ResourceExhausted, err.Error()), "dlq filter too large")
+	}
+
+	if errors.Is(err, ErrAdminReplayIDsRequired) {
+		return ewrap.Wrap(status.Error(codes.InvalidArgument, err.Error()), "replay ids required")
+	}
+
+	if errors.Is(err, ErrAdminReplayIDsTooLarge) {
+		return ewrap.Wrap(status.Error(codes.ResourceExhausted, err.Error()), "replay ids too large")
 	}
 
 	if _, ok := status.FromError(err); ok {

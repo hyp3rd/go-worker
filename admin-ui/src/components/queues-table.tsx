@@ -41,7 +41,15 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
           </button>
         }
       />
-      <Table columns={["Queue", "Ready", "Processing", "Dead", "Weight"]}>
+      <Table
+        columns={[
+          { key: "queue", label: "Queue" },
+          { key: "ready", label: "Ready" },
+          { key: "processing", label: "Processing" },
+          { key: "dead", label: "Dead" },
+          { key: "weight", label: "Weight" },
+        ]}
+      >
         {paged.map((queue) => (
           <TableRow key={queue.name}>
             <TableCell>

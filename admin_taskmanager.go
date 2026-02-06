@@ -148,3 +148,13 @@ func (tm *TaskManager) AdminReplayDLQ(ctx context.Context, limit int) (int, erro
 
 	return backend.AdminReplayDLQ(ctx, limit)
 }
+
+// AdminReplayDLQByID replays specific DLQ entries by ID.
+func (tm *TaskManager) AdminReplayDLQByID(ctx context.Context, ids []string) (int, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return 0, err
+	}
+
+	return backend.AdminReplayDLQByID(ctx, ids)
+}

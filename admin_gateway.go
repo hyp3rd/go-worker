@@ -158,6 +158,7 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	mux.HandleFunc("/admin/v1/pause", handler.handlePause)
 	mux.HandleFunc("/admin/v1/resume", handler.handleResume)
 	mux.HandleFunc("/admin/v1/dlq/replay", handler.handleReplay)
+	mux.HandleFunc("/admin/v1/dlq/replay/ids", handler.handleReplayIDs)
 
 	server := &http.Server{
 		Addr:         httpAddr,
@@ -461,6 +462,47 @@ func (h *adminGatewayHandler) handleReplay(w http.ResponseWriter, r *http.Reques
 	defer cancel()
 
 	resp, err := h.client.ReplayDLQ(ctx, &workerpb.ReplayDLQRequest{Limit: clampLimit32(limit)})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminReplayJSON{Moved: resp.GetMoved()})
+}
+
+func (h *adminGatewayHandler) handleReplayIDs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_body", "Invalid request body", requestID(r, w))
+
+		return
+	}
+
+	var payload struct {
+		IDs []string `json:"ids"`
+	}
+
+	err = json.Unmarshal(body, &payload)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_body", "Invalid request body", requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ReplayDLQByID(ctx, &workerpb.ReplayDLQByIDRequest{Ids: payload.IDs})
 	if err != nil {
 		writeAdminGRPCError(w, reqID, err)
 

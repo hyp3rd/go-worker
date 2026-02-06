@@ -7,12 +7,11 @@
 package workerpb
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1218,6 +1217,94 @@ func (x *ReplayDLQResponse) GetMoved() int32 {
 	return 0
 }
 
+type ReplayDLQByIDRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ids           []string               `protobuf:"bytes,1,rep,name=ids,proto3" json:"ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplayDLQByIDRequest) Reset() {
+	*x = ReplayDLQByIDRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayDLQByIDRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayDLQByIDRequest) ProtoMessage() {}
+
+func (x *ReplayDLQByIDRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayDLQByIDRequest.ProtoReflect.Descriptor instead.
+func (*ReplayDLQByIDRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ReplayDLQByIDRequest) GetIds() []string {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
+type ReplayDLQByIDResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Moved         int32                  `protobuf:"varint,1,opt,name=moved,proto3" json:"moved,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplayDLQByIDResponse) Reset() {
+	*x = ReplayDLQByIDResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayDLQByIDResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayDLQByIDResponse) ProtoMessage() {}
+
+func (x *ReplayDLQByIDResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayDLQByIDResponse.ProtoReflect.Descriptor instead.
+func (*ReplayDLQByIDResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ReplayDLQByIDResponse) GetMoved() int32 {
+	if x != nil {
+		return x.Moved
+	}
+	return 0
+}
+
 var File_worker_v1_admin_proto protoreflect.FileDescriptor
 
 const file_worker_v1_admin_proto_rawDesc = "" +
@@ -1296,7 +1383,11 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\x10ReplayDLQRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\")\n" +
 	"\x11ReplayDLQResponse\x12\x14\n" +
-	"\x05moved\x18\x01 \x01(\x05R\x05moved2\xb7\x05\n" +
+	"\x05moved\x18\x01 \x01(\x05R\x05moved\"(\n" +
+	"\x14ReplayDLQByIDRequest\x12\x10\n" +
+	"\x03ids\x18\x01 \x03(\tR\x03ids\"-\n" +
+	"\x15ReplayDLQByIDResponse\x12\x14\n" +
+	"\x05moved\x18\x01 \x01(\x05R\x05moved2\x8b\x06\n" +
 	"\fAdminService\x12F\n" +
 	"\tGetHealth\x12\x1b.worker.v1.GetHealthRequest\x1a\x1c.worker.v1.GetHealthResponse\x12L\n" +
 	"\vGetOverview\x12\x1d.worker.v1.GetOverviewRequest\x1a\x1e.worker.v1.GetOverviewResponse\x12I\n" +
@@ -1307,7 +1398,8 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\aListDLQ\x12\x19.worker.v1.ListDLQRequest\x1a\x1a.worker.v1.ListDLQResponse\x12O\n" +
 	"\fPauseDequeue\x12\x1e.worker.v1.PauseDequeueRequest\x1a\x1f.worker.v1.PauseDequeueResponse\x12R\n" +
 	"\rResumeDequeue\x12\x1f.worker.v1.ResumeDequeueRequest\x1a .worker.v1.ResumeDequeueResponse\x12F\n" +
-	"\tReplayDLQ\x12\x1b.worker.v1.ReplayDLQRequest\x1a\x1c.worker.v1.ReplayDLQResponseB\x94\x01\n" +
+	"\tReplayDLQ\x12\x1b.worker.v1.ReplayDLQRequest\x1a\x1c.worker.v1.ReplayDLQResponse\x12R\n" +
+	"\rReplayDLQByID\x12\x1f.worker.v1.ReplayDLQByIDRequest\x1a .worker.v1.ReplayDLQByIDResponseB\x94\x01\n" +
 	"\rcom.worker.v1B\n" +
 	"AdminProtoP\x01Z2github.com/hyp3rd/go-worker/pkg/worker/v1;workerpb\xa2\x02\x03WXX\xaa\x02\tWorker.V1\xca\x02\tWorker\\V1\xe2\x02\x15Worker\\V1\\GPBMetadata\xea\x02\n" +
 	"Worker::V1b\x06proto3"
@@ -1324,34 +1416,34 @@ func file_worker_v1_admin_proto_rawDescGZIP() []byte {
 	return file_worker_v1_admin_proto_rawDescData
 }
 
-var (
-	file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
-	file_worker_v1_admin_proto_goTypes  = []any{
-		(*GetOverviewRequest)(nil),    // 0: worker.v1.GetOverviewRequest
-		(*OverviewStats)(nil),         // 1: worker.v1.OverviewStats
-		(*CoordinationStatus)(nil),    // 2: worker.v1.CoordinationStatus
-		(*GetOverviewResponse)(nil),   // 3: worker.v1.GetOverviewResponse
-		(*GetHealthRequest)(nil),      // 4: worker.v1.GetHealthRequest
-		(*GetHealthResponse)(nil),     // 5: worker.v1.GetHealthResponse
-		(*QueueSummary)(nil),          // 6: worker.v1.QueueSummary
-		(*ListQueuesRequest)(nil),     // 7: worker.v1.ListQueuesRequest
-		(*ListQueuesResponse)(nil),    // 8: worker.v1.ListQueuesResponse
-		(*GetQueueRequest)(nil),       // 9: worker.v1.GetQueueRequest
-		(*GetQueueResponse)(nil),      // 10: worker.v1.GetQueueResponse
-		(*ScheduleEntry)(nil),         // 11: worker.v1.ScheduleEntry
-		(*ListSchedulesRequest)(nil),  // 12: worker.v1.ListSchedulesRequest
-		(*ListSchedulesResponse)(nil), // 13: worker.v1.ListSchedulesResponse
-		(*DLQEntry)(nil),              // 14: worker.v1.DLQEntry
-		(*ListDLQRequest)(nil),        // 15: worker.v1.ListDLQRequest
-		(*ListDLQResponse)(nil),       // 16: worker.v1.ListDLQResponse
-		(*PauseDequeueRequest)(nil),   // 17: worker.v1.PauseDequeueRequest
-		(*PauseDequeueResponse)(nil),  // 18: worker.v1.PauseDequeueResponse
-		(*ResumeDequeueRequest)(nil),  // 19: worker.v1.ResumeDequeueRequest
-		(*ResumeDequeueResponse)(nil), // 20: worker.v1.ResumeDequeueResponse
-		(*ReplayDLQRequest)(nil),      // 21: worker.v1.ReplayDLQRequest
-		(*ReplayDLQResponse)(nil),     // 22: worker.v1.ReplayDLQResponse
-	}
-)
+var file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_worker_v1_admin_proto_goTypes = []any{
+	(*GetOverviewRequest)(nil),    // 0: worker.v1.GetOverviewRequest
+	(*OverviewStats)(nil),         // 1: worker.v1.OverviewStats
+	(*CoordinationStatus)(nil),    // 2: worker.v1.CoordinationStatus
+	(*GetOverviewResponse)(nil),   // 3: worker.v1.GetOverviewResponse
+	(*GetHealthRequest)(nil),      // 4: worker.v1.GetHealthRequest
+	(*GetHealthResponse)(nil),     // 5: worker.v1.GetHealthResponse
+	(*QueueSummary)(nil),          // 6: worker.v1.QueueSummary
+	(*ListQueuesRequest)(nil),     // 7: worker.v1.ListQueuesRequest
+	(*ListQueuesResponse)(nil),    // 8: worker.v1.ListQueuesResponse
+	(*GetQueueRequest)(nil),       // 9: worker.v1.GetQueueRequest
+	(*GetQueueResponse)(nil),      // 10: worker.v1.GetQueueResponse
+	(*ScheduleEntry)(nil),         // 11: worker.v1.ScheduleEntry
+	(*ListSchedulesRequest)(nil),  // 12: worker.v1.ListSchedulesRequest
+	(*ListSchedulesResponse)(nil), // 13: worker.v1.ListSchedulesResponse
+	(*DLQEntry)(nil),              // 14: worker.v1.DLQEntry
+	(*ListDLQRequest)(nil),        // 15: worker.v1.ListDLQRequest
+	(*ListDLQResponse)(nil),       // 16: worker.v1.ListDLQResponse
+	(*PauseDequeueRequest)(nil),   // 17: worker.v1.PauseDequeueRequest
+	(*PauseDequeueResponse)(nil),  // 18: worker.v1.PauseDequeueResponse
+	(*ResumeDequeueRequest)(nil),  // 19: worker.v1.ResumeDequeueRequest
+	(*ResumeDequeueResponse)(nil), // 20: worker.v1.ResumeDequeueResponse
+	(*ReplayDLQRequest)(nil),      // 21: worker.v1.ReplayDLQRequest
+	(*ReplayDLQResponse)(nil),     // 22: worker.v1.ReplayDLQResponse
+	(*ReplayDLQByIDRequest)(nil),  // 23: worker.v1.ReplayDLQByIDRequest
+	(*ReplayDLQByIDResponse)(nil), // 24: worker.v1.ReplayDLQByIDResponse
+}
 var file_worker_v1_admin_proto_depIdxs = []int32{
 	1,  // 0: worker.v1.GetOverviewResponse.stats:type_name -> worker.v1.OverviewStats
 	2,  // 1: worker.v1.GetOverviewResponse.coordination:type_name -> worker.v1.CoordinationStatus
@@ -1368,17 +1460,19 @@ var file_worker_v1_admin_proto_depIdxs = []int32{
 	17, // 12: worker.v1.AdminService.PauseDequeue:input_type -> worker.v1.PauseDequeueRequest
 	19, // 13: worker.v1.AdminService.ResumeDequeue:input_type -> worker.v1.ResumeDequeueRequest
 	21, // 14: worker.v1.AdminService.ReplayDLQ:input_type -> worker.v1.ReplayDLQRequest
-	5,  // 15: worker.v1.AdminService.GetHealth:output_type -> worker.v1.GetHealthResponse
-	3,  // 16: worker.v1.AdminService.GetOverview:output_type -> worker.v1.GetOverviewResponse
-	8,  // 17: worker.v1.AdminService.ListQueues:output_type -> worker.v1.ListQueuesResponse
-	10, // 18: worker.v1.AdminService.GetQueue:output_type -> worker.v1.GetQueueResponse
-	13, // 19: worker.v1.AdminService.ListSchedules:output_type -> worker.v1.ListSchedulesResponse
-	16, // 20: worker.v1.AdminService.ListDLQ:output_type -> worker.v1.ListDLQResponse
-	18, // 21: worker.v1.AdminService.PauseDequeue:output_type -> worker.v1.PauseDequeueResponse
-	20, // 22: worker.v1.AdminService.ResumeDequeue:output_type -> worker.v1.ResumeDequeueResponse
-	22, // 23: worker.v1.AdminService.ReplayDLQ:output_type -> worker.v1.ReplayDLQResponse
-	15, // [15:24] is the sub-list for method output_type
-	6,  // [6:15] is the sub-list for method input_type
+	23, // 15: worker.v1.AdminService.ReplayDLQByID:input_type -> worker.v1.ReplayDLQByIDRequest
+	5,  // 16: worker.v1.AdminService.GetHealth:output_type -> worker.v1.GetHealthResponse
+	3,  // 17: worker.v1.AdminService.GetOverview:output_type -> worker.v1.GetOverviewResponse
+	8,  // 18: worker.v1.AdminService.ListQueues:output_type -> worker.v1.ListQueuesResponse
+	10, // 19: worker.v1.AdminService.GetQueue:output_type -> worker.v1.GetQueueResponse
+	13, // 20: worker.v1.AdminService.ListSchedules:output_type -> worker.v1.ListSchedulesResponse
+	16, // 21: worker.v1.AdminService.ListDLQ:output_type -> worker.v1.ListDLQResponse
+	18, // 22: worker.v1.AdminService.PauseDequeue:output_type -> worker.v1.PauseDequeueResponse
+	20, // 23: worker.v1.AdminService.ResumeDequeue:output_type -> worker.v1.ResumeDequeueResponse
+	22, // 24: worker.v1.AdminService.ReplayDLQ:output_type -> worker.v1.ReplayDLQResponse
+	24, // 25: worker.v1.AdminService.ReplayDLQByID:output_type -> worker.v1.ReplayDLQByIDResponse
+	16, // [16:26] is the sub-list for method output_type
+	6,  // [6:16] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -1395,7 +1489,7 @@ func file_worker_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_worker_v1_admin_proto_rawDesc), len(file_worker_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

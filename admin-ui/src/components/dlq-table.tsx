@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { DlqEntry } from "@/lib/types";
 import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
@@ -28,6 +28,9 @@ export function DlqTable({
   const searchParams = useSearchParams();
   const [queueValue, setQueueValue] = useState(queueFilter);
   const [handlerValue, setHandlerValue] = useState(handlerFilter);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [message, setMessage] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     setQueueValue(queueFilter);
@@ -36,6 +39,21 @@ export function DlqTable({
   useEffect(() => {
     setHandlerValue(handlerFilter);
   }, [handlerFilter]);
+
+  useEffect(() => {
+    setSelected((current) => {
+      if (entries.length === 0) {
+        return new Set();
+      }
+      const next = new Set<string>();
+      entries.forEach((entry) => {
+        if (current.has(entry.id)) {
+          next.add(entry.id);
+        }
+      });
+      return next;
+    });
+  }, [entries]);
 
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -81,6 +99,67 @@ export function DlqTable({
     updateParams({ page: String(Math.max(1, page - 1)) });
   };
 
+  const toggleSelect = (id: string) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const allSelected = entries.length > 0 && selected.size === entries.length;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+      return;
+    }
+
+    setSelected(new Set(entries.map((entry) => entry.id)));
+  };
+
+  const replaySelected = async () => {
+    if (selected.size === 0) {
+      return;
+    }
+
+    const ok = window.confirm(
+      `Replay ${selected.size} selected DLQ item(s)? Replays are at-least-once.`
+    );
+    if (!ok) {
+      return;
+    }
+
+    setMessage(null);
+    const ids = Array.from(selected);
+
+    try {
+      const res = await fetch("/api/actions/dlq/replay-ids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json()) as { error?: string };
+        throw new Error(payload?.error ?? "Replay failed");
+      }
+
+      const payload = (await res.json()) as { message?: string };
+      setMessage(payload.message ?? "Replay complete");
+      setSelected(new Set());
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Replay failed");
+    }
+  };
+
   return (
     <div className="mt-6 space-y-4">
       <FilterBar
@@ -88,8 +167,12 @@ export function DlqTable({
         initialQuery={query}
         onQuery={handleQuery}
         rightSlot={
-          <button className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white">
-            Replay selected
+          <button
+            onClick={replaySelected}
+            disabled={selected.size === 0 || pending}
+            className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Replay selected {selected.size > 0 ? `(${selected.size})` : ""}
           </button>
         }
       />
@@ -133,9 +216,36 @@ export function DlqTable({
           </div>
         </div>
       </div>
-      <Table columns={["ID", "Queue", "Handler", "Age", "Attempts"]}>
+      <Table
+        columns={[
+          {
+            key: "select",
+            label: (
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                aria-label="Select all DLQ entries"
+              />
+            ),
+          },
+          { key: "id", label: "ID" },
+          { key: "queue", label: "Queue" },
+          { key: "handler", label: "Handler" },
+          { key: "age", label: "Age" },
+          { key: "attempts", label: "Attempts" },
+        ]}
+      >
         {entries.map((entry) => (
           <TableRow key={entry.id}>
+            <TableCell>
+              <input
+                type="checkbox"
+                checked={selected.has(entry.id)}
+                onChange={() => toggleSelect(entry.id)}
+                aria-label={`Select ${entry.id}`}
+              />
+            </TableCell>
             <TableCell>
               <span className="font-mono text-xs">{entry.id}</span>
             </TableCell>
@@ -146,6 +256,7 @@ export function DlqTable({
           </TableRow>
         ))}
       </Table>
+      {message ? <p className="text-xs text-muted">{message}</p> : null}
       {total === 0 ? (
         <div className="rounded-2xl border border-soft bg-[var(--card)] p-6 text-sm text-muted">
           No DLQ entries found for the current filters.

@@ -12,21 +12,26 @@ import (
 )
 
 const (
-	adminDLQScanLimit      = 2000
-	adminDLQDefaultSize    = 100
-	adminDLQQueueIndex     = 0
-	adminDLQHandlerIndex   = 1
-	adminDLQAttemptsIndex  = 2
-	adminDLQFailedAtIndex  = 3
-	adminDLQUpdatedAtIndex = 4
-	adminSecondsPerMinute  = 60
-	adminMinutesPerHour    = 60
-	adminHoursPerDay       = 24
-	parseIntBitSize        = 64
+	adminDLQScanLimit            = 2000
+	adminDLQDefaultSize          = 100
+	adminDLQQueueIndex           = 0
+	adminDLQHandlerIndex         = 1
+	adminDLQAttemptsIndex        = 2
+	adminDLQFailedAtIndex        = 3
+	adminDLQUpdatedAtIndex       = 4
+	adminDLQReplayMaxIDs         = 1000
+	adminSecondsPerMinute        = 60
+	adminMinutesPerHour          = 60
+	adminHoursPerDay             = 24
+	adminDLQReplayByIDArgsPrefix = 3
+	parseIntBitSize              = 64
 )
 
 //nolint:revive,dupword
 const adminDLQReplayScript = "\nlocal dead = KEYS[1]\nlocal taskPrefix = KEYS[2]\nlocal queuesKey = KEYS[3]\nlocal now = tonumber(ARGV[1])\nlocal limit = tonumber(ARGV[2])\nlocal prefix = ARGV[3]\nlocal defaultQueue = ARGV[4]\n\nlocal moved = 0\nfor i = 1, limit do\n  local id = redis.call(\"RPOP\", dead)\n  if not id then\n    break\n  end\n  local taskKey = taskPrefix .. id\n  if redis.call(\"EXISTS\", taskKey) == 1 then\n    local queue = redis.call(\"HGET\", taskKey, \"queue\")\n    if queue == false or queue == \"\" then\n      queue = defaultQueue\n    end\n    local readyKey = prefix .. \":ready:\" .. queue\n    redis.call(\"HSET\", taskKey, \"ready_at_ms\", now, \"updated_at_ms\", now)\n    redis.call(\"ZADD\", readyKey, now, id)\n    redis.call(\"SADD\", queuesKey, queue)\n    moved = moved + 1\n  end\nend\nreturn moved"
+
+//nolint:revive
+const adminDLQReplayByIDScript = "\nlocal dead = KEYS[1]\nlocal taskPrefix = KEYS[2]\nlocal queuesKey = KEYS[3]\nlocal prefix = ARGV[1]\nlocal defaultQueue = ARGV[2]\nlocal now = tonumber(ARGV[3])\n\nlocal moved = 0\nfor i = 4, #ARGV do\n  local id = ARGV[i]\n  local taskKey = taskPrefix .. id\n  if redis.call(\"EXISTS\", taskKey) == 1 then\n    local queue = redis.call(\"HGET\", taskKey, \"queue\")\n    if queue == false or queue == \"\" then\n      queue = defaultQueue\n    end\n    local readyKey = prefix .. \":ready:\" .. queue\n    local processingKey = prefix .. \":processing:\" .. queue\n    redis.call(\"LREM\", dead, 0, id)\n    redis.call(\"ZREM\", readyKey, id)\n    redis.call(\"ZREM\", processingKey, id)\n    redis.call(\"HSET\", taskKey, \"ready_at_ms\", now, \"updated_at_ms\", now)\n    redis.call(\"ZADD\", readyKey, now, id)\n    redis.call(\"SADD\", queuesKey, queue)\n    moved = moved + 1\n  end\nreturn moved"
 
 // AdminOverview retrieves an overview of the durable backend status.
 func (b *RedisDurableBackend) AdminOverview(ctx context.Context) (AdminOverview, error) {
@@ -284,6 +289,49 @@ func (b *RedisDurableBackend) AdminReplayDLQ(ctx context.Context, limit int) (in
 	moved, err := resp.AsInt64()
 	if err != nil {
 		return 0, ewrap.Wrap(err, "parse replay result")
+	}
+
+	return int(moved), nil
+}
+
+// AdminReplayDLQByID replays specific DLQ entries by ID.
+func (b *RedisDurableBackend) AdminReplayDLQByID(ctx context.Context, ids []string) (int, error) {
+	if ctx == nil {
+		return 0, ErrInvalidTaskContext
+	}
+
+	normalized := normalizeReplayIDs(ids)
+	if len(normalized) == 0 {
+		return 0, ErrAdminReplayIDsRequired
+	}
+
+	if len(normalized) > adminDLQReplayMaxIDs {
+		return 0, ErrAdminReplayIDsTooLarge
+	}
+
+	args := make([]string, 0, adminDLQReplayByIDArgsPrefix+len(normalized))
+	args = append(args,
+		b.keyPrefix(),
+		b.defaultQueueName(),
+		strconv.FormatInt(time.Now().UnixMilli(), 10),
+	)
+	args = append(args, normalized...)
+
+	script := rueidis.NewLuaScript(adminDLQReplayByIDScript)
+	resp := script.Exec(
+		ctx,
+		b.client,
+		[]string{b.deadKey(), b.taskPrefixKey(), b.queuesKey()},
+		args,
+	)
+
+	if resp.Error() != nil {
+		return 0, ewrap.Wrap(resp.Error(), "replay durable DLQ by id")
+	}
+
+	moved, err := resp.AsInt64()
+	if err != nil {
+		return 0, ewrap.Wrap(err, "parse replay by id result")
 	}
 
 	return int(moved), nil
@@ -570,6 +618,31 @@ func (b *RedisDurableBackend) dlqEntries(ctx context.Context, ids []string) ([]A
 	}
 
 	return entries, nil
+}
+
+func normalizeReplayIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+
+	for _, raw := range ids {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+
+		if _, ok := seen[id]; ok {
+			continue
+		}
+
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+
+	return out
 }
 
 func matchAdminDLQFilter(entry AdminDLQEntry, filter adminDLQFilters) bool {

@@ -113,6 +113,14 @@ message ReplayDLQResponse {
   int32 moved = 1;
 }
 
+message ReplayDLQByIDRequest {
+  repeated string ids = 1;
+}
+
+message ReplayDLQByIDResponse {
+  int32 moved = 1;
+}
+
 service AdminService {
   rpc GetHealth(GetHealthRequest) returns (GetHealthResponse);
   rpc GetOverview(GetOverviewRequest) returns (GetOverviewResponse);
@@ -123,4 +131,5 @@ service AdminService {
   rpc PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse);
   rpc ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse);
   rpc ReplayDLQ(ReplayDLQRequest) returns (ReplayDLQResponse);
+  rpc ReplayDLQByID(ReplayDLQByIDRequest) returns (ReplayDLQByIDResponse);
 }

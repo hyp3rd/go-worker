@@ -98,7 +98,7 @@ Service: `worker.v1.AdminService`
 
 - **Overview/Queues/Queue detail**: Implemented (gRPC + gateway + UI).
 - **DLQ pagination + filters**: Implemented in API; UI supports search + queue/handler filters with paging.
-- **DLQ replay**: Implemented (bulk replay by limit). Replay-by-ID/selection is still a TODO.
+- **DLQ replay**: Implemented (bulk replay by limit + replay by ID/selection).
 - **Schedules**: Implemented from in-memory cron registry; UI shows next/last run. Durable backends report schedules via TaskManager.
 - **Health/version**: Implemented (gateway + UI).
 - **Observability counters**: Not implemented.

@@ -1,8 +1,13 @@
+type TableColumn = {
+  key: string;
+  label: React.ReactNode;
+};
+
 export function Table({
   columns,
   children,
 }: {
-  columns: string[];
+  columns: TableColumn[];
   children: React.ReactNode;
 }) {
   return (
@@ -11,8 +16,8 @@ export function Table({
         <thead className="bg-[var(--card)] text-xs uppercase tracking-[0.2em] text-muted">
           <tr>
             {columns.map((column) => (
-              <th key={column} className="px-4 py-3">
-                {column}
+              <th key={column.key} className="px-4 py-3">
+                {column.label}
               </th>
             ))}
           </tr>

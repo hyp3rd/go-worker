@@ -8,7 +8,6 @@ package workerpb
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -29,6 +28,7 @@ const (
 	AdminService_PauseDequeue_FullMethodName  = "/worker.v1.AdminService/PauseDequeue"
 	AdminService_ResumeDequeue_FullMethodName = "/worker.v1.AdminService/ResumeDequeue"
 	AdminService_ReplayDLQ_FullMethodName     = "/worker.v1.AdminService/ReplayDLQ"
+	AdminService_ReplayDLQByID_FullMethodName = "/worker.v1.AdminService/ReplayDLQByID"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -44,6 +44,7 @@ type AdminServiceClient interface {
 	PauseDequeue(ctx context.Context, in *PauseDequeueRequest, opts ...grpc.CallOption) (*PauseDequeueResponse, error)
 	ResumeDequeue(ctx context.Context, in *ResumeDequeueRequest, opts ...grpc.CallOption) (*ResumeDequeueResponse, error)
 	ReplayDLQ(ctx context.Context, in *ReplayDLQRequest, opts ...grpc.CallOption) (*ReplayDLQResponse, error)
+	ReplayDLQByID(ctx context.Context, in *ReplayDLQByIDRequest, opts ...grpc.CallOption) (*ReplayDLQByIDResponse, error)
 }
 
 type adminServiceClient struct {
@@ -144,6 +145,16 @@ func (c *adminServiceClient) ReplayDLQ(ctx context.Context, in *ReplayDLQRequest
 	return out, nil
 }
 
+func (c *adminServiceClient) ReplayDLQByID(ctx context.Context, in *ReplayDLQByIDRequest, opts ...grpc.CallOption) (*ReplayDLQByIDResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReplayDLQByIDResponse)
+	err := c.cc.Invoke(ctx, AdminService_ReplayDLQByID_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations should embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -157,6 +168,7 @@ type AdminServiceServer interface {
 	PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error)
 	ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error)
 	ReplayDLQ(context.Context, *ReplayDLQRequest) (*ReplayDLQResponse, error)
+	ReplayDLQByID(context.Context, *ReplayDLQByIDRequest) (*ReplayDLQByIDResponse, error)
 }
 
 // UnimplementedAdminServiceServer should be embedded to have
@@ -169,37 +181,32 @@ type UnimplementedAdminServiceServer struct{}
 func (UnimplementedAdminServiceServer) GetHealth(context.Context, *GetHealthRequest) (*GetHealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHealth not implemented")
 }
-
 func (UnimplementedAdminServiceServer) GetOverview(context.Context, *GetOverviewRequest) (*GetOverviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOverview not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListQueues not implemented")
 }
-
 func (UnimplementedAdminServiceServer) GetQueue(context.Context, *GetQueueRequest) (*GetQueueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetQueue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSchedules not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDLQ not implemented")
 }
-
 func (UnimplementedAdminServiceServer) PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseDequeue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeDequeue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ReplayDLQ(context.Context, *ReplayDLQRequest) (*ReplayDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReplayDLQ not implemented")
+}
+func (UnimplementedAdminServiceServer) ReplayDLQByID(context.Context, *ReplayDLQByIDRequest) (*ReplayDLQByIDResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReplayDLQByID not implemented")
 }
 func (UnimplementedAdminServiceServer) testEmbeddedByValue() {}
 
@@ -383,6 +390,24 @@ func _AdminService_ReplayDLQ_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ReplayDLQByID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplayDLQByIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ReplayDLQByID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ReplayDLQByID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ReplayDLQByID(ctx, req.(*ReplayDLQByIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -425,6 +450,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReplayDLQ",
 			Handler:    _AdminService_ReplayDLQ_Handler,
+		},
+		{
+			MethodName: "ReplayDLQByID",
+			Handler:    _AdminService_ReplayDLQByID_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -18,6 +18,10 @@ var (
 	ErrAdminQueueNameRequired = ewrap.New("admin queue name is required")
 	// ErrAdminDLQFilterTooLarge indicates the DLQ is too large for filtered queries.
 	ErrAdminDLQFilterTooLarge = ewrap.New("DLQ too large for filtered query")
+	// ErrAdminReplayIDsRequired indicates replay-by-id requires at least one id.
+	ErrAdminReplayIDsRequired = ewrap.New("admin replay ids are required")
+	// ErrAdminReplayIDsTooLarge indicates too many ids were provided.
+	ErrAdminReplayIDsTooLarge = ewrap.New("admin replay ids limit exceeded")
 )
 
 // AdminOverview describes the admin overview snapshot.
@@ -90,4 +94,5 @@ type AdminBackend interface {
 	AdminPause(ctx context.Context) error
 	AdminResume(ctx context.Context) error
 	AdminReplayDLQ(ctx context.Context, limit int) (int, error)
+	AdminReplayDLQByID(ctx context.Context, ids []string) (int, error)
 }
