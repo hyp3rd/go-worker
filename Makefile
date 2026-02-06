@@ -2,7 +2,7 @@ include .project-settings.env
 
 GOLANGCI_LINT_VERSION ?= v2.8.0
 BUF_VERSION ?= v1.65.0
-GO_VERSION ?= 1.25.6
+GO_VERSION ?= 1.25.7
 GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true
 BENCHTIME ?= 1s
@@ -180,6 +180,12 @@ sec:
 	@echo "\nRunning gosec..."
 	gosec -exclude-generated -exclude-dir=__examples/* ./...
 
+run-dev:
+	docker compose -f compose.admin.yaml down && docker compose -f compose.admin.yaml up --build --force-recreate --remove-orphans
+
+stop-dev:
+	docker compose -f compose.admin.yaml down
+
 # check_command_exists is a helper function that checks if a command exists.
 define check_command_exists
 @which $(1) > /dev/null 2>&1 || (echo "$(1) command not found" && exit 1)
@@ -198,6 +204,8 @@ help:
 	@echo "  prepare-proto-tools\t\tInstall protobuf tooling (optional)"
 	@echo "  update-toolchain\t\tUpdate all development tools to their latest versions"
 	@echo "  init\t\t\t\tRun setup-project.sh, install tooling, and proto tools if enabled"
+	@echo "  run-dev\t\t\tRun the development environment with Docker Compose"
+	@echo "  stop-dev\t\t\tStop the development environment"
 	@echo
 	@echo "Testing commands:"
 	@echo "  test\t\t\t\tRun all tests in the project"
@@ -215,4 +223,4 @@ help:
 	@echo
 	@echo
 	@echo "For more information, see the project README."
-.PHONY: prepare-toolchain prepare-proto-tools prepare-base-tools update-toolchain test test-integration bench vet update-deps lint sec help init proto proto-update proto-lint proto-generate proto-format proto-breaking
+.PHONY: prepare-toolchain prepare-proto-tools prepare-base-tools update-toolchain test test-integration bench vet update-deps lint sec help init proto proto-update proto-lint proto-generate proto-format proto-breaking workerctl run-dev stop-dev

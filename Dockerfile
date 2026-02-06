@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+ARG GO_VERSION=1.25.7
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
+
+WORKDIR /src
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG ARCH
+ARG UID=10001
+ARG VERSION=""
+
+ENV VERSION=${VERSION}
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download -x
+
+COPY . .
+
+RUN --mount=type=cache,target=/go/pkg/mod/ \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOARCH_TARGET=${ARCH:-${TARGETARCH:-amd64}}; \
+    CGO_ENABLED=0 GOARCH=${GOARCH_TARGET} go build \
+    -ldflags="all=-s -w -X main.Version=${VERSION} -X main.BuildTime=$(date +%FT%T%z)" \
+    -trimpath -o /out/worker-admin ./cmd/worker-admin
+
+
+FROM gcr.io/distroless/base-debian13:nonroot
+
+COPY --from=builder /out/worker-admin /usr/local/bin/worker-admin
+
+EXPOSE 50052 8081
+
+ENTRYPOINT ["/usr/local/bin/worker-admin"]

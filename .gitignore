@@ -121,3 +121,6 @@ $RECYCLE.BIN/
 examples/multi/res/*.txt
 bin/*
 .dccache
+
+# Local TLS certs for admin gateway
+certs/
