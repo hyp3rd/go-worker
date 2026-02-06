@@ -3,7 +3,9 @@ import { StatCard } from "@/components/stat-card";
 import { StatusPill } from "@/components/status-pill";
 import { RunbookActions } from "@/components/runbook-actions";
 import { RefreshControls } from "@/components/refresh-controls";
+import Link from "next/link";
 import {
+  getAdminActionCounters,
   getCoordinationStatus,
   getJobSchedules,
   getOverviewStats,
@@ -14,11 +16,12 @@ import { formatLatency, formatNumber } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [stats, queues, jobs, coordination] = await Promise.all([
+  const [stats, queues, jobs, coordination, actions] = await Promise.all([
     getOverviewStats(),
     getQueueSummaries(),
     getJobSchedules(),
     getCoordinationStatus(),
+    getAdminActionCounters(),
   ]);
 
   return (
@@ -91,6 +94,25 @@ export default async function Home() {
             description="High‑confidence actions for production."
           />
           <RunbookActions paused={coordination.paused} />
+          <div className="mt-6 rounded-2xl border border-soft bg-[var(--card)] p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted">
+              Action counters
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
+              <div className="rounded-xl bg-white px-3 py-2 text-center shadow-soft">
+                <p className="text-muted">pause</p>
+                <p className="mt-1 text-sm font-semibold">{actions.pause}</p>
+              </div>
+              <div className="rounded-xl bg-white px-3 py-2 text-center shadow-soft">
+                <p className="text-muted">resume</p>
+                <p className="mt-1 text-sm font-semibold">{actions.resume}</p>
+              </div>
+              <div className="rounded-xl bg-white px-3 py-2 text-center shadow-soft">
+                <p className="text-muted">replay</p>
+                <p className="mt-1 text-sm font-semibold">{actions.replay}</p>
+              </div>
+            </div>
+          </div>
           <div className="mt-6 rounded-2xl border border-soft bg-gradient-to-br from-[#ffdccb] via-[#fff6ea] to-[#d7f2ec] p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-muted">
               coordination
@@ -116,9 +138,12 @@ export default async function Home() {
               <button className="rounded-full border border-soft px-4 py-2 text-xs font-semibold">
                 Export
               </button>
-              <button className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-[var(--accent-ink)]">
-                New schedule
-              </button>
+              <Link
+                href="/schedules"
+                className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-[var(--accent-ink)]"
+              >
+                Manage schedules
+              </Link>
             </div>
           }
         />

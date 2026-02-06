@@ -21,6 +21,13 @@ type CronDurableFactory func(ctx context.Context) (DurableTask, error)
 type cronSpec struct {
 	Spec    string
 	Durable bool
+	Paused  bool
+}
+
+type cronFactory struct {
+	Durable        bool
+	TaskFactory    CronTaskFactory
+	DurableFactory CronDurableFactory
 }
 
 // RegisterCronTask registers a cron job that enqueues a task on each tick.
@@ -46,29 +53,12 @@ func (tm *TaskManager) RegisterCronTask(
 		return ewrap.New("cron task already registered")
 	}
 
-	entryID := tm.cron.Schedule(schedule, cron.FuncJob(func() {
-		if tm.skipCronTick() {
-			return
-		}
+	tm.cronFactories[normalized] = cronFactory{
+		Durable:     false,
+		TaskFactory: factory,
+	}
 
-		task, err := factory(tm.ctx)
-		if err != nil {
-			cronLogError("cron task factory", normalized, err)
-
-			return
-		}
-
-		if task == nil {
-			cronLogError("cron task factory", normalized, ewrap.New("cron task is nil"))
-
-			return
-		}
-
-		err = tm.RegisterTask(tm.ctx, task)
-		if err != nil {
-			cronLogError("cron register task", normalized, err)
-		}
-	}))
+	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
 
 	tm.cronEntries[normalized] = entryID
 	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: false}
@@ -99,28 +89,68 @@ func (tm *TaskManager) RegisterDurableCronTask(
 		return ewrap.New("cron task already registered")
 	}
 
-	entryID := tm.cron.Schedule(schedule, cron.FuncJob(func() {
-		if tm.skipCronTick() {
-			return
-		}
+	tm.cronFactories[normalized] = cronFactory{
+		Durable:        true,
+		DurableFactory: factory,
+	}
 
-		task, err := factory(tm.ctx)
-		if err != nil {
-			cronLogError("cron durable task factory", normalized, err)
-
-			return
-		}
-
-		err = tm.RegisterDurableTask(tm.ctx, task)
-		if err != nil {
-			cronLogError("cron register durable task", normalized, err)
-		}
-	}))
+	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
 
 	tm.cronEntries[normalized] = entryID
 	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: true}
 
 	return nil
+}
+
+func (tm *TaskManager) cronJob(name string) func() {
+	return func() {
+		if tm.skipCronTick() {
+			return
+		}
+
+		tm.cronMu.RLock()
+		spec, specOk := tm.cronSpecs[name]
+		factory, factoryOk := tm.cronFactories[name]
+		tm.cronMu.RUnlock()
+
+		if !specOk || !factoryOk || spec.Paused {
+			return
+		}
+
+		if factory.Durable {
+			task, err := factory.DurableFactory(tm.ctx)
+			if err != nil {
+				cronLogError("cron durable task factory", name, err)
+
+				return
+			}
+
+			err = tm.RegisterDurableTask(tm.ctx, task)
+			if err != nil {
+				cronLogError("cron register durable task", name, err)
+			}
+
+			return
+		}
+
+		task, err := factory.TaskFactory(tm.ctx)
+		if err != nil {
+			cronLogError("cron task factory", name, err)
+
+			return
+		}
+
+		if task == nil {
+			cronLogError("cron task factory", name, ewrap.New("cron task is nil"))
+
+			return
+		}
+
+		err = tm.RegisterTask(tm.ctx, task)
+		if err != nil {
+			cronLogError("cron register task", name, err)
+		}
+	}
 }
 
 func (tm *TaskManager) prepareCronRegistration(

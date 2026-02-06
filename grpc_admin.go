@@ -75,6 +75,11 @@ func (s *GRPCServer) GetOverview(ctx context.Context, req *workerpb.GetOverviewR
 	return &workerpb.GetOverviewResponse{
 		Stats:        stats,
 		Coordination: coordination,
+		Actions: &workerpb.AdminActionCounters{
+			Pause:  overview.Actions.Pause,
+			Resume: overview.Actions.Resume,
+			Replay: overview.Actions.Replay,
+		},
 	}, nil
 }
 
@@ -164,26 +169,74 @@ func (s *GRPCServer) ListSchedules(ctx context.Context, req *workerpb.ListSchedu
 	}
 
 	for _, schedule := range schedules {
-		nextRun := int64(0)
-		if !schedule.NextRun.IsZero() {
-			nextRun = schedule.NextRun.UnixMilli()
-		}
-
-		lastRun := int64(0)
-		if !schedule.LastRun.IsZero() {
-			lastRun = schedule.LastRun.UnixMilli()
-		}
-
-		resp.Schedules = append(resp.Schedules, &workerpb.ScheduleEntry{
-			Name:      schedule.Name,
-			Spec:      schedule.Spec,
-			NextRunMs: nextRun,
-			LastRunMs: lastRun,
-			Durable:   schedule.Durable,
-		})
+		resp.Schedules = append(resp.Schedules, scheduleToProto(schedule))
 	}
 
 	return resp, nil
+}
+
+// CreateSchedule registers or updates a cron schedule.
+func (s *GRPCServer) CreateSchedule(ctx context.Context, req *workerpb.CreateScheduleRequest) (*workerpb.CreateScheduleResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_CreateSchedule_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	schedule, err := backend.AdminCreateSchedule(ctx, AdminScheduleSpec{
+		Name:    req.GetName(),
+		Spec:    req.GetSpec(),
+		Durable: req.GetDurable(),
+	})
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.CreateScheduleResponse{Schedule: scheduleToProto(schedule)}, nil
+}
+
+// DeleteSchedule removes a cron schedule.
+func (s *GRPCServer) DeleteSchedule(ctx context.Context, req *workerpb.DeleteScheduleRequest) (*workerpb.DeleteScheduleResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_DeleteSchedule_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	deleted, err := backend.AdminDeleteSchedule(ctx, req.GetName())
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.DeleteScheduleResponse{Deleted: deleted}, nil
+}
+
+// PauseSchedule pauses or resumes a cron schedule.
+func (s *GRPCServer) PauseSchedule(ctx context.Context, req *workerpb.PauseScheduleRequest) (*workerpb.PauseScheduleResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_PauseSchedule_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	schedule, err := backend.AdminPauseSchedule(ctx, req.GetName(), req.GetPaused())
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.PauseScheduleResponse{Schedule: scheduleToProto(schedule)}, nil
 }
 
 // ListDLQ returns DLQ entries.
@@ -333,6 +386,28 @@ func clampInt32(value int) int32 {
 	return int32(value)
 }
 
+func scheduleToProto(schedule AdminSchedule) *workerpb.ScheduleEntry {
+	nextRun := int64(0)
+	if !schedule.NextRun.IsZero() {
+		nextRun = schedule.NextRun.UnixMilli()
+	}
+
+	lastRun := int64(0)
+	if !schedule.LastRun.IsZero() {
+		lastRun = schedule.LastRun.UnixMilli()
+	}
+
+	return &workerpb.ScheduleEntry{
+		Name:      schedule.Name,
+		Spec:      schedule.Spec,
+		NextRunMs: nextRun,
+		LastRunMs: lastRun,
+		Durable:   schedule.Durable,
+		Paused:    schedule.Paused,
+	}
+}
+
+//nolint:cyclop
 func toAdminStatus(err error) error {
 	if err == nil {
 		return nil
@@ -364,6 +439,18 @@ func toAdminStatus(err error) error {
 
 	if errors.Is(err, ErrAdminReplayIDsTooLarge) {
 		return ewrap.Wrap(status.Error(codes.ResourceExhausted, err.Error()), "replay ids too large")
+	}
+
+	if errors.Is(err, ErrAdminScheduleNameRequired) || errors.Is(err, ErrAdminScheduleSpecRequired) {
+		return ewrap.Wrap(status.Error(codes.InvalidArgument, err.Error()), "schedule request invalid")
+	}
+
+	if errors.Is(err, ErrAdminScheduleNotFound) {
+		return ewrap.Wrap(status.Error(codes.NotFound, err.Error()), "schedule not found")
+	}
+
+	if errors.Is(err, ErrAdminScheduleFactoryMissing) || errors.Is(err, ErrAdminScheduleDurableMismatch) {
+		return ewrap.Wrap(status.Error(codes.FailedPrecondition, err.Error()), "schedule factory missing")
 	}
 
 	if _, ok := status.FromError(err); ok {

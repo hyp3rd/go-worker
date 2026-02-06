@@ -207,6 +207,33 @@ func (*RedisDurableBackend) AdminSchedules(ctx context.Context) ([]AdminSchedule
 	return nil, ErrAdminUnsupported
 }
 
+// AdminCreateSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminCreateSchedule(ctx context.Context, _ AdminScheduleSpec) (AdminSchedule, error) {
+	if ctx == nil {
+		return AdminSchedule{}, ErrInvalidTaskContext
+	}
+
+	return AdminSchedule{}, ErrAdminUnsupported
+}
+
+// AdminDeleteSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminDeleteSchedule(ctx context.Context, _ string) (bool, error) {
+	if ctx == nil {
+		return false, ErrInvalidTaskContext
+	}
+
+	return false, ErrAdminUnsupported
+}
+
+// AdminPauseSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminPauseSchedule(ctx context.Context, _ string, _ bool) (AdminSchedule, error) {
+	if ctx == nil {
+		return AdminSchedule{}, ErrInvalidTaskContext
+	}
+
+	return AdminSchedule{}, ErrAdminUnsupported
+}
+
 // AdminDLQ returns entries from the dead letter queue.
 func (b *RedisDurableBackend) AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error) {
 	if ctx == nil {

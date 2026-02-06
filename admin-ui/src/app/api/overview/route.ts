@@ -20,6 +20,11 @@ export async function GET() {
         lease: string;
         paused: boolean;
       };
+      actions: {
+        pause: number;
+        resume: number;
+        replay: number;
+      };
     }>({ method: "GET", path: "/admin/v1/overview" });
 
     return NextResponse.json(payload);

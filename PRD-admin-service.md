@@ -25,8 +25,12 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
 1. **Queue data**
          - Return per-queue ready/processing/dead counts and weights.
          - Return queue detail by name (single-queue view).
+         - Allow updating queue weight and resetting to default.
 1. **Schedules**
          - List cron schedules with spec and next/previous run.
+         - Create/update schedules by name (requires a registered factory).
+         - Pause/resume schedules without unregistering the factory.
+         - Delete schedules by name.
 1. **Health**
          - Report service health and build information (version, commit, Go version).
 1. **DLQ**
@@ -56,6 +60,9 @@ Service: `worker.v1.AdminService`
 - `ListQueues(ListQueuesRequest) returns (ListQueuesResponse)`
 - `GetQueue(GetQueueRequest) returns (GetQueueResponse)`
 - `ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse)`
+- `CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse)`
+- `DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse)`
+- `PauseSchedule(PauseScheduleRequest) returns (PauseScheduleResponse)`
 - `ListDLQ(ListDLQRequest) returns (ListDLQResponse)`
 - `PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse)`
 - `ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse)`
@@ -67,7 +74,12 @@ Service: `worker.v1.AdminService`
 - `GET /admin/v1/overview`
 - `GET /admin/v1/queues`
 - `GET /admin/v1/queues/{name}`
+- `POST /admin/v1/queues/{name}/weight` (body: `{ "weight": 3 }`)
+- `DELETE /admin/v1/queues/{name}/weight`
 - `GET /admin/v1/schedules`
+- `POST /admin/v1/schedules` (body: `{ "name": "...", "spec": "...", "durable": false }`)
+- `DELETE /admin/v1/schedules/{name}`
+- `POST /admin/v1/schedules/{name}/pause` (body: `{ "paused": true }`)
 - `GET /admin/v1/dlq?limit=100&offset=0&queue=default&handler=send_email&query=oops`
 - `POST /admin/v1/pause`
 - `POST /admin/v1/resume`
@@ -85,9 +97,17 @@ Service: `worker.v1.AdminService`
 ## Configuration
 
 - `WORKER_ADMIN_GRPC_ADDR` (default `127.0.0.1:50052`)
+- `WORKER_ADMIN_GRPC_TARGET` (optional; when set, the gateway dials this address instead of starting a local AdminService)
 - `WORKER_ADMIN_HTTP_ADDR` (default `127.0.0.1:8081`)
 - `WORKER_ADMIN_TLS_CERT`, `WORKER_ADMIN_TLS_KEY`, `WORKER_ADMIN_TLS_CA`
 - `WORKER_ADMIN_DEFAULT_QUEUE`, `WORKER_ADMIN_QUEUE_WEIGHTS` (backend defaults)
+
+Worker service cron presets (when using the bundled worker-service):
+
+- `WORKER_DURABLE_CRON_HANDLERS` (comma-separated handler names to register)
+- `WORKER_DURABLE_CRON_PRESETS` (comma-separated `name=spec` overrides)
+- `WORKER_CRON_HANDLERS` (comma-separated in-memory handlers)
+- `WORKER_CRON_PRESETS` (comma-separated `name=spec` overrides)
 
 ## Observability
 
@@ -97,11 +117,13 @@ Service: `worker.v1.AdminService`
 ## Implementation Status (February 5, 2026)
 
 - **Overview/Queues/Queue detail**: Implemented (gRPC + gateway + UI).
+- **Queue actions**: Implemented (set/reset weight via gRPC + gateway + UI).
 - **DLQ pagination + filters**: Implemented in API; UI supports search + queue/handler filters with paging.
 - **DLQ replay**: Implemented (bulk replay by limit + replay by ID/selection).
 - **Schedules**: Implemented from in-memory cron registry; UI shows next/last run. Durable backends report schedules via TaskManager.
 - **Health/version**: Implemented (gateway + UI).
-- **Observability counters**: Not implemented.
+- **Observability counters**: Implemented (pause/resume/replay action counts in overview).
+- **Schedule management endpoints**: Implemented (create/delete/pause via gRPC + gateway + UI).
 
 ## Milestones
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import {
   coordinationStatus,
+  adminActionCounters,
   dlqEntries,
   healthInfo,
   jobSchedules,
@@ -69,6 +70,25 @@ export const getCoordinationStatus = cache(async () => {
     const detail =
       error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to load coordination status: ${detail}`);
+  }
+});
+
+export const getAdminActionCounters = cache(async () => {
+  try {
+    const { actions } = await fetchOverview();
+    return actions;
+  } catch (error) {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
+        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
+    ) {
+      return adminActionCounters;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load admin actions: ${detail}`);
   }
 });
 

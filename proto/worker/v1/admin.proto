@@ -21,9 +21,16 @@ message CoordinationStatus {
   bool paused = 4;
 }
 
+message AdminActionCounters {
+  int64 pause = 1;
+  int64 resume = 2;
+  int64 replay = 3;
+}
+
 message GetOverviewResponse {
   OverviewStats stats = 1;
   CoordinationStatus coordination = 2;
+  AdminActionCounters actions = 3;
 }
 
 message GetHealthRequest {}
@@ -64,12 +71,40 @@ message ScheduleEntry {
   int64 next_run_ms = 3;
   int64 last_run_ms = 4;
   bool durable = 5;
+  bool paused = 6;
 }
 
 message ListSchedulesRequest {}
 
 message ListSchedulesResponse {
   repeated ScheduleEntry schedules = 1;
+}
+
+message CreateScheduleRequest {
+  string name = 1;
+  string spec = 2;
+  bool durable = 3;
+}
+
+message CreateScheduleResponse {
+  ScheduleEntry schedule = 1;
+}
+
+message DeleteScheduleRequest {
+  string name = 1;
+}
+
+message DeleteScheduleResponse {
+  bool deleted = 1;
+}
+
+message PauseScheduleRequest {
+  string name = 1;
+  bool paused = 2;
+}
+
+message PauseScheduleResponse {
+  ScheduleEntry schedule = 1;
 }
 
 message DLQEntry {
@@ -127,6 +162,9 @@ service AdminService {
   rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
   rpc GetQueue(GetQueueRequest) returns (GetQueueResponse);
   rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+  rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
+  rpc PauseSchedule(PauseScheduleRequest) returns (PauseScheduleResponse);
   rpc ListDLQ(ListDLQRequest) returns (ListDLQResponse);
   rpc PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse);
   rpc ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse);

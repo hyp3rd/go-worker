@@ -150,22 +150,24 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
         <p className="text-xs uppercase tracking-[0.2em] text-muted">
           audit trail
         </p>
-        <div className="mt-2 space-y-2 text-xs text-muted">
+        <div className="mt-3 space-y-3">
           {auditEvents.length === 0 ? (
-            <p>No runbook actions yet.</p>
+            <p className="text-xs text-muted">No runbook actions yet.</p>
           ) : (
             auditEvents.slice(0, 5).map((event) => (
               <div
                 key={`${event.action}-${event.at}`}
-                className="flex items-center justify-between"
+                className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-slate-600"
               >
-                <span className="font-semibold text-slate-700">
-                  {event.action}
-                </span>
-                <span>
-                  {new Date(event.at).toLocaleTimeString()}
-                  {event.detail ? ` · ${event.detail}` : ""}
-                </span>
+                <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-muted">
+                  <span>{new Date(event.at).toLocaleTimeString()}</span>
+                  <span className="rounded-full border border-soft bg-[var(--card)] px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                    {event.action}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-medium text-slate-800">
+                  {event.detail ?? "Action completed."}
+                </p>
               </div>
             ))
           )}

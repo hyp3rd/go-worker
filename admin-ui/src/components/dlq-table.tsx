@@ -29,7 +29,10 @@ export function DlqTable({
   const [queueValue, setQueueValue] = useState(queueFilter);
   const [handlerValue, setHandlerValue] = useState(handlerFilter);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{
+    tone: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -150,30 +153,77 @@ export function DlqTable({
       }
 
       const payload = (await res.json()) as { message?: string };
-      setMessage(payload.message ?? "Replay complete");
+      setMessage({
+        tone: "success",
+        text: payload.message ?? "Replay complete",
+      });
       setSelected(new Set());
       startTransition(() => {
         router.refresh();
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Replay failed");
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Replay failed",
+      });
+    }
+  };
+
+  const copySelected = async () => {
+    if (selected.size === 0) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(Array.from(selected).join("\n"));
+      setMessage({
+        tone: "info",
+        text: `Copied ${selected.size} ID(s) to clipboard.`,
+      });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Copy failed",
+      });
     }
   };
 
   return (
     <div className="mt-6 space-y-4">
+      {message ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            message.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : message.tone === "info"
+                ? "border-sky-200 bg-sky-50 text-sky-800"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+        >
+          {message.text}
+        </div>
+      ) : null}
       <FilterBar
         placeholder="Search by id, queue, handler"
         initialQuery={query}
         onQuery={handleQuery}
         rightSlot={
-          <button
-            onClick={replaySelected}
-            disabled={selected.size === 0 || pending}
-            className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Replay selected {selected.size > 0 ? `(${selected.size})` : ""}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={copySelected}
+              disabled={selected.size === 0}
+              className="rounded-full border border-soft px-4 py-2 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Copy IDs
+            </button>
+            <button
+              onClick={replaySelected}
+              disabled={selected.size === 0 || pending}
+              className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Replay selected {selected.size > 0 ? `(${selected.size})` : ""}
+            </button>
+          </div>
         }
       />
       <div className="rounded-2xl border border-soft bg-[var(--card)] p-4">
@@ -256,7 +306,6 @@ export function DlqTable({
           </TableRow>
         ))}
       </Table>
-      {message ? <p className="text-xs text-muted">{message}</p> : null}
       {total === 0 ? (
         <div className="rounded-2xl border border-soft bg-[var(--card)] p-6 text-sm text-muted">
           No DLQ entries found for the current filters.

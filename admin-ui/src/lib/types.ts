@@ -13,7 +13,11 @@ export type JobSchedule = {
   schedule: string;
   nextRun: string;
   lastRun: string;
+  nextRunMs?: number;
+  lastRunMs?: number;
   status: "healthy" | "lagging" | "paused";
+  paused: boolean;
+  durable: boolean;
 };
 
 export type OverviewStats = {
@@ -22,6 +26,12 @@ export type OverviewStats = {
   queues: number;
   avgLatencyMs: number;
   p95LatencyMs: number;
+};
+
+export type AdminActionCounters = {
+  pause: number;
+  resume: number;
+  replay: number;
 };
 
 export type DlqEntry = {

@@ -40,8 +40,9 @@ type config struct {
 	redisTLS      bool
 	redisTLSInsec bool
 
-	grpcAddr string
-	httpAddr string
+	grpcAddr   string
+	grpcTarget string
+	httpAddr   string
 
 	tlsCert string
 	tlsKey  string
@@ -65,32 +66,40 @@ func run() error {
 		return ewrap.Wrap(err, "config")
 	}
 
-	client, err := newRedisClient(cfg)
-	if err != nil {
-		return ewrap.Wrap(err, "redis client")
-	}
-	defer client.Close()
+	startGRPC := cfg.grpcTarget == cfg.grpcAddr
 
-	backend, err := worker.NewRedisDurableBackend(
-		client,
-		worker.WithRedisDurablePrefix(cfg.redisPrefix),
-		worker.WithRedisDurableBatchSize(defaultBatchSize),
-		worker.WithRedisDurableLeaderLock(cfg.leaderLease),
-		worker.WithRedisDurableGlobalRateLimit(cfg.globalRate, cfg.globalBurst),
+	var (
+		grpcServer *grpc.Server
+		client     rueidis.Client
 	)
-	if err != nil {
-		return ewrap.Wrap(err, "durable backend")
-	}
+	if startGRPC {
+		client, err = newRedisClient(cfg)
+		if err != nil {
+			return ewrap.Wrap(err, "redis client")
+		}
+		defer client.Close()
 
-	tm := worker.NewTaskManagerWithOptions(
-		context.Background(),
-		worker.WithDurableBackend(backend),
-		worker.WithDurableLease(defaultLeaseDuration),
-	)
+		backend, err := worker.NewRedisDurableBackend(
+			client,
+			worker.WithRedisDurablePrefix(cfg.redisPrefix),
+			worker.WithRedisDurableBatchSize(defaultBatchSize),
+			worker.WithRedisDurableLeaderLock(cfg.leaderLease),
+			worker.WithRedisDurableGlobalRateLimit(cfg.globalRate, cfg.globalBurst),
+		)
+		if err != nil {
+			return ewrap.Wrap(err, "durable backend")
+		}
 
-	grpcServer, err := startAdminGRPCServer(cfg, tm)
-	if err != nil {
-		return err
+		tm := worker.NewTaskManagerWithOptions(
+			context.Background(),
+			worker.WithDurableBackend(backend),
+			worker.WithDurableLease(defaultLeaseDuration),
+		)
+
+		grpcServer, err = startAdminGRPCServer(cfg, tm)
+		if err != nil {
+			return err
+		}
 	}
 
 	gatewayServer, err := startAdminGateway(cfg)
@@ -103,7 +112,9 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), adminShutdownTimeout)
 	defer cancel()
 
-	grpcServer.GracefulStop()
+	if grpcServer != nil {
+		grpcServer.GracefulStop()
+	}
 
 	err = gatewayServer.Shutdown(shutdownCtx)
 	if err != nil {
@@ -137,7 +148,7 @@ func startAdminGRPCServer(cfg config, tm *worker.TaskManager) (*grpc.Server, err
 
 func startAdminGateway(cfg config) (*http.Server, error) {
 	gatewayServer, err := worker.NewAdminGatewayServer(worker.AdminGatewayConfig{
-		GRPCAddr:    cfg.grpcAddr,
+		GRPCAddr:    cfg.grpcTarget,
 		HTTPAddr:    cfg.httpAddr,
 		TLSCertFile: cfg.tlsCert,
 		TLSKeyFile:  cfg.tlsKey,
@@ -167,10 +178,15 @@ func loadConfig() (config, error) {
 		redisTLS:      parseBool(os.Getenv("WORKER_REDIS_TLS")),
 		redisTLSInsec: parseBool(os.Getenv("WORKER_REDIS_TLS_INSECURE")),
 		grpcAddr:      getenv("WORKER_ADMIN_GRPC_ADDR", defaultGRPCAddr),
+		grpcTarget:    strings.TrimSpace(os.Getenv("WORKER_ADMIN_GRPC_TARGET")),
 		httpAddr:      getenv("WORKER_ADMIN_HTTP_ADDR", defaultHTTPAddr),
 		tlsCert:       os.Getenv("WORKER_ADMIN_TLS_CERT"),
 		tlsKey:        os.Getenv("WORKER_ADMIN_TLS_KEY"),
 		tlsCA:         os.Getenv("WORKER_ADMIN_TLS_CA"),
+	}
+
+	if cfg.grpcTarget == "" {
+		cfg.grpcTarget = cfg.grpcAddr
 	}
 
 	cfg.globalRate = parseFloat(os.Getenv("WORKER_ADMIN_GLOBAL_RATE"))

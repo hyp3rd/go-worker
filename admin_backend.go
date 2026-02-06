@@ -22,6 +22,16 @@ var (
 	ErrAdminReplayIDsRequired = ewrap.New("admin replay ids are required")
 	// ErrAdminReplayIDsTooLarge indicates too many ids were provided.
 	ErrAdminReplayIDsTooLarge = ewrap.New("admin replay ids limit exceeded")
+	// ErrAdminScheduleNameRequired indicates a schedule name is required.
+	ErrAdminScheduleNameRequired = ewrap.New("admin schedule name is required")
+	// ErrAdminScheduleSpecRequired indicates a schedule spec is required.
+	ErrAdminScheduleSpecRequired = ewrap.New("admin schedule spec is required")
+	// ErrAdminScheduleNotFound indicates the schedule was not found.
+	ErrAdminScheduleNotFound = ewrap.New("admin schedule not found")
+	// ErrAdminScheduleFactoryMissing indicates a factory was not registered.
+	ErrAdminScheduleFactoryMissing = ewrap.New("admin schedule factory missing")
+	// ErrAdminScheduleDurableMismatch indicates durable flag mismatched.
+	ErrAdminScheduleDurableMismatch = ewrap.New("admin schedule durable mismatch")
 )
 
 // AdminOverview describes the admin overview snapshot.
@@ -32,6 +42,7 @@ type AdminOverview struct {
 	AvgLatencyMs  int64
 	P95LatencyMs  int64
 	Coordination  AdminCoordination
+	Actions       AdminActionCounters
 }
 
 // AdminCoordination describes coordination state for durable dequeue.
@@ -67,6 +78,21 @@ type AdminSchedule struct {
 	NextRun time.Time
 	LastRun time.Time
 	Durable bool
+	Paused  bool
+}
+
+// AdminScheduleSpec defines a schedule request.
+type AdminScheduleSpec struct {
+	Name    string
+	Spec    string
+	Durable bool
+}
+
+// AdminActionCounters tracks admin action counts.
+type AdminActionCounters struct {
+	Pause  int64
+	Resume int64
+	Replay int64
 }
 
 // AdminDLQFilter controls DLQ listing.
@@ -87,9 +113,24 @@ type AdminDLQPage struct {
 // AdminBackend provides admin data and actions for a backend.
 type AdminBackend interface {
 	AdminOverview(ctx context.Context) (AdminOverview, error)
+	adminQueues
+	adminSchedules
+	adminDLQ
+}
+
+type adminQueues interface {
 	AdminQueues(ctx context.Context) ([]AdminQueueSummary, error)
 	AdminQueue(ctx context.Context, name string) (AdminQueueSummary, error)
+}
+
+type adminSchedules interface {
 	AdminSchedules(ctx context.Context) ([]AdminSchedule, error)
+	AdminCreateSchedule(ctx context.Context, spec AdminScheduleSpec) (AdminSchedule, error)
+	AdminDeleteSchedule(ctx context.Context, name string) (bool, error)
+	AdminPauseSchedule(ctx context.Context, name string, paused bool) (AdminSchedule, error)
+}
+
+type adminDLQ interface {
 	AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error)
 	AdminPause(ctx context.Context) error
 	AdminResume(ctx context.Context) error

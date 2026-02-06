@@ -4,7 +4,7 @@ import http from "http";
 import https from "https";
 
 type GatewayRequest = {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "DELETE";
   path: string;
   body?: unknown;
 };

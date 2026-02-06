@@ -148,6 +148,7 @@
     "recvcheck",
     "requirepass",
     "robfig",
+    "rollup",
     "RPOP",
     "Rpush",
     "rueidis",

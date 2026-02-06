@@ -74,11 +74,12 @@ type TaskManager struct {
 	stopOnce    sync.Once
 	accepting   atomic.Bool
 
-	metrics taskMetrics
-	results *resultBroadcaster
-	hooks   atomic.Pointer[TaskHooks]
-	tracer  atomic.Pointer[tracerHolder]
-	otel    atomic.Pointer[otelMetrics]
+	metrics      taskMetrics
+	results      *resultBroadcaster
+	hooks        atomic.Pointer[TaskHooks]
+	tracer       atomic.Pointer[tracerHolder]
+	otel         atomic.Pointer[otelMetrics]
+	adminActions adminActionCounters
 
 	durableBackend      DurableBackend
 	durableHandlers     map[string]DurableHandlerSpec
@@ -95,11 +96,12 @@ type TaskManager struct {
 	retentionPrune     atomic.Bool
 	retentionOnce      sync.Once
 
-	cronMu      sync.Mutex
-	cron        *cron.Cron
-	cronEntries map[string]cron.EntryID
-	cronLoc     *time.Location
-	cronSpecs   map[string]cronSpec
+	cronMu        sync.RWMutex
+	cron          *cron.Cron
+	cronEntries   map[string]cron.EntryID
+	cronLoc       *time.Location
+	cronSpecs     map[string]cronSpec
+	cronFactories map[string]cronFactory
 }
 
 // NewTaskManagerWithDefaults creates a new task manager with default values.
@@ -225,6 +227,7 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 		cronLoc:             cfg.cronLocation,
 		cronEntries:         map[string]cron.EntryID{},
 		cronSpecs:           map[string]cronSpec{},
+		cronFactories:       map[string]cronFactory{},
 	}
 
 	tm.queueCond = sync.NewCond(&tm.queueMu)

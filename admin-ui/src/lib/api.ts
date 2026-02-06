@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import type {
+  AdminActionCounters,
   CoordinationStatus,
   DlqEntry,
   HealthInfo,
@@ -57,6 +58,7 @@ async function fetchJson<T>(path: string): Promise<T> {
 export async function fetchOverview(): Promise<{
   stats: OverviewStats;
   coordination: CoordinationStatus;
+  actions: AdminActionCounters;
 }> {
   return fetchJson("/api/overview");
 }
