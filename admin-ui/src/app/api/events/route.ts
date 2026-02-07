@@ -10,11 +10,38 @@ export async function GET() {
 
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
+        let closed = false;
+        const closeOnce = () => {
+          if (closed) {
+            return;
+          }
+          closed = true;
+          controller.close();
+        };
+        const isAbortError = (err: unknown) => {
+          if (!err || typeof err !== "object") {
+            return false;
+          }
+          const record = err as { code?: string; name?: string; message?: string };
+          return (
+            record.code === "ECONNRESET" ||
+            record.name === "AbortError" ||
+            (record.message?.includes("aborted") ?? false)
+          );
+        };
+
         stream.on("data", (chunk) => {
           controller.enqueue(new Uint8Array(chunk));
         });
-        stream.on("end", () => controller.close());
-        stream.on("error", (err) => controller.error(err));
+        stream.on("end", closeOnce);
+        stream.on("close", closeOnce);
+        stream.on("error", (err) => {
+          if (isAbortError(err)) {
+            closeOnce();
+            return;
+          }
+          controller.error(err);
+        });
       },
       cancel() {
         const nodeStream = stream as unknown as {
