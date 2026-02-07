@@ -563,8 +563,8 @@ func (tm *TaskManager) handleDurableRetryOrFail(
 		return result, nackErr
 	}
 
-	tm.finishTask(task, terminalStatus, result, err)
 	tm.failDurable(ctx, lease, err)
+	tm.finishTask(task, terminalStatus, result, err)
 
 	return result, err
 }
