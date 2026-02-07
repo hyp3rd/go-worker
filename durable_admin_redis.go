@@ -2,6 +2,9 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,6 +31,8 @@ const (
 	adminHoursPerDay             = 24
 	adminDLQReplayByIDArgsPrefix = 3
 	parseIntBitSize              = 64
+	adminJobsKeyName             = "admin:jobs"
+	adminJobDefaultDockerfile    = "Dockerfile"
 )
 
 //nolint:revive,dupword
@@ -1040,6 +1045,288 @@ func paginateAdminDLQ(entries []AdminDLQEntry, offset, limit int) AdminDLQPage {
 	end := min(offset+limit, total)
 
 	return AdminDLQPage{Entries: entries[offset:end], Total: int64(total)}
+}
+
+type adminJobRecord struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	Repo           string   `json:"repo"`
+	Tag            string   `json:"tag"`
+	Path           string   `json:"path,omitempty"`
+	Dockerfile     string   `json:"dockerfile,omitempty"`
+	Command        []string `json:"command,omitempty"`
+	Env            []string `json:"env,omitempty"`
+	Queue          string   `json:"queue,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
+	TimeoutSeconds int64    `json:"timeout_seconds,omitempty"`
+	CreatedAtMs    int64    `json:"created_at_ms"`
+	UpdatedAtMs    int64    `json:"updated_at_ms"`
+}
+
+// AdminJobs lists registered job definitions.
+func (b *RedisDurableBackend) AdminJobs(ctx context.Context) ([]AdminJob, error) {
+	if ctx == nil {
+		return nil, ErrInvalidTaskContext
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hgetall().Key(b.jobsKey()).Build())
+
+	values, err := resp.AsStrMap()
+	if err != nil {
+		if rueidis.IsRedisNil(err) {
+			return []AdminJob{}, nil
+		}
+
+		return nil, ewrap.Wrap(err, "read admin jobs")
+	}
+
+	jobs := make([]AdminJob, 0, len(values))
+	for _, raw := range values {
+		job, err := parseAdminJobRecord(raw)
+		if err != nil {
+			return nil, err
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].Name < jobs[j].Name
+	})
+
+	return jobs, nil
+}
+
+// AdminJob returns a job definition by name.
+func (b *RedisDurableBackend) AdminJob(ctx context.Context, name string) (AdminJob, error) {
+	if ctx == nil {
+		return AdminJob{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminJob{}, ErrAdminJobNameRequired
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hget().Key(b.jobsKey()).Field(name).Build())
+
+	raw, err := resp.ToString()
+	if err != nil {
+		if rueidis.IsRedisNil(err) {
+			return AdminJob{}, ErrAdminJobNotFound
+		}
+
+		return AdminJob{}, ewrap.Wrap(err, "read admin job")
+	}
+
+	return parseAdminJobRecord(raw)
+}
+
+// AdminUpsertJob creates or updates a job definition.
+func (b *RedisDurableBackend) AdminUpsertJob(ctx context.Context, spec AdminJobSpec) (AdminJob, error) {
+	if ctx == nil {
+		return AdminJob{}, ErrInvalidTaskContext
+	}
+
+	spec, err := b.normalizeJobSpec(spec)
+	if err != nil {
+		return AdminJob{}, err
+	}
+
+	now := time.Now()
+
+	existing, err := b.AdminJob(ctx, spec.Name)
+	if err != nil && !errors.Is(err, ErrAdminJobNotFound) {
+		return AdminJob{}, err
+	}
+
+	createdAt := now
+	if err == nil {
+		createdAt = existing.CreatedAt
+	}
+
+	record := adminJobRecord{
+		Name:           spec.Name,
+		Description:    spec.Description,
+		Repo:           spec.Repo,
+		Tag:            spec.Tag,
+		Path:           spec.Path,
+		Dockerfile:     spec.Dockerfile,
+		Command:        spec.Command,
+		Env:            spec.Env,
+		Queue:          spec.Queue,
+		Retries:        spec.Retries,
+		TimeoutSeconds: int64(spec.Timeout.Seconds()),
+		CreatedAtMs:    createdAt.UnixMilli(),
+		UpdatedAtMs:    now.UnixMilli(),
+	}
+
+	raw, err := json.Marshal(record)
+	if err != nil {
+		return AdminJob{}, ewrap.Wrap(err, "encode admin job")
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hset().Key(b.jobsKey()).FieldValue().FieldValue(record.Name, string(raw)).Build())
+	if resp.Error() != nil {
+		return AdminJob{}, ewrap.Wrap(resp.Error(), "write admin job")
+	}
+
+	return adminJobFromRecord(record), nil
+}
+
+// AdminDeleteJob removes a job definition.
+func (b *RedisDurableBackend) AdminDeleteJob(ctx context.Context, name string) (bool, error) {
+	if ctx == nil {
+		return false, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false, ErrAdminJobNameRequired
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hdel().Key(b.jobsKey()).Field(name).Build())
+
+	count, err := resp.AsInt64()
+	if err != nil {
+		return false, ewrap.Wrap(err, "delete admin job")
+	}
+
+	return count > 0, nil
+}
+
+func (b *RedisDurableBackend) normalizeJobSpec(spec AdminJobSpec) (AdminJobSpec, error) {
+	name := strings.TrimSpace(spec.Name)
+	if name == "" {
+		return AdminJobSpec{}, ErrAdminJobNameRequired
+	}
+
+	repo := strings.TrimSpace(spec.Repo)
+	if repo == "" {
+		return AdminJobSpec{}, ErrAdminJobRepoRequired
+	}
+
+	tag := strings.TrimSpace(spec.Tag)
+	if tag == "" {
+		return AdminJobSpec{}, ErrAdminJobTagRequired
+	}
+
+	if strings.Contains(tag, " ") {
+		return AdminJobSpec{}, ErrAdminJobTagRequired
+	}
+
+	queue := strings.TrimSpace(spec.Queue)
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
+	pathValue, err := sanitizeJobPath(spec.Path)
+	if err != nil {
+		return AdminJobSpec{}, err
+	}
+
+	dockerfile := strings.TrimSpace(spec.Dockerfile)
+	if dockerfile == "" {
+		dockerfile = adminJobDefaultDockerfile
+	}
+
+	dockerfile, err = sanitizeJobPath(dockerfile)
+	if err != nil {
+		return AdminJobSpec{}, err
+	}
+
+	command := trimStringSlice(spec.Command)
+	env := trimStringSlice(spec.Env)
+
+	return AdminJobSpec{
+		Name:        name,
+		Description: strings.TrimSpace(spec.Description),
+		Repo:        repo,
+		Tag:         tag,
+		Path:        pathValue,
+		Dockerfile:  dockerfile,
+		Command:     command,
+		Env:         env,
+		Queue:       queue,
+		Retries:     max(0, spec.Retries),
+		Timeout:     spec.Timeout,
+	}, nil
+}
+
+func (b *RedisDurableBackend) jobsKey() string {
+	return b.keyPrefix() + redisKVSeparator + adminJobsKeyName
+}
+
+func parseAdminJobRecord(raw string) (AdminJob, error) {
+	var record adminJobRecord
+
+	err := json.Unmarshal([]byte(raw), &record)
+	if err != nil {
+		return AdminJob{}, ewrap.Wrap(err, "decode admin job")
+	}
+
+	return adminJobFromRecord(record), nil
+}
+
+func adminJobFromRecord(record adminJobRecord) AdminJob {
+	job := AdminJob{
+		AdminJobSpec: AdminJobSpec{
+			Name:        record.Name,
+			Description: record.Description,
+			Repo:        record.Repo,
+			Tag:         record.Tag,
+			Path:        record.Path,
+			Dockerfile:  record.Dockerfile,
+			Command:     record.Command,
+			Env:         record.Env,
+			Queue:       record.Queue,
+			Retries:     record.Retries,
+		},
+		CreatedAt: time.UnixMilli(record.CreatedAtMs),
+		UpdatedAt: time.UnixMilli(record.UpdatedAtMs),
+	}
+
+	if record.TimeoutSeconds > 0 {
+		job.Timeout = time.Duration(record.TimeoutSeconds) * time.Second
+	}
+
+	return job
+}
+
+func sanitizeJobPath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+
+	if strings.HasPrefix(value, "/") {
+		return "", ewrap.New("job path must be relative")
+	}
+
+	clean := filepath.Clean(value)
+	if strings.HasPrefix(clean, "..") {
+		return "", ewrap.New("job path must not escape repository")
+	}
+
+	return clean, nil
+}
+
+func trimStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+
+		out = append(out, value)
+	}
+
+	return out
 }
 
 func formatAdminDuration(duration time.Duration) string {

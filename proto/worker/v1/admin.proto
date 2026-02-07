@@ -186,6 +186,64 @@ message PauseSchedulesResponse {
   bool paused = 2;
 }
 
+message JobSpec {
+  string name = 1;
+  string description = 2;
+  string repo = 3;
+  string tag = 4;
+  string path = 5;
+  string dockerfile = 6;
+  repeated string command = 7;
+  repeated string env = 8;
+  string queue = 9;
+  int32 retries = 10;
+  int32 timeout_seconds = 11;
+}
+
+message Job {
+  JobSpec spec = 1;
+  int64 created_at_ms = 2;
+  int64 updated_at_ms = 3;
+}
+
+message ListJobsRequest {}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message GetJobRequest {
+  string name = 1;
+}
+
+message GetJobResponse {
+  Job job = 1;
+}
+
+message UpsertJobRequest {
+  JobSpec spec = 1;
+}
+
+message UpsertJobResponse {
+  Job job = 1;
+}
+
+message DeleteJobRequest {
+  string name = 1;
+}
+
+message DeleteJobResponse {
+  bool deleted = 1;
+}
+
+message RunJobRequest {
+  string name = 1;
+}
+
+message RunJobResponse {
+  string task_id = 1;
+}
+
 message DLQEntry {
   string id = 1;
   string queue = 2;
@@ -264,6 +322,11 @@ service AdminService {
   rpc UpdateQueueWeight(UpdateQueueWeightRequest) returns (UpdateQueueWeightResponse);
   rpc ResetQueueWeight(ResetQueueWeightRequest) returns (ResetQueueWeightResponse);
   rpc PauseQueue(PauseQueueRequest) returns (PauseQueueResponse);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+  rpc UpsertJob(UpsertJobRequest) returns (UpsertJobResponse);
+  rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse);
+  rpc RunJob(RunJobRequest) returns (RunJobResponse);
   rpc ListScheduleFactories(ListScheduleFactoriesRequest) returns (ListScheduleFactoriesResponse);
   rpc ListScheduleEvents(ListScheduleEventsRequest) returns (ListScheduleEventsResponse);
   rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);

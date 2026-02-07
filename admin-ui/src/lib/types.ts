@@ -41,6 +41,22 @@ export type ScheduleEvent = {
   metadata?: Record<string, string>;
 };
 
+export type AdminJob = {
+  name: string;
+  description?: string;
+  repo: string;
+  tag: string;
+  path?: string;
+  dockerfile?: string;
+  command?: string[];
+  env?: string[];
+  queue?: string;
+  retries?: number;
+  timeoutSeconds?: number;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+};
+
 export type OverviewStats = {
   activeWorkers: number;
   queuedTasks: number;

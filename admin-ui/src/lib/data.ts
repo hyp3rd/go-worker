@@ -8,12 +8,14 @@ import {
   fetchScheduleFactories,
   fetchScheduleEvents,
   fetchSchedules,
+  fetchJobs,
 } from "@/lib/api";
 import {
   coordinationStatus,
   adminActionCounters,
   dlqEntries,
   healthInfo,
+  adminJobs,
   jobSchedules,
   overviewStats,
   queueSummaries,
@@ -136,6 +138,21 @@ export const getJobSchedules = cache(async () => {
     const detail =
       error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to load job schedules: ${detail}`);
+  }
+});
+
+export const getAdminJobs = cache(async () => {
+  try {
+    const { jobs } = await fetchJobs();
+    return jobs;
+  } catch (error) {
+    if (allowMockData) {
+      return adminJobs;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load admin jobs: ${detail}`);
   }
 });
 

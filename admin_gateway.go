@@ -44,6 +44,10 @@ const (
 	adminErrInvalidBody   = "invalid_body"
 	adminErrMissingQueue  = "missing_queue"
 	adminErrQueueRequired = "Queue name is required"
+	adminErrMissingJob    = "missing_job"
+	adminErrJobRequired   = "Job name is required"
+	adminErrInvalidJob    = "invalid_job"
+	adminErrInvalidJobMsg = "Invalid job name"
 	adminRequestTimeout   = 5 * time.Second
 	adminRequestIDHeader  = "X-Request-Id"
 	adminRequestIDMetaKey = "x-request-id"
@@ -163,6 +167,8 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	mux.HandleFunc("/admin/v1/overview", handler.handleOverview)
 	mux.HandleFunc("/admin/v1/queues", handler.handleQueues)
 	mux.HandleFunc("/admin/v1/queues/", handler.handleQueue)
+	mux.HandleFunc("/admin/v1/jobs", handler.handleJobs)
+	mux.HandleFunc("/admin/v1/jobs/", handler.handleJob)
 	mux.HandleFunc("/admin/v1/schedules", handler.handleSchedules)
 	mux.HandleFunc("/admin/v1/schedules/factories", handler.handleScheduleFactories)
 	mux.HandleFunc("/admin/v1/schedules/events", handler.handleScheduleEvents)
@@ -512,6 +518,182 @@ func (h *adminGatewayHandler) handleQueuePause(w http.ResponseWriter, r *http.Re
 	}
 
 	writeAdminJSON(w, http.StatusOK, adminQueueJSON{Queue: queueSummaryFromProto(resp.GetQueue())})
+}
+
+func (h *adminGatewayHandler) handleJobs(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleJobsList(w, r)
+	case http.MethodPost:
+		h.handleJobUpsert(w, r)
+	default:
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+	}
+}
+
+func (h *adminGatewayHandler) handleJobsList(w http.ResponseWriter, r *http.Request) {
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListJobs(ctx, &workerpb.ListJobsRequest{})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	jobs := make([]adminJobJSON, 0, len(resp.GetJobs()))
+	for _, job := range resp.GetJobs() {
+		jobs = append(jobs, adminJobFromProto(job))
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobsJSON{Jobs: jobs})
+}
+
+func (h *adminGatewayHandler) handleJobUpsert(w http.ResponseWriter, r *http.Request) {
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	var payload adminJobRequest
+	if len(body) > 0 {
+		err = json.Unmarshal(body, &payload)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	spec, err := jobSpecToProto(payload)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJob, err.Error(), reqID)
+
+		return
+	}
+
+	resp, err := h.client.UpsertJob(ctx, &workerpb.UpsertJobRequest{
+		Spec: spec,
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobResponse{Job: adminJobFromProto(resp.GetJob())})
+}
+
+func (h *adminGatewayHandler) handleJob(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/admin/v1/jobs/")
+
+	path = strings.Trim(path, adminPathSeparator)
+	if path == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingJob, adminErrJobRequired, requestID(r, w))
+
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/run"); ok {
+		name := strings.TrimSuffix(before, adminPathSeparator)
+		h.handleJobRun(w, r, name)
+
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		h.handleJobGet(w, r, path)
+	case http.MethodDelete:
+		h.handleJobDelete(w, r, path)
+	default:
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+	}
+}
+
+func (h *adminGatewayHandler) handleJobGet(w http.ResponseWriter, r *http.Request, name string) {
+	name = strings.Trim(name, adminPathSeparator)
+	if name == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingJob, adminErrJobRequired, requestID(r, w))
+
+		return
+	}
+
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJob, adminErrInvalidJobMsg, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetJob(ctx, &workerpb.GetJobRequest{Name: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobResponse{Job: adminJobFromProto(resp.GetJob())})
+}
+
+func (h *adminGatewayHandler) handleJobDelete(w http.ResponseWriter, r *http.Request, name string) {
+	reqID := requestID(r, w)
+
+	decoded, err := url.PathUnescape(strings.TrimSpace(name))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJob, adminErrInvalidJobMsg, reqID)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.DeleteJob(ctx, &workerpb.DeleteJobRequest{Name: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobDeleteResponse{Deleted: resp.GetDeleted()})
+}
+
+func (h *adminGatewayHandler) handleJobRun(w http.ResponseWriter, r *http.Request, name string) {
+	handleRunAction(w, r, name, adminErrInvalidJob, adminErrInvalidJobMsg,
+		func(ctx context.Context, decoded string) (string, error) {
+			resp, err := h.client.RunJob(ctx, &workerpb.RunJobRequest{Name: decoded})
+			if err != nil {
+				return "", err
+			}
+
+			return resp.GetTaskId(), nil
+		},
+		func(taskID string) any {
+			return adminJobRunResponse{TaskID: taskID}
+		},
+	)
 }
 
 func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) {
@@ -1169,6 +1351,30 @@ func (h *adminGatewayHandler) handleSchedulePause(w http.ResponseWriter, r *http
 }
 
 func (h *adminGatewayHandler) handleScheduleRun(w http.ResponseWriter, r *http.Request, name string) {
+	handleRunAction(w, r, name, "invalid_name", "invalid schedule name",
+		func(ctx context.Context, decoded string) (string, error) {
+			resp, err := h.client.RunSchedule(ctx, &workerpb.RunScheduleRequest{Name: decoded})
+			if err != nil {
+				return "", err
+			}
+
+			return resp.GetTaskId(), nil
+		},
+		func(taskID string) any {
+			return adminScheduleRunResponse{TaskID: taskID}
+		},
+	)
+}
+
+func handleRunAction(
+	w http.ResponseWriter,
+	r *http.Request,
+	name string,
+	invalidCode string,
+	invalidMessage string,
+	run func(ctx context.Context, decoded string) (string, error),
+	response func(taskID string) any,
+) {
 	if r.Method != http.MethodPost {
 		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
 
@@ -1179,7 +1385,7 @@ func (h *adminGatewayHandler) handleScheduleRun(w http.ResponseWriter, r *http.R
 
 	decoded, err := url.PathUnescape(strings.TrimSpace(name))
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, "invalid_name", "invalid schedule name", reqID)
+		writeAdminError(w, http.StatusBadRequest, invalidCode, invalidMessage, reqID)
 
 		return
 	}
@@ -1189,14 +1395,14 @@ func (h *adminGatewayHandler) handleScheduleRun(w http.ResponseWriter, r *http.R
 
 	defer cancel()
 
-	resp, err := h.client.RunSchedule(ctx, &workerpb.RunScheduleRequest{Name: decoded})
+	taskID, err := run(ctx, decoded)
 	if err != nil {
 		writeAdminGRPCError(w, reqID, err)
 
 		return
 	}
 
-	writeAdminJSON(w, http.StatusOK, adminScheduleRunResponse{TaskID: resp.GetTaskId()})
+	writeAdminJSON(w, http.StatusOK, response(taskID))
 }
 
 type adminOverviewJSON struct {
@@ -1234,6 +1440,22 @@ type adminQueueJSON struct {
 	Queue queueSummaryJSON `json:"queue"`
 }
 
+type adminJobsJSON struct {
+	Jobs []adminJobJSON `json:"jobs"`
+}
+
+type adminJobResponse struct {
+	Job adminJobJSON `json:"job"`
+}
+
+type adminJobDeleteResponse struct {
+	Deleted bool `json:"deleted"`
+}
+
+type adminJobRunResponse struct {
+	TaskID string `json:"taskId"`
+}
+
 type adminSchedulesJSON struct {
 	Schedules []scheduleJSON `json:"schedules"`
 }
@@ -1254,6 +1476,20 @@ type adminQueuePauseRequest struct {
 	Paused bool `json:"paused"`
 }
 
+type adminJobRequest struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	Repo           string   `json:"repo"`
+	Tag            string   `json:"tag"`
+	Path           string   `json:"path,omitempty"`
+	Dockerfile     string   `json:"dockerfile,omitempty"`
+	Command        []string `json:"command,omitempty"`
+	Env            []string `json:"env,omitempty"`
+	Queue          string   `json:"queue,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
+	TimeoutSeconds int64    `json:"timeoutSeconds,omitempty"`
+}
+
 type scheduleJSON struct {
 	Name      string `json:"name"`
 	Schedule  string `json:"schedule"`
@@ -1264,6 +1500,22 @@ type scheduleJSON struct {
 	Status    string `json:"status"`
 	Paused    bool   `json:"paused"`
 	Durable   bool   `json:"durable"`
+}
+
+type adminJobJSON struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	Repo           string   `json:"repo"`
+	Tag            string   `json:"tag"`
+	Path           string   `json:"path,omitempty"`
+	Dockerfile     string   `json:"dockerfile,omitempty"`
+	Command        []string `json:"command,omitempty"`
+	Env            []string `json:"env,omitempty"`
+	Queue          string   `json:"queue,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
+	TimeoutSeconds int64    `json:"timeoutSeconds,omitempty"`
+	CreatedAtMs    int64    `json:"createdAtMs"`
+	UpdatedAtMs    int64    `json:"updatedAtMs"`
 }
 
 type scheduleFactoryJSON struct {
@@ -1599,6 +1851,59 @@ func scheduleEventFromProto(event *workerpb.ScheduleEvent) scheduleEventJSON {
 		Error:        event.GetError(),
 		Metadata:     event.GetMetadata(),
 	}
+}
+
+func adminJobFromProto(job *workerpb.Job) adminJobJSON {
+	if job == nil {
+		return adminJobJSON{}
+	}
+
+	spec := job.GetSpec()
+
+	return adminJobJSON{
+		Name:           spec.GetName(),
+		Description:    spec.GetDescription(),
+		Repo:           spec.GetRepo(),
+		Tag:            spec.GetTag(),
+		Path:           spec.GetPath(),
+		Dockerfile:     spec.GetDockerfile(),
+		Command:        append([]string{}, spec.GetCommand()...),
+		Env:            append([]string{}, spec.GetEnv()...),
+		Queue:          spec.GetQueue(),
+		Retries:        int(spec.GetRetries()),
+		TimeoutSeconds: int64(spec.GetTimeoutSeconds()),
+		CreatedAtMs:    job.GetCreatedAtMs(),
+		UpdatedAtMs:    job.GetUpdatedAtMs(),
+	}
+}
+
+func jobSpecToProto(payload adminJobRequest) (*workerpb.JobSpec, error) {
+	retriesValue := max(payload.Retries, 0)
+	timeoutValue := max(payload.TimeoutSeconds, int64(0))
+
+	retries, err := sectconv.ToInt32(retriesValue)
+	if err != nil {
+		return nil, ewrap.Wrap(err, "job retries overflow")
+	}
+
+	timeoutSeconds, err := sectconv.SafeInt32FromInt64(timeoutValue)
+	if err != nil {
+		return nil, ewrap.Wrap(err, "job timeout overflow")
+	}
+
+	return &workerpb.JobSpec{
+		Name:           strings.TrimSpace(payload.Name),
+		Description:    strings.TrimSpace(payload.Description),
+		Repo:           strings.TrimSpace(payload.Repo),
+		Tag:            strings.TrimSpace(payload.Tag),
+		Path:           strings.TrimSpace(payload.Path),
+		Dockerfile:     strings.TrimSpace(payload.Dockerfile),
+		Command:        append([]string{}, payload.Command...),
+		Env:            append([]string{}, payload.Env...),
+		Queue:          strings.TrimSpace(payload.Queue),
+		Retries:        retries,
+		TimeoutSeconds: timeoutSeconds,
+	}, nil
 }
 
 func dlqEntryDetailFromProto(entry *workerpb.DLQEntryDetail) dlqEntryDetailJSON {

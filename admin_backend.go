@@ -40,6 +40,16 @@ var (
 	ErrAdminScheduleFactoryMissing = ewrap.New("admin schedule factory missing")
 	// ErrAdminScheduleDurableMismatch indicates durable flag mismatched.
 	ErrAdminScheduleDurableMismatch = ewrap.New("admin schedule durable mismatch")
+	// ErrAdminJobNameRequired indicates a job name is required.
+	ErrAdminJobNameRequired = ewrap.New("admin job name is required")
+	// ErrAdminJobRepoRequired indicates a job repo is required.
+	ErrAdminJobRepoRequired = ewrap.New("admin job repo is required")
+	// ErrAdminJobTagRequired indicates a job tag is required.
+	ErrAdminJobTagRequired = ewrap.New("admin job tag is required")
+	// ErrAdminJobCommandRequired indicates a job command is required.
+	ErrAdminJobCommandRequired = ewrap.New("admin job command is required")
+	// ErrAdminJobNotFound indicates the job was not found.
+	ErrAdminJobNotFound = ewrap.New("admin job not found")
 )
 
 // AdminOverview describes the admin overview snapshot.
@@ -144,6 +154,28 @@ type AdminScheduleSpec struct {
 	Durable bool
 }
 
+// AdminJobSpec defines a job configuration for containerized execution.
+type AdminJobSpec struct {
+	Name        string
+	Description string
+	Repo        string
+	Tag         string
+	Path        string
+	Dockerfile  string
+	Command     []string
+	Env         []string
+	Queue       string
+	Retries     int
+	Timeout     time.Duration
+}
+
+// AdminJob represents a persisted job definition.
+type AdminJob struct {
+	AdminJobSpec
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 // AdminActionCounters tracks admin action counts.
 type AdminActionCounters struct {
 	Pause  int64
@@ -172,6 +204,7 @@ type AdminBackend interface {
 	adminQueues
 	adminSchedules
 	adminDLQ
+	adminJobs
 }
 
 type adminQueues interface {
@@ -200,4 +233,11 @@ type adminDLQ interface {
 	AdminResume(ctx context.Context) error
 	AdminReplayDLQ(ctx context.Context, limit int) (int, error)
 	AdminReplayDLQByID(ctx context.Context, ids []string) (int, error)
+}
+
+type adminJobs interface {
+	AdminJobs(ctx context.Context) ([]AdminJob, error)
+	AdminJob(ctx context.Context, name string) (AdminJob, error)
+	AdminUpsertJob(ctx context.Context, spec AdminJobSpec) (AdminJob, error)
+	AdminDeleteJob(ctx context.Context, name string) (bool, error)
 }

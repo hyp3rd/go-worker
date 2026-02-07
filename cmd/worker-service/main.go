@@ -31,6 +31,7 @@ const (
 	defaultCronSpec       = "@every 1m"
 	parseFloatBitSize     = 64
 	workerShutdownTimeout = 5 * time.Second
+	defaultJobOutputBytes = 64 * 1024
 )
 
 func defaultDurableCronHandlers() []string {
@@ -70,6 +71,13 @@ type config struct {
 	cronSpec            string
 	durableCronSpecs    map[string]string
 	cronSpecs           map[string]string
+
+	jobRepoAllowlist []string
+	jobDockerBin     string
+	jobGitBin        string
+	jobNetwork       string
+	jobWorkDir       string
+	jobOutputBytes   int
 }
 
 func main() {
@@ -82,26 +90,15 @@ func main() {
 func run() error {
 	cfg := loadConfig()
 
-	client, err := newRedisClient(cfg)
+	client, backend, err := newDurableBackend(cfg)
 	if err != nil {
-		return ewrap.Wrap(err, "redis client")
+		return err
 	}
 	defer client.Close()
 
-	backendOptions := []worker.RedisDurableOption{
-		worker.WithRedisDurablePrefix(cfg.redisPrefix),
-		worker.WithRedisDurableLeaderLock(cfg.leaderLease),
-	}
-	if cfg.globalRate > 0 && cfg.globalBurst > 0 {
-		backendOptions = append(backendOptions, worker.WithRedisDurableGlobalRateLimit(cfg.globalRate, cfg.globalBurst))
-	}
+	jobRunner := newJobRunner(cfg)
 
-	backend, err := worker.NewRedisDurableBackend(client, backendOptions...)
-	if err != nil {
-		return ewrap.Wrap(err, "durable backend")
-	}
-
-	handlers, durableHandlers := buildHandlerMaps(cfg)
+	handlers, durableHandlers := buildHandlerMaps(cfg, jobRunner)
 	tm := worker.NewTaskManagerWithOptions(
 		context.Background(),
 		worker.WithDurableBackend(backend),
@@ -113,6 +110,11 @@ func run() error {
 	err = registerCronFactories(tm, cfg)
 	if err != nil {
 		return err
+	}
+
+	err = tm.SyncJobFactories(context.Background())
+	if err != nil {
+		log.Printf("job factories: %v", err)
 	}
 
 	grpcServer := grpc.NewServer()
@@ -149,20 +151,50 @@ func run() error {
 	return nil
 }
 
+func newDurableBackend(cfg config) (rueidis.Client, *worker.RedisDurableBackend, error) {
+	client, err := newRedisClient(cfg)
+	if err != nil {
+		return nil, nil, ewrap.Wrap(err, "redis client")
+	}
+
+	backendOptions := []worker.RedisDurableOption{
+		worker.WithRedisDurablePrefix(cfg.redisPrefix),
+		worker.WithRedisDurableLeaderLock(cfg.leaderLease),
+	}
+	if cfg.globalRate > 0 && cfg.globalBurst > 0 {
+		backendOptions = append(backendOptions, worker.WithRedisDurableGlobalRateLimit(cfg.globalRate, cfg.globalBurst))
+	}
+
+	backend, err := worker.NewRedisDurableBackend(client, backendOptions...)
+	if err != nil {
+		client.Close()
+
+		return nil, nil, ewrap.Wrap(err, "durable backend")
+	}
+
+	return client, backend, nil
+}
+
 func loadConfig() config {
 	cfg := config{
-		redisAddr:     getenv("WORKER_REDIS_ADDR", defaultRedisAddr),
-		redisPassword: os.Getenv("WORKER_REDIS_PASSWORD"),
-		redisPrefix:   getenv("WORKER_REDIS_PREFIX", defaultRedisPrefix),
-		redisTLS:      parseBool(os.Getenv("WORKER_REDIS_TLS")),
-		redisTLSInsec: parseBool(os.Getenv("WORKER_REDIS_TLS_INSECURE")),
-		grpcAddr:      getenv("WORKER_GRPC_ADDR", defaultGRPCAddr),
-		durableLease:  defaultDuration(os.Getenv("WORKER_DURABLE_LEASE"), defaultLease),
-		globalRate:    parseFloat(os.Getenv("WORKER_GLOBAL_RATE")),
-		globalBurst:   parseInt(os.Getenv("WORKER_GLOBAL_BURST")),
-		leaderLease:   defaultDuration(os.Getenv("WORKER_LEADER_LEASE"), 0),
-		cronHandlers:  parseList(os.Getenv("WORKER_CRON_HANDLERS")),
-		cronSpec:      getenv("WORKER_CRON_DEFAULT_SPEC", defaultCronSpec),
+		redisAddr:        getenv("WORKER_REDIS_ADDR", defaultRedisAddr),
+		redisPassword:    os.Getenv("WORKER_REDIS_PASSWORD"),
+		redisPrefix:      getenv("WORKER_REDIS_PREFIX", defaultRedisPrefix),
+		redisTLS:         parseBool(os.Getenv("WORKER_REDIS_TLS")),
+		redisTLSInsec:    parseBool(os.Getenv("WORKER_REDIS_TLS_INSECURE")),
+		grpcAddr:         getenv("WORKER_GRPC_ADDR", defaultGRPCAddr),
+		durableLease:     defaultDuration(os.Getenv("WORKER_DURABLE_LEASE"), defaultLease),
+		globalRate:       parseFloat(os.Getenv("WORKER_GLOBAL_RATE")),
+		globalBurst:      parseInt(os.Getenv("WORKER_GLOBAL_BURST")),
+		leaderLease:      defaultDuration(os.Getenv("WORKER_LEADER_LEASE"), 0),
+		cronHandlers:     parseList(os.Getenv("WORKER_CRON_HANDLERS")),
+		cronSpec:         getenv("WORKER_CRON_DEFAULT_SPEC", defaultCronSpec),
+		jobRepoAllowlist: parseList(os.Getenv("WORKER_JOB_REPO_ALLOWLIST")),
+		jobDockerBin:     getenv("WORKER_JOB_DOCKER_BIN", "docker"),
+		jobGitBin:        getenv("WORKER_JOB_GIT_BIN", "git"),
+		jobNetwork:       strings.TrimSpace(os.Getenv("WORKER_JOB_NETWORK")),
+		jobWorkDir:       strings.TrimSpace(os.Getenv("WORKER_JOB_WORKDIR")),
+		jobOutputBytes:   parseIntWithDefault(os.Getenv("WORKER_JOB_OUTPUT_BYTES"), defaultJobOutputBytes),
 	}
 
 	cfg.durableCronHandlers = append([]string{}, defaultDurableCronHandlers()...)
@@ -236,12 +268,19 @@ func registerCronFactories(tm *worker.TaskManager, cfg config) error {
 	return nil
 }
 
-func buildHandlerMaps(cfg config) (map[string]worker.HandlerSpec, map[string]worker.DurableHandlerSpec) {
+func buildHandlerMaps(
+	cfg config,
+	jobRunner *jobRunner,
+) (map[string]worker.HandlerSpec, map[string]worker.DurableHandlerSpec) {
 	handlers := map[string]worker.HandlerSpec{
 		"send_email": sendEmailHandlerSpec(),
 	}
 	durableHandlers := map[string]worker.DurableHandlerSpec{
 		"send_email": sendEmailDurableHandlerSpec(),
+	}
+
+	if jobRunner != nil {
+		durableHandlers[worker.JobHandlerName] = jobDurableHandlerSpec(jobRunner)
 	}
 
 	addNames := append([]string{}, cfg.cronHandlers...)
@@ -346,6 +385,15 @@ func parseInt(raw string) int {
 	value, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || value <= 0 {
 		return 0
+	}
+
+	return value
+}
+
+func parseIntWithDefault(raw string, fallback int) int {
+	value := parseInt(raw)
+	if value <= 0 {
+		return fallback
 	}
 
 	return value

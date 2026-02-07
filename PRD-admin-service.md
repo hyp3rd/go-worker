@@ -34,6 +34,11 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
          - Delete schedules by name.
          - Run schedule immediately on demand.
          - Pause/resume all schedules at once.
+1. **Jobs (containerized runner)**
+         - Persist job definitions (repo + tag + optional path/dockerfile).
+         - Run jobs on demand (enqueue durable task).
+         - Register job factories to allow scheduling via existing cron APIs.
+         - Enforce tag-only Git fetch (no branches).
 1. **Health**
          - Report service health and build information (version, commit, Go version).
 1. **DLQ**
@@ -73,6 +78,11 @@ Service: `worker.v1.AdminService`
 - `PauseSchedule(PauseScheduleRequest) returns (PauseScheduleResponse)`
 - `RunSchedule(RunScheduleRequest) returns (RunScheduleResponse)`
 - `PauseSchedules(PauseSchedulesRequest) returns (PauseSchedulesResponse)`
+- `ListJobs(ListJobsRequest) returns (ListJobsResponse)`
+- `GetJob(GetJobRequest) returns (GetJobResponse)`
+- `UpsertJob(UpsertJobRequest) returns (UpsertJobResponse)`
+- `DeleteJob(DeleteJobRequest) returns (DeleteJobResponse)`
+- `RunJob(RunJobRequest) returns (RunJobResponse)`
 - `ListDLQ(ListDLQRequest) returns (ListDLQResponse)`
 - `GetDLQEntry(GetDLQEntryRequest) returns (GetDLQEntryResponse)`
 - `PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse)`
@@ -97,6 +107,11 @@ Service: `worker.v1.AdminService`
 - `POST /admin/v1/schedules/{name}/pause` (body: `{ "paused": true }`)
 - `POST /admin/v1/schedules/{name}/run`
 - `POST /admin/v1/schedules/pause` (body: `{ "paused": true }`)
+- `GET /admin/v1/jobs`
+- `GET /admin/v1/jobs/{name}`
+- `POST /admin/v1/jobs` (body: `{ "name": "...", "repo": "...", "tag": "v1.2.3", "path": "subdir", "dockerfile": "Dockerfile", "command": ["..."], "env": ["ENV_KEY"], "queue": "default", "retries": 2, "timeoutSeconds": 600 }`)
+- `DELETE /admin/v1/jobs/{name}`
+- `POST /admin/v1/jobs/{name}/run`
 - `GET /admin/v1/dlq?limit=100&offset=0&queue=default&handler=send_email&query=oops`
 - `GET /admin/v1/dlq/{id}`
 - `POST /admin/v1/pause`
@@ -129,6 +144,15 @@ Worker service cron presets (when using the bundled worker-service):
 - `WORKER_CRON_HANDLERS` (comma-separated in-memory handlers)
 - `WORKER_CRON_PRESETS` (comma-separated `name=spec` overrides)
 
+Worker service job runner (containerized):
+
+- `WORKER_JOB_REPO_ALLOWLIST` (comma-separated; `*` to allow all)
+- `WORKER_JOB_GIT_BIN` (default `git`)
+- `WORKER_JOB_DOCKER_BIN` (default `docker`)
+- `WORKER_JOB_NETWORK` (optional docker network)
+- `WORKER_JOB_WORKDIR` (optional temp workspace root)
+- `WORKER_JOB_OUTPUT_BYTES` (max combined stdout+stderr)
+
 ## Observability
 
 - Log errors and action outcomes at INFO/WARN levels.
@@ -147,6 +171,7 @@ Worker service cron presets (when using the bundled worker-service):
 - **Observability counters**: Implemented (pause/resume/replay action counts in overview).
 - **Schedule management endpoints**: Implemented (create/delete/pause/run + pause-all via gRPC + gateway + UI).
 - **Events stream**: Implemented (gateway SSE + UI schedule event log via `/api/events`).
+- **Jobs (containerized runner)**: Implemented in API + worker-service; UI pending.
 
 ## Milestones
 

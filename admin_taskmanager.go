@@ -474,6 +474,189 @@ func (tm *TaskManager) AdminDeleteSchedule(ctx context.Context, name string) (bo
 	return true, nil
 }
 
+// AdminJobs lists registered job definitions.
+func (tm *TaskManager) AdminJobs(ctx context.Context) ([]AdminJob, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return nil, err
+	}
+
+	return backend.AdminJobs(ctx)
+}
+
+// AdminJob returns a job definition by name.
+func (tm *TaskManager) AdminJob(ctx context.Context, name string) (AdminJob, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return AdminJob{}, err
+	}
+
+	return backend.AdminJob(ctx, name)
+}
+
+// AdminUpsertJob creates or updates a job definition and registers a cron factory.
+func (tm *TaskManager) AdminUpsertJob(ctx context.Context, spec AdminJobSpec) (AdminJob, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return AdminJob{}, err
+	}
+
+	job, err := backend.AdminUpsertJob(ctx, spec)
+	if err != nil {
+		return AdminJob{}, err
+	}
+
+	err = tm.registerJobFactory(job)
+	if err != nil {
+		return AdminJob{}, err
+	}
+
+	return job, nil
+}
+
+// AdminDeleteJob removes a job definition and its cron factory.
+func (tm *TaskManager) AdminDeleteJob(ctx context.Context, name string) (bool, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return false, err
+	}
+
+	deleted, err := backend.AdminDeleteJob(ctx, name)
+	if err != nil {
+		return false, err
+	}
+
+	if deleted {
+		tm.unregisterJobFactory(name)
+	}
+
+	return deleted, nil
+}
+
+// AdminRunJob enqueues a job immediately as a durable task.
+func (tm *TaskManager) AdminRunJob(ctx context.Context, name string) (string, error) {
+	if tm == nil {
+		return "", ErrAdminBackendUnavailable
+	}
+
+	if ctx == nil {
+		return "", ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ErrAdminJobNameRequired
+	}
+
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return "", err
+	}
+
+	job, err := backend.AdminJob(ctx, name)
+	if err != nil {
+		return "", err
+	}
+
+	task, err := jobDurableTask(job)
+	if err != nil {
+		return "", err
+	}
+
+	err = tm.RegisterDurableTask(ctx, task)
+	if err != nil {
+		return "", err
+	}
+
+	return task.ID.String(), nil
+}
+
+func (tm *TaskManager) registerJobFactory(job AdminJob) error {
+	if tm == nil {
+		return ErrAdminBackendUnavailable
+	}
+
+	name := strings.TrimSpace(job.Name)
+	if name == "" {
+		return ErrAdminJobNameRequired
+	}
+
+	tm.cronMu.Lock()
+	defer tm.cronMu.Unlock()
+
+	if tm.cronFactories == nil {
+		return ErrAdminBackendUnavailable
+	}
+
+	if existing, ok := tm.cronFactories[name]; ok && existing.Origin != cronFactoryOriginJob {
+		return ewrap.New("job factory name conflicts with existing schedule factory")
+	}
+
+	tm.cronFactories[name] = cronFactory{
+		Durable: true,
+		DurableFactory: func(_ context.Context) (DurableTask, error) {
+			return jobDurableTask(job)
+		},
+		Origin: cronFactoryOriginJob,
+	}
+
+	return nil
+}
+
+func (tm *TaskManager) unregisterJobFactory(name string) {
+	if tm == nil {
+		return
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+
+	tm.cronMu.Lock()
+	defer tm.cronMu.Unlock()
+
+	if factory, ok := tm.cronFactories[name]; ok && factory.Origin == cronFactoryOriginJob {
+		delete(tm.cronFactories, name)
+	}
+
+	if entryID, ok := tm.cronEntries[name]; ok {
+		if tm.cron != nil {
+			tm.cron.Remove(entryID)
+		}
+
+		delete(tm.cronEntries, name)
+	}
+
+	delete(tm.cronSpecs, name)
+}
+
+// SyncJobFactories loads persisted jobs and registers factories for them.
+func (tm *TaskManager) SyncJobFactories(ctx context.Context) error {
+	if tm == nil {
+		return ErrAdminBackendUnavailable
+	}
+
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return err
+	}
+
+	jobs, err := backend.AdminJobs(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, job := range jobs {
+		err = tm.registerJobFactory(job)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // AdminPauseSchedule pauses or resumes a cron schedule by name.
 func (tm *TaskManager) AdminPauseSchedule(ctx context.Context, name string, paused bool) (AdminSchedule, error) {
 	if tm == nil {

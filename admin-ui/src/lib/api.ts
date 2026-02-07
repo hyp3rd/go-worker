@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import type {
   AdminActionCounters,
+  AdminJob,
   CoordinationStatus,
   DlqEntry,
   HealthInfo,
@@ -82,6 +83,10 @@ export async function fetchQueueDetail(
 
 export async function fetchSchedules(): Promise<{ schedules: JobSchedule[] }> {
   return fetchJson("/api/schedules");
+}
+
+export async function fetchJobs(): Promise<{ jobs: AdminJob[] }> {
+  return fetchJson("/api/jobs");
 }
 
 export async function fetchScheduleFactories(): Promise<{

@@ -3,6 +3,7 @@ import type {
   CoordinationStatus,
   DlqEntry,
   HealthInfo,
+  AdminJob,
   JobSchedule,
   OverviewStats,
   QueueSummary,
@@ -148,6 +149,39 @@ export const scheduleEvents: ScheduleEvent[] = [
       task_name: "report_generator",
       description: "Generate the hourly SLA report.",
     },
+  },
+];
+
+export const adminJobs: AdminJob[] = [
+  {
+    name: "metrics_rollup",
+    description: "Roll up durable metrics snapshots",
+    repo: "git@github.com:hyp3rd/worker-jobs.git",
+    tag: "v1.2.0",
+    path: "jobs/metrics",
+    dockerfile: "Dockerfile",
+    command: ["./run.sh"],
+    env: ["WORKER_ADMIN_API_URL"],
+    queue: "default",
+    retries: 2,
+    timeoutSeconds: 600,
+    createdAtMs: Date.now() - 24 * 60 * 60 * 1000,
+    updatedAtMs: Date.now() - 60 * 60 * 1000,
+  },
+  {
+    name: "dlq_sweep",
+    description: "Sweep DLQ and emit alerts",
+    repo: "git@github.com:hyp3rd/worker-jobs.git",
+    tag: "v1.2.0",
+    path: "jobs/dlq",
+    dockerfile: "Dockerfile",
+    command: ["./run.sh", "--notify"],
+    env: ["WORKER_ADMIN_API_URL"],
+    queue: "default",
+    retries: 1,
+    timeoutSeconds: 900,
+    createdAtMs: Date.now() - 7 * 24 * 60 * 60 * 1000,
+    updatedAtMs: Date.now() - 12 * 60 * 60 * 1000,
   },
 ];
 

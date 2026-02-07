@@ -1962,6 +1962,622 @@ func (x *PauseSchedulesResponse) GetPaused() bool {
 	return false
 }
 
+type JobSpec struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description    string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Repo           string                 `protobuf:"bytes,3,opt,name=repo,proto3" json:"repo,omitempty"`
+	Tag            string                 `protobuf:"bytes,4,opt,name=tag,proto3" json:"tag,omitempty"`
+	Path           string                 `protobuf:"bytes,5,opt,name=path,proto3" json:"path,omitempty"`
+	Dockerfile     string                 `protobuf:"bytes,6,opt,name=dockerfile,proto3" json:"dockerfile,omitempty"`
+	Command        []string               `protobuf:"bytes,7,rep,name=command,proto3" json:"command,omitempty"`
+	Env            []string               `protobuf:"bytes,8,rep,name=env,proto3" json:"env,omitempty"`
+	Queue          string                 `protobuf:"bytes,9,opt,name=queue,proto3" json:"queue,omitempty"`
+	Retries        int32                  `protobuf:"varint,10,opt,name=retries,proto3" json:"retries,omitempty"`
+	TimeoutSeconds int32                  `protobuf:"varint,11,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *JobSpec) Reset() {
+	*x = JobSpec{}
+	mi := &file_worker_v1_admin_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobSpec) ProtoMessage() {}
+
+func (x *JobSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobSpec.ProtoReflect.Descriptor instead.
+func (*JobSpec) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *JobSpec) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *JobSpec) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *JobSpec) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *JobSpec) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+func (x *JobSpec) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *JobSpec) GetDockerfile() string {
+	if x != nil {
+		return x.Dockerfile
+	}
+	return ""
+}
+
+func (x *JobSpec) GetCommand() []string {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *JobSpec) GetEnv() []string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *JobSpec) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *JobSpec) GetRetries() int32 {
+	if x != nil {
+		return x.Retries
+	}
+	return 0
+}
+
+func (x *JobSpec) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+type Job struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Spec          *JobSpec               `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	CreatedAtMs   int64                  `protobuf:"varint,2,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
+	UpdatedAtMs   int64                  `protobuf:"varint,3,opt,name=updated_at_ms,json=updatedAtMs,proto3" json:"updated_at_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Job) Reset() {
+	*x = Job{}
+	mi := &file_worker_v1_admin_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Job) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Job) ProtoMessage() {}
+
+func (x *Job) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Job.ProtoReflect.Descriptor instead.
+func (*Job) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *Job) GetSpec() *JobSpec {
+	if x != nil {
+		return x.Spec
+	}
+	return nil
+}
+
+func (x *Job) GetCreatedAtMs() int64 {
+	if x != nil {
+		return x.CreatedAtMs
+	}
+	return 0
+}
+
+func (x *Job) GetUpdatedAtMs() int64 {
+	if x != nil {
+		return x.UpdatedAtMs
+	}
+	return 0
+}
+
+type ListJobsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListJobsRequest) Reset() {
+	*x = ListJobsRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListJobsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsRequest) ProtoMessage() {}
+
+func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
+func (*ListJobsRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{39}
+}
+
+type ListJobsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Jobs          []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListJobsResponse) Reset() {
+	*x = ListJobsResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListJobsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsResponse) ProtoMessage() {}
+
+func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
+func (*ListJobsResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ListJobsResponse) GetJobs() []*Job {
+	if x != nil {
+		return x.Jobs
+	}
+	return nil
+}
+
+type GetJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetJobRequest) Reset() {
+	*x = GetJobRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetJobRequest) ProtoMessage() {}
+
+func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
+func (*GetJobRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *GetJobRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Job           *Job                   `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetJobResponse) Reset() {
+	*x = GetJobResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetJobResponse) ProtoMessage() {}
+
+func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
+func (*GetJobResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *GetJobResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
+	}
+	return nil
+}
+
+type UpsertJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Spec          *JobSpec               `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertJobRequest) Reset() {
+	*x = UpsertJobRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertJobRequest) ProtoMessage() {}
+
+func (x *UpsertJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertJobRequest.ProtoReflect.Descriptor instead.
+func (*UpsertJobRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *UpsertJobRequest) GetSpec() *JobSpec {
+	if x != nil {
+		return x.Spec
+	}
+	return nil
+}
+
+type UpsertJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Job           *Job                   `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertJobResponse) Reset() {
+	*x = UpsertJobResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertJobResponse) ProtoMessage() {}
+
+func (x *UpsertJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertJobResponse.ProtoReflect.Descriptor instead.
+func (*UpsertJobResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *UpsertJobResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
+	}
+	return nil
+}
+
+type DeleteJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteJobRequest) Reset() {
+	*x = DeleteJobRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteJobRequest) ProtoMessage() {}
+
+func (x *DeleteJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteJobRequest.ProtoReflect.Descriptor instead.
+func (*DeleteJobRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *DeleteJobRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type DeleteJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deleted       bool                   `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteJobResponse) Reset() {
+	*x = DeleteJobResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteJobResponse) ProtoMessage() {}
+
+func (x *DeleteJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteJobResponse.ProtoReflect.Descriptor instead.
+func (*DeleteJobResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *DeleteJobResponse) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+type RunJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunJobRequest) Reset() {
+	*x = RunJobRequest{}
+	mi := &file_worker_v1_admin_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunJobRequest) ProtoMessage() {}
+
+func (x *RunJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunJobRequest.ProtoReflect.Descriptor instead.
+func (*RunJobRequest) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *RunJobRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type RunJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunJobResponse) Reset() {
+	*x = RunJobResponse{}
+	mi := &file_worker_v1_admin_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunJobResponse) ProtoMessage() {}
+
+func (x *RunJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_worker_v1_admin_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunJobResponse.ProtoReflect.Descriptor instead.
+func (*RunJobResponse) Descriptor() ([]byte, []int) {
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *RunJobResponse) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
 type DLQEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1975,7 +2591,7 @@ type DLQEntry struct {
 
 func (x *DLQEntry) Reset() {
 	*x = DLQEntry{}
-	mi := &file_worker_v1_admin_proto_msgTypes[37]
+	mi := &file_worker_v1_admin_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1987,7 +2603,7 @@ func (x *DLQEntry) String() string {
 func (*DLQEntry) ProtoMessage() {}
 
 func (x *DLQEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[37]
+	mi := &file_worker_v1_admin_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2000,7 +2616,7 @@ func (x *DLQEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DLQEntry.ProtoReflect.Descriptor instead.
 func (*DLQEntry) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{37}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *DLQEntry) GetId() string {
@@ -2056,7 +2672,7 @@ type DLQEntryDetail struct {
 
 func (x *DLQEntryDetail) Reset() {
 	*x = DLQEntryDetail{}
-	mi := &file_worker_v1_admin_proto_msgTypes[38]
+	mi := &file_worker_v1_admin_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2068,7 +2684,7 @@ func (x *DLQEntryDetail) String() string {
 func (*DLQEntryDetail) ProtoMessage() {}
 
 func (x *DLQEntryDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[38]
+	mi := &file_worker_v1_admin_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2081,7 +2697,7 @@ func (x *DLQEntryDetail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DLQEntryDetail.ProtoReflect.Descriptor instead.
 func (*DLQEntryDetail) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{38}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DLQEntryDetail) GetId() string {
@@ -2163,7 +2779,7 @@ type GetDLQEntryRequest struct {
 
 func (x *GetDLQEntryRequest) Reset() {
 	*x = GetDLQEntryRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[39]
+	mi := &file_worker_v1_admin_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2175,7 +2791,7 @@ func (x *GetDLQEntryRequest) String() string {
 func (*GetDLQEntryRequest) ProtoMessage() {}
 
 func (x *GetDLQEntryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[39]
+	mi := &file_worker_v1_admin_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2188,7 +2804,7 @@ func (x *GetDLQEntryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQEntryRequest.ProtoReflect.Descriptor instead.
 func (*GetDLQEntryRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{39}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GetDLQEntryRequest) GetId() string {
@@ -2207,7 +2823,7 @@ type GetDLQEntryResponse struct {
 
 func (x *GetDLQEntryResponse) Reset() {
 	*x = GetDLQEntryResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[40]
+	mi := &file_worker_v1_admin_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2219,7 +2835,7 @@ func (x *GetDLQEntryResponse) String() string {
 func (*GetDLQEntryResponse) ProtoMessage() {}
 
 func (x *GetDLQEntryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[40]
+	mi := &file_worker_v1_admin_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2232,7 +2848,7 @@ func (x *GetDLQEntryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQEntryResponse.ProtoReflect.Descriptor instead.
 func (*GetDLQEntryResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{40}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *GetDLQEntryResponse) GetEntry() *DLQEntryDetail {
@@ -2255,7 +2871,7 @@ type ListDLQRequest struct {
 
 func (x *ListDLQRequest) Reset() {
 	*x = ListDLQRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[41]
+	mi := &file_worker_v1_admin_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2267,7 +2883,7 @@ func (x *ListDLQRequest) String() string {
 func (*ListDLQRequest) ProtoMessage() {}
 
 func (x *ListDLQRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[41]
+	mi := &file_worker_v1_admin_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2280,7 +2896,7 @@ func (x *ListDLQRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDLQRequest.ProtoReflect.Descriptor instead.
 func (*ListDLQRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{41}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListDLQRequest) GetLimit() int32 {
@@ -2328,7 +2944,7 @@ type ListDLQResponse struct {
 
 func (x *ListDLQResponse) Reset() {
 	*x = ListDLQResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[42]
+	mi := &file_worker_v1_admin_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2340,7 +2956,7 @@ func (x *ListDLQResponse) String() string {
 func (*ListDLQResponse) ProtoMessage() {}
 
 func (x *ListDLQResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[42]
+	mi := &file_worker_v1_admin_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2353,7 +2969,7 @@ func (x *ListDLQResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDLQResponse.ProtoReflect.Descriptor instead.
 func (*ListDLQResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{42}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListDLQResponse) GetEntries() []*DLQEntry {
@@ -2378,7 +2994,7 @@ type PauseDequeueRequest struct {
 
 func (x *PauseDequeueRequest) Reset() {
 	*x = PauseDequeueRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[43]
+	mi := &file_worker_v1_admin_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2390,7 +3006,7 @@ func (x *PauseDequeueRequest) String() string {
 func (*PauseDequeueRequest) ProtoMessage() {}
 
 func (x *PauseDequeueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[43]
+	mi := &file_worker_v1_admin_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2403,7 +3019,7 @@ func (x *PauseDequeueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseDequeueRequest.ProtoReflect.Descriptor instead.
 func (*PauseDequeueRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{43}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{55}
 }
 
 type PauseDequeueResponse struct {
@@ -2415,7 +3031,7 @@ type PauseDequeueResponse struct {
 
 func (x *PauseDequeueResponse) Reset() {
 	*x = PauseDequeueResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[44]
+	mi := &file_worker_v1_admin_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2427,7 +3043,7 @@ func (x *PauseDequeueResponse) String() string {
 func (*PauseDequeueResponse) ProtoMessage() {}
 
 func (x *PauseDequeueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[44]
+	mi := &file_worker_v1_admin_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2440,7 +3056,7 @@ func (x *PauseDequeueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseDequeueResponse.ProtoReflect.Descriptor instead.
 func (*PauseDequeueResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{44}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *PauseDequeueResponse) GetPaused() bool {
@@ -2458,7 +3074,7 @@ type ResumeDequeueRequest struct {
 
 func (x *ResumeDequeueRequest) Reset() {
 	*x = ResumeDequeueRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[45]
+	mi := &file_worker_v1_admin_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2470,7 +3086,7 @@ func (x *ResumeDequeueRequest) String() string {
 func (*ResumeDequeueRequest) ProtoMessage() {}
 
 func (x *ResumeDequeueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[45]
+	mi := &file_worker_v1_admin_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2483,7 +3099,7 @@ func (x *ResumeDequeueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeDequeueRequest.ProtoReflect.Descriptor instead.
 func (*ResumeDequeueRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{45}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{57}
 }
 
 type ResumeDequeueResponse struct {
@@ -2495,7 +3111,7 @@ type ResumeDequeueResponse struct {
 
 func (x *ResumeDequeueResponse) Reset() {
 	*x = ResumeDequeueResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[46]
+	mi := &file_worker_v1_admin_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2507,7 +3123,7 @@ func (x *ResumeDequeueResponse) String() string {
 func (*ResumeDequeueResponse) ProtoMessage() {}
 
 func (x *ResumeDequeueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[46]
+	mi := &file_worker_v1_admin_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2520,7 +3136,7 @@ func (x *ResumeDequeueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeDequeueResponse.ProtoReflect.Descriptor instead.
 func (*ResumeDequeueResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{46}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ResumeDequeueResponse) GetPaused() bool {
@@ -2539,7 +3155,7 @@ type ReplayDLQRequest struct {
 
 func (x *ReplayDLQRequest) Reset() {
 	*x = ReplayDLQRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[47]
+	mi := &file_worker_v1_admin_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2551,7 +3167,7 @@ func (x *ReplayDLQRequest) String() string {
 func (*ReplayDLQRequest) ProtoMessage() {}
 
 func (x *ReplayDLQRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[47]
+	mi := &file_worker_v1_admin_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2564,7 +3180,7 @@ func (x *ReplayDLQRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplayDLQRequest.ProtoReflect.Descriptor instead.
 func (*ReplayDLQRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{47}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ReplayDLQRequest) GetLimit() int32 {
@@ -2583,7 +3199,7 @@ type ReplayDLQResponse struct {
 
 func (x *ReplayDLQResponse) Reset() {
 	*x = ReplayDLQResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[48]
+	mi := &file_worker_v1_admin_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2595,7 +3211,7 @@ func (x *ReplayDLQResponse) String() string {
 func (*ReplayDLQResponse) ProtoMessage() {}
 
 func (x *ReplayDLQResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[48]
+	mi := &file_worker_v1_admin_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2608,7 +3224,7 @@ func (x *ReplayDLQResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplayDLQResponse.ProtoReflect.Descriptor instead.
 func (*ReplayDLQResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{48}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ReplayDLQResponse) GetMoved() int32 {
@@ -2627,7 +3243,7 @@ type ReplayDLQByIDRequest struct {
 
 func (x *ReplayDLQByIDRequest) Reset() {
 	*x = ReplayDLQByIDRequest{}
-	mi := &file_worker_v1_admin_proto_msgTypes[49]
+	mi := &file_worker_v1_admin_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2639,7 +3255,7 @@ func (x *ReplayDLQByIDRequest) String() string {
 func (*ReplayDLQByIDRequest) ProtoMessage() {}
 
 func (x *ReplayDLQByIDRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[49]
+	mi := &file_worker_v1_admin_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2652,7 +3268,7 @@ func (x *ReplayDLQByIDRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplayDLQByIDRequest.ProtoReflect.Descriptor instead.
 func (*ReplayDLQByIDRequest) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{49}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ReplayDLQByIDRequest) GetIds() []string {
@@ -2671,7 +3287,7 @@ type ReplayDLQByIDResponse struct {
 
 func (x *ReplayDLQByIDResponse) Reset() {
 	*x = ReplayDLQByIDResponse{}
-	mi := &file_worker_v1_admin_proto_msgTypes[50]
+	mi := &file_worker_v1_admin_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2683,7 +3299,7 @@ func (x *ReplayDLQByIDResponse) String() string {
 func (*ReplayDLQByIDResponse) ProtoMessage() {}
 
 func (x *ReplayDLQByIDResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_worker_v1_admin_proto_msgTypes[50]
+	mi := &file_worker_v1_admin_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2696,7 +3312,7 @@ func (x *ReplayDLQByIDResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplayDLQByIDResponse.ProtoReflect.Descriptor instead.
 func (*ReplayDLQByIDResponse) Descriptor() ([]byte, []int) {
-	return file_worker_v1_admin_proto_rawDescGZIP(), []int{50}
+	return file_worker_v1_admin_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ReplayDLQByIDResponse) GetMoved() int32 {
@@ -2833,7 +3449,45 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\x06paused\x18\x01 \x01(\bR\x06paused\"J\n" +
 	"\x16PauseSchedulesResponse\x12\x18\n" +
 	"\aupdated\x18\x01 \x01(\x05R\aupdated\x12\x16\n" +
-	"\x06paused\x18\x02 \x01(\bR\x06paused\"}\n" +
+	"\x06paused\x18\x02 \x01(\bR\x06paused\"\x9e\x02\n" +
+	"\aJobSpec\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04repo\x18\x03 \x01(\tR\x04repo\x12\x10\n" +
+	"\x03tag\x18\x04 \x01(\tR\x03tag\x12\x12\n" +
+	"\x04path\x18\x05 \x01(\tR\x04path\x12\x1e\n" +
+	"\n" +
+	"dockerfile\x18\x06 \x01(\tR\n" +
+	"dockerfile\x12\x18\n" +
+	"\acommand\x18\a \x03(\tR\acommand\x12\x10\n" +
+	"\x03env\x18\b \x03(\tR\x03env\x12\x14\n" +
+	"\x05queue\x18\t \x01(\tR\x05queue\x12\x18\n" +
+	"\aretries\x18\n" +
+	" \x01(\x05R\aretries\x12'\n" +
+	"\x0ftimeout_seconds\x18\v \x01(\x05R\x0etimeoutSeconds\"u\n" +
+	"\x03Job\x12&\n" +
+	"\x04spec\x18\x01 \x01(\v2\x12.worker.v1.JobSpecR\x04spec\x12\"\n" +
+	"\rcreated_at_ms\x18\x02 \x01(\x03R\vcreatedAtMs\x12\"\n" +
+	"\rupdated_at_ms\x18\x03 \x01(\x03R\vupdatedAtMs\"\x11\n" +
+	"\x0fListJobsRequest\"6\n" +
+	"\x10ListJobsResponse\x12\"\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x0e.worker.v1.JobR\x04jobs\"#\n" +
+	"\rGetJobRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"2\n" +
+	"\x0eGetJobResponse\x12 \n" +
+	"\x03job\x18\x01 \x01(\v2\x0e.worker.v1.JobR\x03job\":\n" +
+	"\x10UpsertJobRequest\x12&\n" +
+	"\x04spec\x18\x01 \x01(\v2\x12.worker.v1.JobSpecR\x04spec\"5\n" +
+	"\x11UpsertJobResponse\x12 \n" +
+	"\x03job\x18\x01 \x01(\v2\x0e.worker.v1.JobR\x03job\"&\n" +
+	"\x10DeleteJobRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"-\n" +
+	"\x11DeleteJobResponse\x12\x18\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\"#\n" +
+	"\rRunJobRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\")\n" +
+	"\x0eRunJobResponse\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\"}\n" +
 	"\bDLQEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05queue\x18\x02 \x01(\tR\x05queue\x12\x18\n" +
@@ -2883,7 +3537,7 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\x14ReplayDLQByIDRequest\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\tR\x03ids\"-\n" +
 	"\x15ReplayDLQByIDResponse\x12\x14\n" +
-	"\x05moved\x18\x01 \x01(\x05R\x05moved2\xd7\r\n" +
+	"\x05moved\x18\x01 \x01(\x05R\x05moved2\xaa\x10\n" +
 	"\fAdminService\x12F\n" +
 	"\tGetHealth\x12\x1b.worker.v1.GetHealthRequest\x1a\x1c.worker.v1.GetHealthResponse\x12L\n" +
 	"\vGetOverview\x12\x1d.worker.v1.GetOverviewRequest\x1a\x1e.worker.v1.GetOverviewResponse\x12I\n" +
@@ -2893,7 +3547,12 @@ const file_worker_v1_admin_proto_rawDesc = "" +
 	"\x11UpdateQueueWeight\x12#.worker.v1.UpdateQueueWeightRequest\x1a$.worker.v1.UpdateQueueWeightResponse\x12[\n" +
 	"\x10ResetQueueWeight\x12\".worker.v1.ResetQueueWeightRequest\x1a#.worker.v1.ResetQueueWeightResponse\x12I\n" +
 	"\n" +
-	"PauseQueue\x12\x1c.worker.v1.PauseQueueRequest\x1a\x1d.worker.v1.PauseQueueResponse\x12j\n" +
+	"PauseQueue\x12\x1c.worker.v1.PauseQueueRequest\x1a\x1d.worker.v1.PauseQueueResponse\x12C\n" +
+	"\bListJobs\x12\x1a.worker.v1.ListJobsRequest\x1a\x1b.worker.v1.ListJobsResponse\x12=\n" +
+	"\x06GetJob\x12\x18.worker.v1.GetJobRequest\x1a\x19.worker.v1.GetJobResponse\x12F\n" +
+	"\tUpsertJob\x12\x1b.worker.v1.UpsertJobRequest\x1a\x1c.worker.v1.UpsertJobResponse\x12F\n" +
+	"\tDeleteJob\x12\x1b.worker.v1.DeleteJobRequest\x1a\x1c.worker.v1.DeleteJobResponse\x12=\n" +
+	"\x06RunJob\x12\x18.worker.v1.RunJobRequest\x1a\x19.worker.v1.RunJobResponse\x12j\n" +
 	"\x15ListScheduleFactories\x12'.worker.v1.ListScheduleFactoriesRequest\x1a(.worker.v1.ListScheduleFactoriesResponse\x12a\n" +
 	"\x12ListScheduleEvents\x12$.worker.v1.ListScheduleEventsRequest\x1a%.worker.v1.ListScheduleEventsResponse\x12R\n" +
 	"\rListSchedules\x12\x1f.worker.v1.ListSchedulesRequest\x1a .worker.v1.ListSchedulesResponse\x12U\n" +
@@ -2925,7 +3584,7 @@ func file_worker_v1_admin_proto_rawDescGZIP() []byte {
 }
 
 var (
-	file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
+	file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
 	file_worker_v1_admin_proto_goTypes  = []any{
 		(*GetOverviewRequest)(nil),            // 0: worker.v1.GetOverviewRequest
 		(*OverviewStats)(nil),                 // 1: worker.v1.OverviewStats
@@ -2964,22 +3623,34 @@ var (
 		(*RunScheduleResponse)(nil),           // 34: worker.v1.RunScheduleResponse
 		(*PauseSchedulesRequest)(nil),         // 35: worker.v1.PauseSchedulesRequest
 		(*PauseSchedulesResponse)(nil),        // 36: worker.v1.PauseSchedulesResponse
-		(*DLQEntry)(nil),                      // 37: worker.v1.DLQEntry
-		(*DLQEntryDetail)(nil),                // 38: worker.v1.DLQEntryDetail
-		(*GetDLQEntryRequest)(nil),            // 39: worker.v1.GetDLQEntryRequest
-		(*GetDLQEntryResponse)(nil),           // 40: worker.v1.GetDLQEntryResponse
-		(*ListDLQRequest)(nil),                // 41: worker.v1.ListDLQRequest
-		(*ListDLQResponse)(nil),               // 42: worker.v1.ListDLQResponse
-		(*PauseDequeueRequest)(nil),           // 43: worker.v1.PauseDequeueRequest
-		(*PauseDequeueResponse)(nil),          // 44: worker.v1.PauseDequeueResponse
-		(*ResumeDequeueRequest)(nil),          // 45: worker.v1.ResumeDequeueRequest
-		(*ResumeDequeueResponse)(nil),         // 46: worker.v1.ResumeDequeueResponse
-		(*ReplayDLQRequest)(nil),              // 47: worker.v1.ReplayDLQRequest
-		(*ReplayDLQResponse)(nil),             // 48: worker.v1.ReplayDLQResponse
-		(*ReplayDLQByIDRequest)(nil),          // 49: worker.v1.ReplayDLQByIDRequest
-		(*ReplayDLQByIDResponse)(nil),         // 50: worker.v1.ReplayDLQByIDResponse
-		nil,                                   // 51: worker.v1.ScheduleEvent.MetadataEntry
-		nil,                                   // 52: worker.v1.DLQEntryDetail.MetadataEntry
+		(*JobSpec)(nil),                       // 37: worker.v1.JobSpec
+		(*Job)(nil),                           // 38: worker.v1.Job
+		(*ListJobsRequest)(nil),               // 39: worker.v1.ListJobsRequest
+		(*ListJobsResponse)(nil),              // 40: worker.v1.ListJobsResponse
+		(*GetJobRequest)(nil),                 // 41: worker.v1.GetJobRequest
+		(*GetJobResponse)(nil),                // 42: worker.v1.GetJobResponse
+		(*UpsertJobRequest)(nil),              // 43: worker.v1.UpsertJobRequest
+		(*UpsertJobResponse)(nil),             // 44: worker.v1.UpsertJobResponse
+		(*DeleteJobRequest)(nil),              // 45: worker.v1.DeleteJobRequest
+		(*DeleteJobResponse)(nil),             // 46: worker.v1.DeleteJobResponse
+		(*RunJobRequest)(nil),                 // 47: worker.v1.RunJobRequest
+		(*RunJobResponse)(nil),                // 48: worker.v1.RunJobResponse
+		(*DLQEntry)(nil),                      // 49: worker.v1.DLQEntry
+		(*DLQEntryDetail)(nil),                // 50: worker.v1.DLQEntryDetail
+		(*GetDLQEntryRequest)(nil),            // 51: worker.v1.GetDLQEntryRequest
+		(*GetDLQEntryResponse)(nil),           // 52: worker.v1.GetDLQEntryResponse
+		(*ListDLQRequest)(nil),                // 53: worker.v1.ListDLQRequest
+		(*ListDLQResponse)(nil),               // 54: worker.v1.ListDLQResponse
+		(*PauseDequeueRequest)(nil),           // 55: worker.v1.PauseDequeueRequest
+		(*PauseDequeueResponse)(nil),          // 56: worker.v1.PauseDequeueResponse
+		(*ResumeDequeueRequest)(nil),          // 57: worker.v1.ResumeDequeueRequest
+		(*ResumeDequeueResponse)(nil),         // 58: worker.v1.ResumeDequeueResponse
+		(*ReplayDLQRequest)(nil),              // 59: worker.v1.ReplayDLQRequest
+		(*ReplayDLQResponse)(nil),             // 60: worker.v1.ReplayDLQResponse
+		(*ReplayDLQByIDRequest)(nil),          // 61: worker.v1.ReplayDLQByIDRequest
+		(*ReplayDLQByIDResponse)(nil),         // 62: worker.v1.ReplayDLQByIDResponse
+		nil,                                   // 63: worker.v1.ScheduleEvent.MetadataEntry
+		nil,                                   // 64: worker.v1.DLQEntryDetail.MetadataEntry
 	}
 )
 
@@ -2992,62 +3663,77 @@ var file_worker_v1_admin_proto_depIdxs = []int32{
 	7,  // 5: worker.v1.UpdateQueueWeightResponse.queue:type_name -> worker.v1.QueueSummary
 	7,  // 6: worker.v1.ResetQueueWeightResponse.queue:type_name -> worker.v1.QueueSummary
 	7,  // 7: worker.v1.PauseQueueResponse.queue:type_name -> worker.v1.QueueSummary
-	51, // 8: worker.v1.ScheduleEvent.metadata:type_name -> worker.v1.ScheduleEvent.MetadataEntry
+	63, // 8: worker.v1.ScheduleEvent.metadata:type_name -> worker.v1.ScheduleEvent.MetadataEntry
 	19, // 9: worker.v1.ListScheduleFactoriesResponse.factories:type_name -> worker.v1.ScheduleFactory
 	20, // 10: worker.v1.ListScheduleEventsResponse.events:type_name -> worker.v1.ScheduleEvent
 	18, // 11: worker.v1.ListSchedulesResponse.schedules:type_name -> worker.v1.ScheduleEntry
 	18, // 12: worker.v1.CreateScheduleResponse.schedule:type_name -> worker.v1.ScheduleEntry
 	18, // 13: worker.v1.PauseScheduleResponse.schedule:type_name -> worker.v1.ScheduleEntry
-	52, // 14: worker.v1.DLQEntryDetail.metadata:type_name -> worker.v1.DLQEntryDetail.MetadataEntry
-	38, // 15: worker.v1.GetDLQEntryResponse.entry:type_name -> worker.v1.DLQEntryDetail
-	37, // 16: worker.v1.ListDLQResponse.entries:type_name -> worker.v1.DLQEntry
-	5,  // 17: worker.v1.AdminService.GetHealth:input_type -> worker.v1.GetHealthRequest
-	0,  // 18: worker.v1.AdminService.GetOverview:input_type -> worker.v1.GetOverviewRequest
-	8,  // 19: worker.v1.AdminService.ListQueues:input_type -> worker.v1.ListQueuesRequest
-	10, // 20: worker.v1.AdminService.GetQueue:input_type -> worker.v1.GetQueueRequest
-	12, // 21: worker.v1.AdminService.UpdateQueueWeight:input_type -> worker.v1.UpdateQueueWeightRequest
-	14, // 22: worker.v1.AdminService.ResetQueueWeight:input_type -> worker.v1.ResetQueueWeightRequest
-	16, // 23: worker.v1.AdminService.PauseQueue:input_type -> worker.v1.PauseQueueRequest
-	21, // 24: worker.v1.AdminService.ListScheduleFactories:input_type -> worker.v1.ListScheduleFactoriesRequest
-	23, // 25: worker.v1.AdminService.ListScheduleEvents:input_type -> worker.v1.ListScheduleEventsRequest
-	25, // 26: worker.v1.AdminService.ListSchedules:input_type -> worker.v1.ListSchedulesRequest
-	27, // 27: worker.v1.AdminService.CreateSchedule:input_type -> worker.v1.CreateScheduleRequest
-	29, // 28: worker.v1.AdminService.DeleteSchedule:input_type -> worker.v1.DeleteScheduleRequest
-	31, // 29: worker.v1.AdminService.PauseSchedule:input_type -> worker.v1.PauseScheduleRequest
-	33, // 30: worker.v1.AdminService.RunSchedule:input_type -> worker.v1.RunScheduleRequest
-	35, // 31: worker.v1.AdminService.PauseSchedules:input_type -> worker.v1.PauseSchedulesRequest
-	41, // 32: worker.v1.AdminService.ListDLQ:input_type -> worker.v1.ListDLQRequest
-	39, // 33: worker.v1.AdminService.GetDLQEntry:input_type -> worker.v1.GetDLQEntryRequest
-	43, // 34: worker.v1.AdminService.PauseDequeue:input_type -> worker.v1.PauseDequeueRequest
-	45, // 35: worker.v1.AdminService.ResumeDequeue:input_type -> worker.v1.ResumeDequeueRequest
-	47, // 36: worker.v1.AdminService.ReplayDLQ:input_type -> worker.v1.ReplayDLQRequest
-	49, // 37: worker.v1.AdminService.ReplayDLQByID:input_type -> worker.v1.ReplayDLQByIDRequest
-	6,  // 38: worker.v1.AdminService.GetHealth:output_type -> worker.v1.GetHealthResponse
-	4,  // 39: worker.v1.AdminService.GetOverview:output_type -> worker.v1.GetOverviewResponse
-	9,  // 40: worker.v1.AdminService.ListQueues:output_type -> worker.v1.ListQueuesResponse
-	11, // 41: worker.v1.AdminService.GetQueue:output_type -> worker.v1.GetQueueResponse
-	13, // 42: worker.v1.AdminService.UpdateQueueWeight:output_type -> worker.v1.UpdateQueueWeightResponse
-	15, // 43: worker.v1.AdminService.ResetQueueWeight:output_type -> worker.v1.ResetQueueWeightResponse
-	17, // 44: worker.v1.AdminService.PauseQueue:output_type -> worker.v1.PauseQueueResponse
-	22, // 45: worker.v1.AdminService.ListScheduleFactories:output_type -> worker.v1.ListScheduleFactoriesResponse
-	24, // 46: worker.v1.AdminService.ListScheduleEvents:output_type -> worker.v1.ListScheduleEventsResponse
-	26, // 47: worker.v1.AdminService.ListSchedules:output_type -> worker.v1.ListSchedulesResponse
-	28, // 48: worker.v1.AdminService.CreateSchedule:output_type -> worker.v1.CreateScheduleResponse
-	30, // 49: worker.v1.AdminService.DeleteSchedule:output_type -> worker.v1.DeleteScheduleResponse
-	32, // 50: worker.v1.AdminService.PauseSchedule:output_type -> worker.v1.PauseScheduleResponse
-	34, // 51: worker.v1.AdminService.RunSchedule:output_type -> worker.v1.RunScheduleResponse
-	36, // 52: worker.v1.AdminService.PauseSchedules:output_type -> worker.v1.PauseSchedulesResponse
-	42, // 53: worker.v1.AdminService.ListDLQ:output_type -> worker.v1.ListDLQResponse
-	40, // 54: worker.v1.AdminService.GetDLQEntry:output_type -> worker.v1.GetDLQEntryResponse
-	44, // 55: worker.v1.AdminService.PauseDequeue:output_type -> worker.v1.PauseDequeueResponse
-	46, // 56: worker.v1.AdminService.ResumeDequeue:output_type -> worker.v1.ResumeDequeueResponse
-	48, // 57: worker.v1.AdminService.ReplayDLQ:output_type -> worker.v1.ReplayDLQResponse
-	50, // 58: worker.v1.AdminService.ReplayDLQByID:output_type -> worker.v1.ReplayDLQByIDResponse
-	38, // [38:59] is the sub-list for method output_type
-	17, // [17:38] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	37, // 14: worker.v1.Job.spec:type_name -> worker.v1.JobSpec
+	38, // 15: worker.v1.ListJobsResponse.jobs:type_name -> worker.v1.Job
+	38, // 16: worker.v1.GetJobResponse.job:type_name -> worker.v1.Job
+	37, // 17: worker.v1.UpsertJobRequest.spec:type_name -> worker.v1.JobSpec
+	38, // 18: worker.v1.UpsertJobResponse.job:type_name -> worker.v1.Job
+	64, // 19: worker.v1.DLQEntryDetail.metadata:type_name -> worker.v1.DLQEntryDetail.MetadataEntry
+	50, // 20: worker.v1.GetDLQEntryResponse.entry:type_name -> worker.v1.DLQEntryDetail
+	49, // 21: worker.v1.ListDLQResponse.entries:type_name -> worker.v1.DLQEntry
+	5,  // 22: worker.v1.AdminService.GetHealth:input_type -> worker.v1.GetHealthRequest
+	0,  // 23: worker.v1.AdminService.GetOverview:input_type -> worker.v1.GetOverviewRequest
+	8,  // 24: worker.v1.AdminService.ListQueues:input_type -> worker.v1.ListQueuesRequest
+	10, // 25: worker.v1.AdminService.GetQueue:input_type -> worker.v1.GetQueueRequest
+	12, // 26: worker.v1.AdminService.UpdateQueueWeight:input_type -> worker.v1.UpdateQueueWeightRequest
+	14, // 27: worker.v1.AdminService.ResetQueueWeight:input_type -> worker.v1.ResetQueueWeightRequest
+	16, // 28: worker.v1.AdminService.PauseQueue:input_type -> worker.v1.PauseQueueRequest
+	39, // 29: worker.v1.AdminService.ListJobs:input_type -> worker.v1.ListJobsRequest
+	41, // 30: worker.v1.AdminService.GetJob:input_type -> worker.v1.GetJobRequest
+	43, // 31: worker.v1.AdminService.UpsertJob:input_type -> worker.v1.UpsertJobRequest
+	45, // 32: worker.v1.AdminService.DeleteJob:input_type -> worker.v1.DeleteJobRequest
+	47, // 33: worker.v1.AdminService.RunJob:input_type -> worker.v1.RunJobRequest
+	21, // 34: worker.v1.AdminService.ListScheduleFactories:input_type -> worker.v1.ListScheduleFactoriesRequest
+	23, // 35: worker.v1.AdminService.ListScheduleEvents:input_type -> worker.v1.ListScheduleEventsRequest
+	25, // 36: worker.v1.AdminService.ListSchedules:input_type -> worker.v1.ListSchedulesRequest
+	27, // 37: worker.v1.AdminService.CreateSchedule:input_type -> worker.v1.CreateScheduleRequest
+	29, // 38: worker.v1.AdminService.DeleteSchedule:input_type -> worker.v1.DeleteScheduleRequest
+	31, // 39: worker.v1.AdminService.PauseSchedule:input_type -> worker.v1.PauseScheduleRequest
+	33, // 40: worker.v1.AdminService.RunSchedule:input_type -> worker.v1.RunScheduleRequest
+	35, // 41: worker.v1.AdminService.PauseSchedules:input_type -> worker.v1.PauseSchedulesRequest
+	53, // 42: worker.v1.AdminService.ListDLQ:input_type -> worker.v1.ListDLQRequest
+	51, // 43: worker.v1.AdminService.GetDLQEntry:input_type -> worker.v1.GetDLQEntryRequest
+	55, // 44: worker.v1.AdminService.PauseDequeue:input_type -> worker.v1.PauseDequeueRequest
+	57, // 45: worker.v1.AdminService.ResumeDequeue:input_type -> worker.v1.ResumeDequeueRequest
+	59, // 46: worker.v1.AdminService.ReplayDLQ:input_type -> worker.v1.ReplayDLQRequest
+	61, // 47: worker.v1.AdminService.ReplayDLQByID:input_type -> worker.v1.ReplayDLQByIDRequest
+	6,  // 48: worker.v1.AdminService.GetHealth:output_type -> worker.v1.GetHealthResponse
+	4,  // 49: worker.v1.AdminService.GetOverview:output_type -> worker.v1.GetOverviewResponse
+	9,  // 50: worker.v1.AdminService.ListQueues:output_type -> worker.v1.ListQueuesResponse
+	11, // 51: worker.v1.AdminService.GetQueue:output_type -> worker.v1.GetQueueResponse
+	13, // 52: worker.v1.AdminService.UpdateQueueWeight:output_type -> worker.v1.UpdateQueueWeightResponse
+	15, // 53: worker.v1.AdminService.ResetQueueWeight:output_type -> worker.v1.ResetQueueWeightResponse
+	17, // 54: worker.v1.AdminService.PauseQueue:output_type -> worker.v1.PauseQueueResponse
+	40, // 55: worker.v1.AdminService.ListJobs:output_type -> worker.v1.ListJobsResponse
+	42, // 56: worker.v1.AdminService.GetJob:output_type -> worker.v1.GetJobResponse
+	44, // 57: worker.v1.AdminService.UpsertJob:output_type -> worker.v1.UpsertJobResponse
+	46, // 58: worker.v1.AdminService.DeleteJob:output_type -> worker.v1.DeleteJobResponse
+	48, // 59: worker.v1.AdminService.RunJob:output_type -> worker.v1.RunJobResponse
+	22, // 60: worker.v1.AdminService.ListScheduleFactories:output_type -> worker.v1.ListScheduleFactoriesResponse
+	24, // 61: worker.v1.AdminService.ListScheduleEvents:output_type -> worker.v1.ListScheduleEventsResponse
+	26, // 62: worker.v1.AdminService.ListSchedules:output_type -> worker.v1.ListSchedulesResponse
+	28, // 63: worker.v1.AdminService.CreateSchedule:output_type -> worker.v1.CreateScheduleResponse
+	30, // 64: worker.v1.AdminService.DeleteSchedule:output_type -> worker.v1.DeleteScheduleResponse
+	32, // 65: worker.v1.AdminService.PauseSchedule:output_type -> worker.v1.PauseScheduleResponse
+	34, // 66: worker.v1.AdminService.RunSchedule:output_type -> worker.v1.RunScheduleResponse
+	36, // 67: worker.v1.AdminService.PauseSchedules:output_type -> worker.v1.PauseSchedulesResponse
+	54, // 68: worker.v1.AdminService.ListDLQ:output_type -> worker.v1.ListDLQResponse
+	52, // 69: worker.v1.AdminService.GetDLQEntry:output_type -> worker.v1.GetDLQEntryResponse
+	56, // 70: worker.v1.AdminService.PauseDequeue:output_type -> worker.v1.PauseDequeueResponse
+	58, // 71: worker.v1.AdminService.ResumeDequeue:output_type -> worker.v1.ResumeDequeueResponse
+	60, // 72: worker.v1.AdminService.ReplayDLQ:output_type -> worker.v1.ReplayDLQResponse
+	62, // 73: worker.v1.AdminService.ReplayDLQByID:output_type -> worker.v1.ReplayDLQByIDResponse
+	48, // [48:74] is the sub-list for method output_type
+	22, // [22:48] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_worker_v1_admin_proto_init() }
@@ -3061,7 +3747,7 @@ func file_worker_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_worker_v1_admin_proto_rawDesc), len(file_worker_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   53,
+			NumMessages:   65,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

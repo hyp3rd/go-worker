@@ -29,7 +29,13 @@ type cronFactory struct {
 	Durable        bool
 	TaskFactory    CronTaskFactory
 	DurableFactory CronDurableFactory
+	Origin         string
 }
+
+const (
+	cronFactoryOriginUser = "user"
+	cronFactoryOriginJob  = "job"
+)
 
 // RegisterCronTask registers a cron job that enqueues a task on each tick.
 func (tm *TaskManager) RegisterCronTask(
@@ -57,6 +63,7 @@ func (tm *TaskManager) RegisterCronTask(
 	tm.cronFactories[normalized] = cronFactory{
 		Durable:     false,
 		TaskFactory: factory,
+		Origin:      cronFactoryOriginUser,
 	}
 
 	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
@@ -93,6 +100,7 @@ func (tm *TaskManager) RegisterDurableCronTask(
 	tm.cronFactories[normalized] = cronFactory{
 		Durable:        true,
 		DurableFactory: factory,
+		Origin:         cronFactoryOriginUser,
 	}
 
 	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
