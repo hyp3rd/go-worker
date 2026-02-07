@@ -169,6 +169,9 @@ linters:
         - name: line-length-limit
           arguments: [140]
 
+        - name: max-public-structs
+          arguments: [20]
+
         - name: var-naming
           disabled: true
         # https://github.com/mgechev/revive/blob/HEAD/RULES_DESCRIPTIONS.md#package-comments

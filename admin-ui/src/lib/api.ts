@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
 import type {
+  AdminActionCounters,
+  AdminJob,
   CoordinationStatus,
   DlqEntry,
   HealthInfo,
@@ -7,6 +9,8 @@ import type {
   OverviewStats,
   QueueDetail,
   QueueSummary,
+  ScheduleFactory,
+  ScheduleEvent,
 } from "@/lib/types";
 
 const getOrigin = async () => {
@@ -57,6 +61,7 @@ async function fetchJson<T>(path: string): Promise<T> {
 export async function fetchOverview(): Promise<{
   stats: OverviewStats;
   coordination: CoordinationStatus;
+  actions: AdminActionCounters;
 }> {
   return fetchJson("/api/overview");
 }
@@ -78,6 +83,32 @@ export async function fetchQueueDetail(
 
 export async function fetchSchedules(): Promise<{ schedules: JobSchedule[] }> {
   return fetchJson("/api/schedules");
+}
+
+export async function fetchJobs(): Promise<{ jobs: AdminJob[] }> {
+  return fetchJson("/api/jobs");
+}
+
+export async function fetchScheduleFactories(): Promise<{
+  factories: ScheduleFactory[];
+}> {
+  return fetchJson("/api/schedules/factories");
+}
+
+export async function fetchScheduleEvents(params?: {
+  name?: string;
+  limit?: number;
+}): Promise<{ events: ScheduleEvent[] }> {
+  const search = new URLSearchParams();
+  if (params?.name) {
+    search.set("name", params.name);
+  }
+  if (params?.limit) {
+    search.set("limit", String(params.limit));
+  }
+  const suffix = search.toString();
+  const path = suffix ? `/api/schedules/events?${suffix}` : "/api/schedules/events";
+  return fetchJson(path);
 }
 
 export async function fetchDlq(params?: {

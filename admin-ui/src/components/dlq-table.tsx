@@ -2,10 +2,12 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import type { DlqEntry } from "@/lib/types";
+import type { DlqEntry, DlqEntryDetail } from "@/lib/types";
+import { formatDuration, formatNumber } from "@/lib/format";
 import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
 import { Table, TableCell, TableRow } from "@/components/table";
+import { RelativeTime } from "@/components/relative-time";
 
 export function DlqTable({
   entries,
@@ -29,8 +31,14 @@ export function DlqTable({
   const [queueValue, setQueueValue] = useState(queueFilter);
   const [handlerValue, setHandlerValue] = useState(handlerFilter);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{
+    tone: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [detail, setDetail] = useState<DlqEntryDetail | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     setQueueValue(queueFilter);
@@ -150,30 +158,160 @@ export function DlqTable({
       }
 
       const payload = (await res.json()) as { message?: string };
-      setMessage(payload.message ?? "Replay complete");
+      setMessage({
+        tone: "success",
+        text: payload.message ?? "Replay complete",
+      });
       setSelected(new Set());
       startTransition(() => {
         router.refresh();
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Replay failed");
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Replay failed",
+      });
     }
+  };
+
+  const copySelected = async () => {
+    if (selected.size === 0) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(Array.from(selected).join("\n"));
+      setMessage({
+        tone: "info",
+        text: `Copied ${selected.size} ID(s) to clipboard.`,
+      });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Copy failed",
+      });
+    }
+  };
+
+  const replayOne = async (id: string) => {
+    const ok = window.confirm(
+      "Replay this DLQ item? Replays are at-least-once."
+    );
+    if (!ok) {
+      return;
+    }
+
+    setMessage(null);
+    try {
+      const res = await fetch("/api/actions/dlq/replay-ids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [id] }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json()) as { error?: string };
+        throw new Error(payload?.error ?? "Replay failed");
+      }
+
+      const payload = (await res.json()) as { message?: string };
+      setMessage({
+        tone: "success",
+        text: payload.message ?? "Replay complete",
+      });
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Replay failed",
+      });
+    }
+  };
+
+  const copyOne = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setMessage({ tone: "info", text: "Copied ID to clipboard." });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Copy failed",
+      });
+    }
+  };
+
+  const openDetail = async (id: string) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetail(null);
+
+    try {
+      const res = await fetch(`/api/dlq/${encodeURIComponent(id)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const payload = (await res.json()) as { error?: string };
+        throw new Error(payload?.error ?? "Failed to load DLQ entry");
+      }
+      const payload = (await res.json()) as { entry?: DlqEntryDetail };
+      if (payload?.entry) {
+        setDetail(payload.entry);
+      } else {
+        throw new Error("DLQ entry unavailable");
+      }
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Failed to load DLQ entry",
+      });
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setDetail(null);
   };
 
   return (
     <div className="mt-6 space-y-4">
+      {message ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm ${
+            message.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : message.tone === "info"
+                ? "border-sky-200 bg-sky-50 text-sky-800"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+          }`}
+        >
+          {message.text}
+        </div>
+      ) : null}
       <FilterBar
         placeholder="Search by id, queue, handler"
         initialQuery={query}
         onQuery={handleQuery}
         rightSlot={
-          <button
-            onClick={replaySelected}
-            disabled={selected.size === 0 || pending}
-            className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Replay selected {selected.size > 0 ? `(${selected.size})` : ""}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={copySelected}
+              disabled={selected.size === 0}
+              className="rounded-full border border-soft px-4 py-2 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Copy IDs
+            </button>
+            <button
+              onClick={replaySelected}
+              disabled={selected.size === 0 || pending}
+              className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Replay selected {selected.size > 0 ? `(${selected.size})` : ""}
+            </button>
+          </div>
         }
       />
       <div className="rounded-2xl border border-soft bg-[var(--card)] p-4">
@@ -234,6 +372,7 @@ export function DlqTable({
           { key: "handler", label: "Handler" },
           { key: "age", label: "Age" },
           { key: "attempts", label: "Attempts" },
+          { key: "actions", label: "Actions" },
         ]}
       >
         {entries.map((entry) => (
@@ -253,10 +392,142 @@ export function DlqTable({
             <TableCell>{entry.handler}</TableCell>
             <TableCell>{entry.age}</TableCell>
             <TableCell>{entry.attempts}</TableCell>
+            <TableCell>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => openDetail(entry.id)}
+                  className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-slate-700"
+                >
+                  Inspect
+                </button>
+                <button
+                  onClick={() => replayOne(entry.id)}
+                  className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-slate-700"
+                >
+                  Replay
+                </button>
+                <button
+                  onClick={() => copyOne(entry.id)}
+                  className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-muted"
+                >
+                  Copy
+                </button>
+              </div>
+            </TableCell>
           </TableRow>
         ))}
       </Table>
-      {message ? <p className="text-xs text-muted">{message}</p> : null}
+      {detailOpen ? (
+        <div className="rounded-2xl border border-soft bg-[var(--card)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">
+                DLQ entry detail
+              </p>
+              <p className="mt-1 font-mono text-xs text-slate-700">
+                {detail?.id ?? "loading..."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => detail?.id && copyOne(detail.id)}
+                className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-muted"
+              >
+                Copy ID
+              </button>
+              <button
+                onClick={() => detail?.id && replayOne(detail.id)}
+                className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-slate-700"
+              >
+                Replay
+              </button>
+              <button
+                onClick={closeDetail}
+                className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-muted"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          {detailLoading ? (
+            <p className="mt-4 text-sm text-muted">Loading detail...</p>
+          ) : detail ? (
+            <>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted">
+                  <p className="uppercase tracking-[0.16em]">Queue</p>
+                  <p className="mt-1 text-sm text-slate-900">
+                    {detail.queue || "default"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted">
+                  <p className="uppercase tracking-[0.16em]">Handler</p>
+                  <p className="mt-1 text-sm text-slate-900">
+                    {detail.handler || "n/a"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted">
+                  <p className="uppercase tracking-[0.16em]">Attempts</p>
+                  <p className="mt-1 text-sm text-slate-900">
+                    {detail.attempts}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted">
+                  <p className="uppercase tracking-[0.16em]">Age</p>
+                  <p className="mt-1 text-sm text-slate-900">
+                    {formatDuration(detail.ageMs)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted">
+                  <p className="uppercase tracking-[0.16em]">Failed</p>
+                  <p className="mt-1 text-sm text-slate-900">
+                    <RelativeTime valueMs={detail.failedAtMs} mode="past" />
+                  </p>
+                </div>
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted">
+                  <p className="uppercase tracking-[0.16em]">Updated</p>
+                  <p className="mt-1 text-sm text-slate-900">
+                    <RelativeTime valueMs={detail.updatedAtMs} mode="past" />
+                  </p>
+                </div>
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted md:col-span-2">
+                  <p className="uppercase tracking-[0.16em]">Last error</p>
+                  <p className="mt-1 break-words text-sm text-slate-900">
+                    {detail.lastError || "n/a"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-muted">
+                  <p className="uppercase tracking-[0.16em]">Payload size</p>
+                  <p className="mt-1 text-sm text-slate-900">
+                    {formatNumber(detail.payloadSize)} bytes
+                  </p>
+                </div>
+              </div>
+
+              {detail.metadata && Object.keys(detail.metadata).length > 0 ? (
+                <div className="mt-4 grid gap-2 md:grid-cols-2">
+                  {Object.entries(detail.metadata).map(([key, value]) => (
+                    <div
+                      key={`${detail.id}-${key}`}
+                      className="rounded-lg border border-soft bg-white/80 px-3 py-2 text-[11px] text-slate-600"
+                    >
+                      <span className="uppercase tracking-[0.16em] text-muted">
+                        {key}
+                      </span>
+                      <p className="mt-1 break-words text-sm text-slate-800">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="mt-4 text-sm text-muted">No detail available.</p>
+          )}
+        </div>
+      ) : null}
       {total === 0 ? (
         <div className="rounded-2xl border border-soft bg-[var(--card)] p-6 text-sm text-muted">
           No DLQ entries found for the current filters.

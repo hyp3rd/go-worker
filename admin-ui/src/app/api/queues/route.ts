@@ -13,6 +13,7 @@ export async function GET() {
         processing: number;
         dead: number;
         weight: number;
+        paused: boolean;
       }>;
     }>({ method: "GET", path: "/admin/v1/queues" });
 

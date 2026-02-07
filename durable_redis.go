@@ -25,6 +25,7 @@ const (
 	redisDeadKey           = "dead"
 	redisQueuesKey         = "queues"
 	redisPausedKey         = "paused"
+	redisPausedQueuesKey   = "paused_queues"
 	redisGlobalRateKey     = "global_rate"
 	redisLeaderKey         = "leader"
 	redisFieldHandler      = "handler"
@@ -450,7 +451,25 @@ func (b *RedisDurableBackend) dequeueQueues(ctx context.Context) ([]string, map[
 	queues = ensureQueueList(queues, defaultQueue)
 	sort.Strings(queues)
 
-	return queues, weights, nil
+	paused, err := b.pausedQueues(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(paused) == 0 {
+		return queues, weights, nil
+	}
+
+	filtered := make([]string, 0, len(queues))
+	for _, queue := range queues {
+		if paused[queue] {
+			continue
+		}
+
+		filtered = append(filtered, queue)
+	}
+
+	return filtered, weights, nil
 }
 
 func (b *RedisDurableBackend) dequeueFromQueues(
@@ -599,6 +618,11 @@ func (b *RedisDurableBackend) pausedKey() string {
 	return b.keyPrefix() + redisKVSeparator + redisPausedKey
 }
 
+// pausedQueuesKey returns the Redis key for paused queues.
+func (b *RedisDurableBackend) pausedQueuesKey() string {
+	return b.keyPrefix() + redisKVSeparator + redisPausedQueuesKey
+}
+
 // taskPrefixKey returns the prefix for durable task keys.
 func (b *RedisDurableBackend) taskPrefixKey() string {
 	return b.keyPrefix() + redisKVSeparator + redisTaskKeyPrefix
@@ -658,6 +682,31 @@ func (b *RedisDurableBackend) queueList(ctx context.Context) ([]string, error) {
 	}
 
 	return values, nil
+}
+
+func (b *RedisDurableBackend) pausedQueues(ctx context.Context) (map[string]bool, error) {
+	resp := b.client.Do(ctx, b.client.B().Smembers().Key(b.pausedQueuesKey()).Build())
+
+	values, err := resp.AsStrSlice()
+	if err != nil {
+		if rueidis.IsRedisNil(err) {
+			return map[string]bool{}, nil
+		}
+
+		return nil, ewrap.Wrap(err, "read paused queues")
+	}
+
+	out := make(map[string]bool, len(values))
+	for _, value := range values {
+		name := normalizeQueueName(strings.TrimSpace(value))
+		if name == "" {
+			continue
+		}
+
+		out[name] = true
+	}
+
+	return out, nil
 }
 
 func (b *RedisDurableBackend) isPaused(ctx context.Context) (bool, error) {

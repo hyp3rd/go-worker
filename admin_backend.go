@@ -16,12 +16,40 @@ var (
 	ErrAdminQueueNotFound = ewrap.New("admin queue not found")
 	// ErrAdminQueueNameRequired indicates a queue name is required.
 	ErrAdminQueueNameRequired = ewrap.New("admin queue name is required")
+	// ErrAdminQueueWeightInvalid indicates a queue weight is invalid.
+	ErrAdminQueueWeightInvalid = ewrap.New("admin queue weight is invalid")
+	// ErrAdminQueuePauseUnsupported indicates pausing queues is not supported.
+	ErrAdminQueuePauseUnsupported = ewrap.New("admin queue pause unsupported")
 	// ErrAdminDLQFilterTooLarge indicates the DLQ is too large for filtered queries.
 	ErrAdminDLQFilterTooLarge = ewrap.New("DLQ too large for filtered query")
+	// ErrAdminDLQEntryIDRequired indicates a DLQ id is required.
+	ErrAdminDLQEntryIDRequired = ewrap.New("admin DLQ id is required")
+	// ErrAdminDLQEntryNotFound indicates the DLQ entry was not found.
+	ErrAdminDLQEntryNotFound = ewrap.New("admin DLQ entry not found")
 	// ErrAdminReplayIDsRequired indicates replay-by-id requires at least one id.
 	ErrAdminReplayIDsRequired = ewrap.New("admin replay ids are required")
 	// ErrAdminReplayIDsTooLarge indicates too many ids were provided.
 	ErrAdminReplayIDsTooLarge = ewrap.New("admin replay ids limit exceeded")
+	// ErrAdminScheduleNameRequired indicates a schedule name is required.
+	ErrAdminScheduleNameRequired = ewrap.New("admin schedule name is required")
+	// ErrAdminScheduleSpecRequired indicates a schedule spec is required.
+	ErrAdminScheduleSpecRequired = ewrap.New("admin schedule spec is required")
+	// ErrAdminScheduleNotFound indicates the schedule was not found.
+	ErrAdminScheduleNotFound = ewrap.New("admin schedule not found")
+	// ErrAdminScheduleFactoryMissing indicates a factory was not registered.
+	ErrAdminScheduleFactoryMissing = ewrap.New("admin schedule factory missing")
+	// ErrAdminScheduleDurableMismatch indicates durable flag mismatched.
+	ErrAdminScheduleDurableMismatch = ewrap.New("admin schedule durable mismatch")
+	// ErrAdminJobNameRequired indicates a job name is required.
+	ErrAdminJobNameRequired = ewrap.New("admin job name is required")
+	// ErrAdminJobRepoRequired indicates a job repo is required.
+	ErrAdminJobRepoRequired = ewrap.New("admin job repo is required")
+	// ErrAdminJobTagRequired indicates a job tag is required.
+	ErrAdminJobTagRequired = ewrap.New("admin job tag is required")
+	// ErrAdminJobCommandRequired indicates a job command is required.
+	ErrAdminJobCommandRequired = ewrap.New("admin job command is required")
+	// ErrAdminJobNotFound indicates the job was not found.
+	ErrAdminJobNotFound = ewrap.New("admin job not found")
 )
 
 // AdminOverview describes the admin overview snapshot.
@@ -32,6 +60,7 @@ type AdminOverview struct {
 	AvgLatencyMs  int64
 	P95LatencyMs  int64
 	Coordination  AdminCoordination
+	Actions       AdminActionCounters
 }
 
 // AdminCoordination describes coordination state for durable dequeue.
@@ -49,6 +78,7 @@ type AdminQueueSummary struct {
 	Processing int64
 	Dead       int64
 	Weight     int
+	Paused     bool
 }
 
 // AdminDLQEntry represents a DLQ entry.
@@ -60,6 +90,20 @@ type AdminDLQEntry struct {
 	AgeMs    int64
 }
 
+// AdminDLQEntryDetail represents a detailed DLQ entry.
+type AdminDLQEntryDetail struct {
+	ID          string
+	Queue       string
+	Handler     string
+	Attempts    int
+	AgeMs       int64
+	FailedAtMs  int64
+	UpdatedAtMs int64
+	LastError   string
+	PayloadSize int64
+	Metadata    map[string]string
+}
+
 // AdminSchedule represents a cron schedule entry.
 type AdminSchedule struct {
 	Name    string
@@ -67,6 +111,76 @@ type AdminSchedule struct {
 	NextRun time.Time
 	LastRun time.Time
 	Durable bool
+	Paused  bool
+}
+
+// AdminScheduleEvent describes a cron schedule execution event.
+type AdminScheduleEvent struct {
+	TaskID     string
+	Name       string
+	Spec       string
+	Durable    bool
+	Status     string
+	Queue      string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMs int64
+	Result     string
+	Error      string
+	Metadata   map[string]string
+}
+
+// AdminScheduleEventFilter filters schedule events.
+type AdminScheduleEventFilter struct {
+	Name  string
+	Limit int
+}
+
+// AdminScheduleEventPage represents schedule events.
+type AdminScheduleEventPage struct {
+	Events []AdminScheduleEvent
+}
+
+// AdminScheduleFactory describes a registered schedule factory.
+type AdminScheduleFactory struct {
+	Name    string
+	Durable bool
+}
+
+// AdminScheduleSpec defines a schedule request.
+type AdminScheduleSpec struct {
+	Name    string
+	Spec    string
+	Durable bool
+}
+
+// AdminJobSpec defines a job configuration for containerized execution.
+type AdminJobSpec struct {
+	Name        string
+	Description string
+	Repo        string
+	Tag         string
+	Path        string
+	Dockerfile  string
+	Command     []string
+	Env         []string
+	Queue       string
+	Retries     int
+	Timeout     time.Duration
+}
+
+// AdminJob represents a persisted job definition.
+type AdminJob struct {
+	AdminJobSpec
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// AdminActionCounters tracks admin action counts.
+type AdminActionCounters struct {
+	Pause  int64
+	Resume int64
+	Replay int64
 }
 
 // AdminDLQFilter controls DLQ listing.
@@ -87,12 +201,43 @@ type AdminDLQPage struct {
 // AdminBackend provides admin data and actions for a backend.
 type AdminBackend interface {
 	AdminOverview(ctx context.Context) (AdminOverview, error)
+	adminQueues
+	adminSchedules
+	adminDLQ
+	adminJobs
+}
+
+type adminQueues interface {
 	AdminQueues(ctx context.Context) ([]AdminQueueSummary, error)
 	AdminQueue(ctx context.Context, name string) (AdminQueueSummary, error)
+	AdminPauseQueue(ctx context.Context, name string, paused bool) (AdminQueueSummary, error)
+	AdminSetQueueWeight(ctx context.Context, name string, weight int) (AdminQueueSummary, error)
+	AdminResetQueueWeight(ctx context.Context, name string) (AdminQueueSummary, error)
+}
+
+type adminSchedules interface {
 	AdminSchedules(ctx context.Context) ([]AdminSchedule, error)
+	AdminScheduleFactories(ctx context.Context) ([]AdminScheduleFactory, error)
+	AdminScheduleEvents(ctx context.Context, filter AdminScheduleEventFilter) (AdminScheduleEventPage, error)
+	AdminPauseSchedules(ctx context.Context, paused bool) (int, error)
+	AdminRunSchedule(ctx context.Context, name string) (string, error)
+	AdminCreateSchedule(ctx context.Context, spec AdminScheduleSpec) (AdminSchedule, error)
+	AdminDeleteSchedule(ctx context.Context, name string) (bool, error)
+	AdminPauseSchedule(ctx context.Context, name string, paused bool) (AdminSchedule, error)
+}
+
+type adminDLQ interface {
 	AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error)
+	AdminDLQEntry(ctx context.Context, id string) (AdminDLQEntryDetail, error)
 	AdminPause(ctx context.Context) error
 	AdminResume(ctx context.Context) error
 	AdminReplayDLQ(ctx context.Context, limit int) (int, error)
 	AdminReplayDLQByID(ctx context.Context, ids []string) (int, error)
+}
+
+type adminJobs interface {
+	AdminJobs(ctx context.Context) ([]AdminJob, error)
+	AdminJob(ctx context.Context, name string) (AdminJob, error)
+	AdminUpsertJob(ctx context.Context, spec AdminJobSpec) (AdminJob, error)
+	AdminDeleteJob(ctx context.Context, name string) (bool, error)
 }

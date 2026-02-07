@@ -2,6 +2,10 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,12 +23,16 @@ const (
 	adminDLQAttemptsIndex        = 2
 	adminDLQFailedAtIndex        = 3
 	adminDLQUpdatedAtIndex       = 4
+	adminDLQLastErrorIndex       = 5
+	adminDLQMetadataIndex        = 6
 	adminDLQReplayMaxIDs         = 1000
 	adminSecondsPerMinute        = 60
 	adminMinutesPerHour          = 60
 	adminHoursPerDay             = 24
 	adminDLQReplayByIDArgsPrefix = 3
 	parseIntBitSize              = 64
+	adminJobsKeyName             = "admin:jobs"
+	adminJobDefaultDockerfile    = "Dockerfile"
 )
 
 //nolint:revive,dupword
@@ -121,6 +129,13 @@ func (b *RedisDurableBackend) AdminQueues(ctx context.Context) ([]AdminQueueSumm
 		return nil, err
 	}
 
+	queues = mergeQueueNames(queues, weights)
+
+	pausedQueues, err := b.pausedQueues(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	deadCounts, err := b.deadCountsByQueue(ctx, queues, adminDLQScanLimit)
 	if err != nil {
 		return nil, err
@@ -143,7 +158,8 @@ func (b *RedisDurableBackend) AdminQueues(ctx context.Context) ([]AdminQueueSumm
 			Ready:      readyCount,
 			Processing: processingCount,
 			Dead:       deadCount,
-			Weight:     weights[queue],
+			Weight:     b.queueWeight(weights, queue),
+			Paused:     pausedQueues[queue],
 		})
 	}
 
@@ -174,6 +190,11 @@ func (b *RedisDurableBackend) AdminQueue(ctx context.Context, name string) (Admi
 		}
 	}
 
+	pausedQueues, err := b.pausedQueues(ctx)
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
 	readyCount, processingCount, err := b.queueCounts(ctx, name)
 	if err != nil {
 		return AdminQueueSummary{}, err
@@ -195,7 +216,108 @@ func (b *RedisDurableBackend) AdminQueue(ctx context.Context, name string) (Admi
 		Processing: processingCount,
 		Dead:       deadCount,
 		Weight:     b.queueWeight(weights, name),
+		Paused:     pausedQueues[name],
 	}, nil
+}
+
+// AdminPauseQueue pauses or resumes a specific queue.
+func (b *RedisDurableBackend) AdminPauseQueue(ctx context.Context, name string, paused bool) (AdminQueueSummary, error) {
+	if ctx == nil {
+		return AdminQueueSummary{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminQueueSummary{}, ErrAdminQueueNameRequired
+	}
+
+	name = normalizeQueueName(name)
+
+	queues, err := b.queueList(ctx)
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	queues = ensureQueueList(queues, b.defaultQueueName())
+	if !containsQueue(queues, name) {
+		return AdminQueueSummary{}, ErrAdminQueueNotFound
+	}
+
+	if paused {
+		resp := b.client.Do(ctx, b.client.B().Sadd().Key(b.pausedQueuesKey()).Member(name).Build())
+
+		err := resp.Error()
+		if err != nil {
+			return AdminQueueSummary{}, ewrap.Wrap(err, "pause queue")
+		}
+	} else {
+		resp := b.client.Do(ctx, b.client.B().Srem().Key(b.pausedQueuesKey()).Member(name).Build())
+
+		err := resp.Error()
+		if err != nil {
+			return AdminQueueSummary{}, ewrap.Wrap(err, "resume queue")
+		}
+	}
+
+	return b.AdminQueue(ctx, name)
+}
+
+// AdminSetQueueWeight updates the scheduler weight for a queue.
+func (b *RedisDurableBackend) AdminSetQueueWeight(ctx context.Context, name string, weight int) (AdminQueueSummary, error) {
+	if ctx == nil {
+		return AdminQueueSummary{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminQueueSummary{}, ErrAdminQueueNameRequired
+	}
+
+	if weight <= 0 {
+		return AdminQueueSummary{}, ErrAdminQueueWeightInvalid
+	}
+
+	weight = normalizeQueueWeight(weight)
+
+	name = normalizeQueueName(name)
+
+	b.queueMu.Lock()
+
+	if b.queueWeights == nil {
+		b.queueWeights = map[string]int{}
+	}
+
+	b.queueWeights[name] = weight
+	b.queueMu.Unlock()
+
+	resp := b.client.Do(ctx, b.client.B().Sadd().Key(b.queuesKey()).Member(name).Build())
+
+	err := resp.Error()
+	if err != nil {
+		return AdminQueueSummary{}, ewrap.Wrap(err, "register queue")
+	}
+
+	return b.AdminQueue(ctx, name)
+}
+
+// AdminResetQueueWeight resets a queue weight to the default.
+func (b *RedisDurableBackend) AdminResetQueueWeight(ctx context.Context, name string) (AdminQueueSummary, error) {
+	if ctx == nil {
+		return AdminQueueSummary{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminQueueSummary{}, ErrAdminQueueNameRequired
+	}
+
+	name = normalizeQueueName(name)
+
+	b.queueMu.Lock()
+	delete(b.queueWeights, name)
+	b.queueMu.Unlock()
+
+	return b.AdminQueue(ctx, name)
 }
 
 // AdminSchedules returns cron schedule data if supported.
@@ -205,6 +327,69 @@ func (*RedisDurableBackend) AdminSchedules(ctx context.Context) ([]AdminSchedule
 	}
 
 	return nil, ErrAdminUnsupported
+}
+
+// AdminScheduleFactories is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminScheduleFactories(ctx context.Context) ([]AdminScheduleFactory, error) {
+	if ctx == nil {
+		return nil, ErrInvalidTaskContext
+	}
+
+	return nil, ErrAdminUnsupported
+}
+
+// AdminScheduleEvents is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminScheduleEvents(ctx context.Context, _ AdminScheduleEventFilter) (AdminScheduleEventPage, error) {
+	if ctx == nil {
+		return AdminScheduleEventPage{}, ErrInvalidTaskContext
+	}
+
+	return AdminScheduleEventPage{}, ErrAdminUnsupported
+}
+
+// AdminCreateSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminCreateSchedule(ctx context.Context, _ AdminScheduleSpec) (AdminSchedule, error) {
+	if ctx == nil {
+		return AdminSchedule{}, ErrInvalidTaskContext
+	}
+
+	return AdminSchedule{}, ErrAdminUnsupported
+}
+
+// AdminDeleteSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminDeleteSchedule(ctx context.Context, _ string) (bool, error) {
+	if ctx == nil {
+		return false, ErrInvalidTaskContext
+	}
+
+	return false, ErrAdminUnsupported
+}
+
+// AdminPauseSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminPauseSchedule(ctx context.Context, _ string, _ bool) (AdminSchedule, error) {
+	if ctx == nil {
+		return AdminSchedule{}, ErrInvalidTaskContext
+	}
+
+	return AdminSchedule{}, ErrAdminUnsupported
+}
+
+// AdminPauseSchedules is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminPauseSchedules(ctx context.Context, _ bool) (int, error) {
+	if ctx == nil {
+		return 0, ErrInvalidTaskContext
+	}
+
+	return 0, ErrAdminUnsupported
+}
+
+// AdminRunSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminRunSchedule(ctx context.Context, _ string) (string, error) {
+	if ctx == nil {
+		return "", ErrInvalidTaskContext
+	}
+
+	return "", ErrAdminUnsupported
 }
 
 // AdminDLQ returns entries from the dead letter queue.
@@ -229,6 +414,192 @@ func (b *RedisDurableBackend) AdminDLQ(ctx context.Context, filter AdminDLQFilte
 	}
 
 	return b.dlqPageWithFilters(ctx, filters, total)
+}
+
+// AdminDLQEntry returns detailed DLQ entry information.
+func (b *RedisDurableBackend) AdminDLQEntry(ctx context.Context, id string) (AdminDLQEntryDetail, error) {
+	if ctx == nil {
+		return AdminDLQEntryDetail{}, ErrInvalidTaskContext
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return AdminDLQEntryDetail{}, ErrAdminDLQEntryIDRequired
+	}
+
+	taskKey := b.taskPrefixKey() + id
+
+	fields, err := b.dlqEntryFields(ctx, taskKey, id)
+	if err != nil {
+		return AdminDLQEntryDetail{}, err
+	}
+
+	payloadSize, err := b.dlqEntryPayloadSize(ctx, taskKey)
+	if err != nil {
+		return AdminDLQEntryDetail{}, err
+	}
+
+	age := dlqEntryAge(fields.failedAt, fields.updatedAt)
+
+	return AdminDLQEntryDetail{
+		ID:          id,
+		Queue:       fields.queue,
+		Handler:     fields.handler,
+		Attempts:    fields.attempts,
+		AgeMs:       age.Milliseconds(),
+		FailedAtMs:  fields.failedAt,
+		UpdatedAtMs: fields.updatedAt,
+		LastError:   fields.lastError,
+		PayloadSize: payloadSize,
+		Metadata:    fields.metadata,
+	}, nil
+}
+
+type dlqEntryFields struct {
+	queue     string
+	handler   string
+	attempts  int
+	failedAt  int64
+	updatedAt int64
+	lastError string
+	metadata  map[string]string
+}
+
+func (b *RedisDurableBackend) dlqEntryFields(ctx context.Context, taskKey, id string) (dlqEntryFields, error) {
+	err := b.ensureDLQEntryExists(ctx, taskKey, id)
+	if err != nil {
+		return dlqEntryFields{}, err
+	}
+
+	values, err := b.fetchDLQEntryValues(ctx, taskKey, id)
+	if err != nil {
+		return dlqEntryFields{}, err
+	}
+
+	queue := valueAt(values, adminDLQQueueIndex)
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
+	handler := valueAt(values, adminDLQHandlerIndex)
+	attempts := parseInt(valueAt(values, adminDLQAttemptsIndex))
+	failedAt := parseInt64(valueAt(values, adminDLQFailedAtIndex))
+	updatedAt := parseInt64(valueAt(values, adminDLQUpdatedAtIndex))
+	lastError := valueAt(values, adminDLQLastErrorIndex)
+	metadataRaw := valueAt(values, adminDLQMetadataIndex)
+
+	metadata, err := decodeMetadata(metadataRaw)
+	if err != nil {
+		return dlqEntryFields{}, err
+	}
+
+	return dlqEntryFields{
+		queue:     queue,
+		handler:   handler,
+		attempts:  attempts,
+		failedAt:  failedAt,
+		updatedAt: updatedAt,
+		lastError: lastError,
+		metadata:  metadata,
+	}, nil
+}
+
+func (b *RedisDurableBackend) ensureDLQEntryExists(ctx context.Context, taskKey, id string) error {
+	existsResp := b.client.Do(ctx, b.client.B().Exists().Key(taskKey).Build())
+
+	exists, err := existsResp.AsInt64()
+	if err != nil {
+		return ewrap.Wrapf(err, "read DLQ task %s", id)
+	}
+
+	if exists == 0 {
+		return ErrAdminDLQEntryNotFound
+	}
+
+	return nil
+}
+
+func (b *RedisDurableBackend) fetchDLQEntryValues(ctx context.Context, taskKey, id string) ([]string, error) {
+	fields := []string{
+		redisFieldQueue,
+		redisFieldHandler,
+		redisFieldAttempts,
+		redisFieldFailedAtMs,
+		redisFieldUpdatedAtMs,
+		redisFieldLastError,
+		redisFieldMetadata,
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hmget().Key(taskKey).Field(fields...).Build())
+
+	values, err := resp.AsStrSlice()
+	if err != nil {
+		return nil, ewrap.Wrapf(err, "read DLQ task %s", id)
+	}
+
+	return values, nil
+}
+
+func (b *RedisDurableBackend) dlqEntryPayloadSize(ctx context.Context, taskKey string) (int64, error) {
+	sizeResp := b.client.Do(ctx, b.client.B().Hstrlen().Key(taskKey).Field(redisFieldPayload).Build())
+
+	payloadSize, err := sizeResp.AsInt64()
+	if err != nil {
+		return 0, ewrap.Wrapf(err, "read DLQ task payload size %s", taskKey)
+	}
+
+	return payloadSize, nil
+}
+
+func dlqEntryAge(failedAt, updatedAt int64) time.Duration {
+	if failedAt > 0 {
+		return time.Since(time.UnixMilli(failedAt))
+	}
+
+	if updatedAt > 0 {
+		return time.Since(time.UnixMilli(updatedAt))
+	}
+
+	return 0
+}
+
+func mergeQueueNames(queues []string, weights map[string]int) []string {
+	if len(weights) == 0 {
+		return queues
+	}
+
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(queues)+len(weights))
+
+	for _, queue := range queues {
+		if queue == "" {
+			continue
+		}
+
+		if _, ok := seen[queue]; ok {
+			continue
+		}
+
+		seen[queue] = struct{}{}
+		out = append(out, queue)
+	}
+
+	for queue := range weights {
+		if queue == "" {
+			continue
+		}
+
+		if _, ok := seen[queue]; ok {
+			continue
+		}
+
+		seen[queue] = struct{}{}
+		out = append(out, queue)
+	}
+
+	sort.Strings(out)
+
+	return out
 }
 
 // AdminPause pauses dequeueing of tasks.
@@ -674,6 +1045,288 @@ func paginateAdminDLQ(entries []AdminDLQEntry, offset, limit int) AdminDLQPage {
 	end := min(offset+limit, total)
 
 	return AdminDLQPage{Entries: entries[offset:end], Total: int64(total)}
+}
+
+type adminJobRecord struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	Repo           string   `json:"repo"`
+	Tag            string   `json:"tag"`
+	Path           string   `json:"path,omitempty"`
+	Dockerfile     string   `json:"dockerfile,omitempty"`
+	Command        []string `json:"command,omitempty"`
+	Env            []string `json:"env,omitempty"`
+	Queue          string   `json:"queue,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
+	TimeoutSeconds int64    `json:"timeout_seconds,omitempty"`
+	CreatedAtMs    int64    `json:"created_at_ms"`
+	UpdatedAtMs    int64    `json:"updated_at_ms"`
+}
+
+// AdminJobs lists registered job definitions.
+func (b *RedisDurableBackend) AdminJobs(ctx context.Context) ([]AdminJob, error) {
+	if ctx == nil {
+		return nil, ErrInvalidTaskContext
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hgetall().Key(b.jobsKey()).Build())
+
+	values, err := resp.AsStrMap()
+	if err != nil {
+		if rueidis.IsRedisNil(err) {
+			return []AdminJob{}, nil
+		}
+
+		return nil, ewrap.Wrap(err, "read admin jobs")
+	}
+
+	jobs := make([]AdminJob, 0, len(values))
+	for _, raw := range values {
+		job, err := parseAdminJobRecord(raw)
+		if err != nil {
+			return nil, err
+		}
+
+		jobs = append(jobs, job)
+	}
+
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].Name < jobs[j].Name
+	})
+
+	return jobs, nil
+}
+
+// AdminJob returns a job definition by name.
+func (b *RedisDurableBackend) AdminJob(ctx context.Context, name string) (AdminJob, error) {
+	if ctx == nil {
+		return AdminJob{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminJob{}, ErrAdminJobNameRequired
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hget().Key(b.jobsKey()).Field(name).Build())
+
+	raw, err := resp.ToString()
+	if err != nil {
+		if rueidis.IsRedisNil(err) {
+			return AdminJob{}, ErrAdminJobNotFound
+		}
+
+		return AdminJob{}, ewrap.Wrap(err, "read admin job")
+	}
+
+	return parseAdminJobRecord(raw)
+}
+
+// AdminUpsertJob creates or updates a job definition.
+func (b *RedisDurableBackend) AdminUpsertJob(ctx context.Context, spec AdminJobSpec) (AdminJob, error) {
+	if ctx == nil {
+		return AdminJob{}, ErrInvalidTaskContext
+	}
+
+	spec, err := b.normalizeJobSpec(spec)
+	if err != nil {
+		return AdminJob{}, err
+	}
+
+	now := time.Now()
+
+	existing, err := b.AdminJob(ctx, spec.Name)
+	if err != nil && !errors.Is(err, ErrAdminJobNotFound) {
+		return AdminJob{}, err
+	}
+
+	createdAt := now
+	if err == nil {
+		createdAt = existing.CreatedAt
+	}
+
+	record := adminJobRecord{
+		Name:           spec.Name,
+		Description:    spec.Description,
+		Repo:           spec.Repo,
+		Tag:            spec.Tag,
+		Path:           spec.Path,
+		Dockerfile:     spec.Dockerfile,
+		Command:        spec.Command,
+		Env:            spec.Env,
+		Queue:          spec.Queue,
+		Retries:        spec.Retries,
+		TimeoutSeconds: int64(spec.Timeout.Seconds()),
+		CreatedAtMs:    createdAt.UnixMilli(),
+		UpdatedAtMs:    now.UnixMilli(),
+	}
+
+	raw, err := json.Marshal(record)
+	if err != nil {
+		return AdminJob{}, ewrap.Wrap(err, "encode admin job")
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hset().Key(b.jobsKey()).FieldValue().FieldValue(record.Name, string(raw)).Build())
+	if resp.Error() != nil {
+		return AdminJob{}, ewrap.Wrap(resp.Error(), "write admin job")
+	}
+
+	return adminJobFromRecord(record), nil
+}
+
+// AdminDeleteJob removes a job definition.
+func (b *RedisDurableBackend) AdminDeleteJob(ctx context.Context, name string) (bool, error) {
+	if ctx == nil {
+		return false, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false, ErrAdminJobNameRequired
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hdel().Key(b.jobsKey()).Field(name).Build())
+
+	count, err := resp.AsInt64()
+	if err != nil {
+		return false, ewrap.Wrap(err, "delete admin job")
+	}
+
+	return count > 0, nil
+}
+
+func (b *RedisDurableBackend) normalizeJobSpec(spec AdminJobSpec) (AdminJobSpec, error) {
+	name := strings.TrimSpace(spec.Name)
+	if name == "" {
+		return AdminJobSpec{}, ErrAdminJobNameRequired
+	}
+
+	repo := strings.TrimSpace(spec.Repo)
+	if repo == "" {
+		return AdminJobSpec{}, ErrAdminJobRepoRequired
+	}
+
+	tag := strings.TrimSpace(spec.Tag)
+	if tag == "" {
+		return AdminJobSpec{}, ErrAdminJobTagRequired
+	}
+
+	if strings.Contains(tag, " ") {
+		return AdminJobSpec{}, ErrAdminJobTagRequired
+	}
+
+	queue := strings.TrimSpace(spec.Queue)
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
+	pathValue, err := sanitizeJobPath(spec.Path)
+	if err != nil {
+		return AdminJobSpec{}, err
+	}
+
+	dockerfile := strings.TrimSpace(spec.Dockerfile)
+	if dockerfile == "" {
+		dockerfile = adminJobDefaultDockerfile
+	}
+
+	dockerfile, err = sanitizeJobPath(dockerfile)
+	if err != nil {
+		return AdminJobSpec{}, err
+	}
+
+	command := trimStringSlice(spec.Command)
+	env := trimStringSlice(spec.Env)
+
+	return AdminJobSpec{
+		Name:        name,
+		Description: strings.TrimSpace(spec.Description),
+		Repo:        repo,
+		Tag:         tag,
+		Path:        pathValue,
+		Dockerfile:  dockerfile,
+		Command:     command,
+		Env:         env,
+		Queue:       queue,
+		Retries:     max(0, spec.Retries),
+		Timeout:     spec.Timeout,
+	}, nil
+}
+
+func (b *RedisDurableBackend) jobsKey() string {
+	return b.keyPrefix() + redisKVSeparator + adminJobsKeyName
+}
+
+func parseAdminJobRecord(raw string) (AdminJob, error) {
+	var record adminJobRecord
+
+	err := json.Unmarshal([]byte(raw), &record)
+	if err != nil {
+		return AdminJob{}, ewrap.Wrap(err, "decode admin job")
+	}
+
+	return adminJobFromRecord(record), nil
+}
+
+func adminJobFromRecord(record adminJobRecord) AdminJob {
+	job := AdminJob{
+		AdminJobSpec: AdminJobSpec{
+			Name:        record.Name,
+			Description: record.Description,
+			Repo:        record.Repo,
+			Tag:         record.Tag,
+			Path:        record.Path,
+			Dockerfile:  record.Dockerfile,
+			Command:     record.Command,
+			Env:         record.Env,
+			Queue:       record.Queue,
+			Retries:     record.Retries,
+		},
+		CreatedAt: time.UnixMilli(record.CreatedAtMs),
+		UpdatedAt: time.UnixMilli(record.UpdatedAtMs),
+	}
+
+	if record.TimeoutSeconds > 0 {
+		job.Timeout = time.Duration(record.TimeoutSeconds) * time.Second
+	}
+
+	return job
+}
+
+func sanitizeJobPath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+
+	if strings.HasPrefix(value, "/") {
+		return "", ewrap.New("job path must be relative")
+	}
+
+	clean := filepath.Clean(value)
+	if strings.HasPrefix(clean, "..") {
+		return "", ewrap.New("job path must not escape repository")
+	}
+
+	return clean, nil
+}
+
+func trimStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+
+		out = append(out, value)
+	}
+
+	return out
 }
 
 func formatAdminDuration(duration time.Duration) string {

@@ -21,6 +21,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         processing: number;
         dead: number;
         weight: number;
+        paused: boolean;
       };
     }>({
       method: "GET",

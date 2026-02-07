@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -37,10 +38,23 @@ const (
 	adminMaxInt32         = 2147483647
 	adminErrMethodBlocked = "method_not_allowed"
 	adminErrMethodMessage = "Method not allowed"
+	adminErrInvalidJSON   = "invalid_json"
+	adminErrReadBodyMsg   = "failed to read request body"
+	adminErrParseBodyMsg  = "failed to parse request body"
+	adminErrInvalidBody   = "invalid_body"
+	adminErrMissingQueue  = "missing_queue"
+	adminErrQueueRequired = "Queue name is required"
+	adminErrMissingJob    = "missing_job"
+	adminErrJobRequired   = "Job name is required"
+	adminErrInvalidJob    = "invalid_job"
+	adminErrInvalidJobMsg = "Invalid job name"
 	adminRequestTimeout   = 5 * time.Second
 	adminRequestIDHeader  = "X-Request-Id"
 	adminRequestIDMetaKey = "x-request-id"
+	adminPathSeparator    = "/"
 	adminScheduleLag      = 2 * time.Minute
+	adminEventsInterval   = 10 * time.Second
+	adminEventsMaxCount   = 25
 )
 
 // AdminGatewayConfig configures the admin HTTP gateway.
@@ -153,8 +167,16 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	mux.HandleFunc("/admin/v1/overview", handler.handleOverview)
 	mux.HandleFunc("/admin/v1/queues", handler.handleQueues)
 	mux.HandleFunc("/admin/v1/queues/", handler.handleQueue)
+	mux.HandleFunc("/admin/v1/jobs", handler.handleJobs)
+	mux.HandleFunc("/admin/v1/jobs/", handler.handleJob)
 	mux.HandleFunc("/admin/v1/schedules", handler.handleSchedules)
+	mux.HandleFunc("/admin/v1/schedules/factories", handler.handleScheduleFactories)
+	mux.HandleFunc("/admin/v1/schedules/events", handler.handleScheduleEvents)
+	mux.HandleFunc("/admin/v1/schedules/pause", handler.handleSchedulesPause)
+	mux.HandleFunc("/admin/v1/schedules/", handler.handleSchedule)
+	mux.HandleFunc("/admin/v1/events", handler.handleEvents)
 	mux.HandleFunc("/admin/v1/dlq", handler.handleDLQ)
+	mux.HandleFunc("/admin/v1/dlq/", handler.handleDLQEntry)
 	mux.HandleFunc("/admin/v1/pause", handler.handlePause)
 	mux.HandleFunc("/admin/v1/resume", handler.handleResume)
 	mux.HandleFunc("/admin/v1/dlq/replay", handler.handleReplay)
@@ -246,6 +268,11 @@ func (h *adminGatewayHandler) handleOverview(w http.ResponseWriter, r *http.Requ
 			Lease:           resp.GetCoordination().GetLease(),
 			Paused:          resp.GetCoordination().GetPaused(),
 		},
+		Actions: adminActionsJSON{
+			Pause:  resp.GetActions().GetPause(),
+			Resume: resp.GetActions().GetResume(),
+			Replay: resp.GetActions().GetReplay(),
+		},
 	}
 
 	writeAdminJSON(w, http.StatusOK, payload)
@@ -273,35 +300,54 @@ func (h *adminGatewayHandler) handleQueues(w http.ResponseWriter, r *http.Reques
 
 	queues := make([]queueSummaryJSON, 0, len(resp.GetQueues()))
 	for _, queue := range resp.GetQueues() {
-		queues = append(queues, queueSummaryJSON{
-			Name:       queue.GetName(),
-			Ready:      queue.GetReady(),
-			Processing: queue.GetProcessing(),
-			Dead:       queue.GetDead(),
-			Weight:     queue.GetWeight(),
-		})
+		queues = append(queues, queueSummaryFromProto(queue))
 	}
 
 	writeAdminJSON(w, http.StatusOK, adminQueuesJSON{Queues: queues})
 }
 
 func (h *adminGatewayHandler) handleQueue(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+	path := strings.TrimPrefix(r.URL.Path, "/admin/v1/queues/")
+
+	path = strings.Trim(path, adminPathSeparator)
+	if path == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
 
 		return
 	}
 
-	name := strings.TrimPrefix(r.URL.Path, "/admin/v1/queues/")
+	if before, ok := strings.CutSuffix(path, "/weight"); ok {
+		name := strings.TrimSuffix(before, adminPathSeparator)
+		h.handleQueueWeight(w, r, name)
 
-	name = strings.Trim(name, "/")
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/pause"); ok {
+		name := strings.TrimSuffix(before, adminPathSeparator)
+		h.handleQueuePause(w, r, name)
+
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		h.handleQueueGet(w, r, path)
+
+		return
+	}
+
+	writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+}
+
+func (h *adminGatewayHandler) handleQueueGet(w http.ResponseWriter, r *http.Request, name string) {
+	name = strings.Trim(name, adminPathSeparator)
 	if name == "" {
-		writeAdminError(w, http.StatusBadRequest, "missing_queue", "Queue name is required", requestID(r, w))
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
 
 		return
 	}
 
-	name, err := url.PathUnescape(name)
+	decoded, err := url.PathUnescape(name)
 	if err != nil {
 		writeAdminError(w, http.StatusBadRequest, "invalid_queue", "Invalid queue name", requestID(r, w))
 
@@ -314,7 +360,7 @@ func (h *adminGatewayHandler) handleQueue(w http.ResponseWriter, r *http.Request
 
 	defer cancel()
 
-	resp, err := h.client.GetQueue(ctx, &workerpb.GetQueueRequest{Name: name})
+	resp, err := h.client.GetQueue(ctx, &workerpb.GetQueueRequest{Name: decoded})
 	if err != nil {
 		writeAdminGRPCError(w, reqID, err)
 
@@ -329,10 +375,325 @@ func (h *adminGatewayHandler) handleQueue(w http.ResponseWriter, r *http.Request
 			Processing: queue.GetProcessing(),
 			Dead:       queue.GetDead(),
 			Weight:     queue.GetWeight(),
+			Paused:     queue.GetPaused(),
 		},
 	}
 
 	writeAdminJSON(w, http.StatusOK, payload)
+}
+
+func (h *adminGatewayHandler) handleQueueWeight(w http.ResponseWriter, r *http.Request, name string) {
+	name = strings.Trim(name, adminPathSeparator)
+	if name == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
+
+		return
+	}
+
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_queue", "Invalid queue name", requestID(r, w))
+
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		h.handleQueueWeightUpdate(w, r, decoded)
+	case http.MethodDelete:
+		h.handleQueueWeightReset(w, r, decoded)
+	default:
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+	}
+}
+
+func (h *adminGatewayHandler) handleQueueWeightUpdate(w http.ResponseWriter, r *http.Request, name string) {
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	var payload adminQueueWeightRequest
+
+	err = json.Unmarshal(body, &payload)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.UpdateQueueWeight(ctx, &workerpb.UpdateQueueWeightRequest{
+		Name:   name,
+		Weight: clampLimit32(payload.Weight),
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminQueueJSON{Queue: queueSummaryFromProto(resp.GetQueue())})
+}
+
+func (h *adminGatewayHandler) handleQueueWeightReset(w http.ResponseWriter, r *http.Request, name string) {
+	reqID := requestID(r, w)
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ResetQueueWeight(ctx, &workerpb.ResetQueueWeightRequest{Name: name})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminQueueJSON{Queue: queueSummaryFromProto(resp.GetQueue())})
+}
+
+func (h *adminGatewayHandler) handleQueuePause(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	name = strings.Trim(name, adminPathSeparator)
+	if name == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
+
+		return
+	}
+
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_queue", "Invalid queue name", requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	payload := adminQueuePauseRequest{Paused: true}
+	if len(body) > 0 {
+		err := json.Unmarshal(body, &payload)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.PauseQueue(ctx, &workerpb.PauseQueueRequest{
+		Name:   decoded,
+		Paused: payload.Paused,
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminQueueJSON{Queue: queueSummaryFromProto(resp.GetQueue())})
+}
+
+func (h *adminGatewayHandler) handleJobs(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleJobsList(w, r)
+	case http.MethodPost:
+		h.handleJobUpsert(w, r)
+	default:
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+	}
+}
+
+func (h *adminGatewayHandler) handleJobsList(w http.ResponseWriter, r *http.Request) {
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListJobs(ctx, &workerpb.ListJobsRequest{})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	jobs := make([]adminJobJSON, 0, len(resp.GetJobs()))
+	for _, job := range resp.GetJobs() {
+		jobs = append(jobs, adminJobFromProto(job))
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobsJSON{Jobs: jobs})
+}
+
+func (h *adminGatewayHandler) handleJobUpsert(w http.ResponseWriter, r *http.Request) {
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	var payload adminJobRequest
+	if len(body) > 0 {
+		err = json.Unmarshal(body, &payload)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	spec, err := jobSpecToProto(payload)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJob, err.Error(), reqID)
+
+		return
+	}
+
+	resp, err := h.client.UpsertJob(ctx, &workerpb.UpsertJobRequest{
+		Spec: spec,
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobResponse{Job: adminJobFromProto(resp.GetJob())})
+}
+
+func (h *adminGatewayHandler) handleJob(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/admin/v1/jobs/")
+
+	path = strings.Trim(path, adminPathSeparator)
+	if path == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingJob, adminErrJobRequired, requestID(r, w))
+
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/run"); ok {
+		name := strings.TrimSuffix(before, adminPathSeparator)
+		h.handleJobRun(w, r, name)
+
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		h.handleJobGet(w, r, path)
+	case http.MethodDelete:
+		h.handleJobDelete(w, r, path)
+	default:
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+	}
+}
+
+func (h *adminGatewayHandler) handleJobGet(w http.ResponseWriter, r *http.Request, name string) {
+	name = strings.Trim(name, adminPathSeparator)
+	if name == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingJob, adminErrJobRequired, requestID(r, w))
+
+		return
+	}
+
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJob, adminErrInvalidJobMsg, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetJob(ctx, &workerpb.GetJobRequest{Name: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobResponse{Job: adminJobFromProto(resp.GetJob())})
+}
+
+func (h *adminGatewayHandler) handleJobDelete(w http.ResponseWriter, r *http.Request, name string) {
+	reqID := requestID(r, w)
+
+	decoded, err := url.PathUnescape(strings.TrimSpace(name))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJob, adminErrInvalidJobMsg, reqID)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.DeleteJob(ctx, &workerpb.DeleteJobRequest{Name: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobDeleteResponse{Deleted: resp.GetDeleted()})
+}
+
+func (h *adminGatewayHandler) handleJobRun(w http.ResponseWriter, r *http.Request, name string) {
+	handleRunAction(w, r, name, adminErrInvalidJob, adminErrInvalidJobMsg,
+		func(ctx context.Context, decoded string) (string, error) {
+			resp, err := h.client.RunJob(ctx, &workerpb.RunJobRequest{Name: decoded})
+			if err != nil {
+				return "", err
+			}
+
+			return resp.GetTaskId(), nil
+		},
+		func(taskID string) any {
+			return adminJobRunResponse{TaskID: taskID}
+		},
+	)
 }
 
 func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) {
@@ -343,7 +704,7 @@ func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) 
 	}
 
 	queryValues := r.URL.Query()
-	limit := parseIntParam(queryValues.Get("limit"), defaultAdminDLQLimit)
+	limit := parseIntParam(queryValues.Get("limit"), defaultAdminScheduleEventLimit)
 	offset := parseOffsetParam(queryValues.Get("offset"))
 	queueFilter := strings.TrimSpace(queryValues.Get("queue"))
 	handlerFilter := strings.TrimSpace(queryValues.Get("handler"))
@@ -380,6 +741,47 @@ func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeAdminJSON(w, http.StatusOK, adminDLQJSON{Entries: entries, Total: resp.GetTotal()})
+}
+
+func (h *adminGatewayHandler) handleDLQEntry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/admin/v1/dlq/")
+
+	id := strings.Trim(path, adminPathSeparator)
+	if id == "" {
+		writeAdminError(w, http.StatusBadRequest, "missing_dlq_id", "DLQ id is required", requestID(r, w))
+
+		return
+	}
+
+	decoded, err := url.PathUnescape(id)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_dlq_id", "Invalid DLQ id", requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetDLQEntry(ctx, &workerpb.GetDLQEntryRequest{Id: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminDLQEntryDetailJSON{
+		Entry: dlqEntryDetailFromProto(resp.GetEntry()),
+	})
 }
 
 func (h *adminGatewayHandler) handlePause(w http.ResponseWriter, r *http.Request) {
@@ -440,7 +842,7 @@ func (h *adminGatewayHandler) handleReplay(w http.ResponseWriter, r *http.Reques
 	if r.Body != nil {
 		body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
 		if err != nil {
-			writeAdminError(w, http.StatusBadRequest, "invalid_body", "Invalid request body", requestID(r, w))
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, "Invalid request body", requestID(r, w))
 
 			return
 		}
@@ -480,7 +882,7 @@ func (h *adminGatewayHandler) handleReplayIDs(w http.ResponseWriter, r *http.Req
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, "invalid_body", "Invalid request body", requestID(r, w))
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, "Invalid request body", requestID(r, w))
 
 		return
 	}
@@ -491,7 +893,7 @@ func (h *adminGatewayHandler) handleReplayIDs(w http.ResponseWriter, r *http.Req
 
 	err = json.Unmarshal(body, &payload)
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, "invalid_body", "Invalid request body", requestID(r, w))
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, "Invalid request body", requestID(r, w))
 
 		return
 	}
@@ -512,13 +914,226 @@ func (h *adminGatewayHandler) handleReplayIDs(w http.ResponseWriter, r *http.Req
 	writeAdminJSON(w, http.StatusOK, adminReplayJSON{Moved: resp.GetMoved()})
 }
 
-func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Request) {
+func (h *adminGatewayHandler) handleScheduleFactories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
 
 		return
 	}
 
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListScheduleFactories(ctx, &workerpb.ListScheduleFactoriesRequest{})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	factories := make([]scheduleFactoryJSON, 0, len(resp.GetFactories()))
+	for _, factory := range resp.GetFactories() {
+		factories = append(factories, scheduleFactoryFromProto(factory))
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminScheduleFactoriesJSON{Factories: factories})
+}
+
+func (h *adminGatewayHandler) handleScheduleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	queryValues := r.URL.Query()
+	limit := parseIntParam(queryValues.Get("limit"), defaultAdminDLQLimit)
+	name := strings.TrimSpace(queryValues.Get("name"))
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListScheduleEvents(ctx, &workerpb.ListScheduleEventsRequest{
+		Name:  name,
+		Limit: clampLimit32(limit),
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	events := make([]scheduleEventJSON, 0, len(resp.GetEvents()))
+	for _, event := range resp.GetEvents() {
+		events = append(events, scheduleEventFromProto(event))
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminScheduleEventsJSON{Events: events})
+}
+
+func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeAdminError(w, http.StatusInternalServerError, "stream_not_supported", "streaming unsupported", requestID(r, w))
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	reqID := requestID(r, w)
+	ctx := r.Context()
+
+	ticker := time.NewTicker(adminEventsInterval)
+	defer ticker.Stop()
+
+	writer := newAdminEventWriter(w, flusher)
+	emit := func() bool {
+		err := h.sendOverviewEvent(ctx, reqID, writer)
+		if err != nil {
+			err := writer.Write("error", map[string]any{"message": err.Error()})
+			if err != nil {
+				return false
+			}
+		}
+
+		err = h.sendScheduleEventsEvent(ctx, reqID, writer)
+		if err != nil {
+			err := writer.Write("error", map[string]any{"message": err.Error()})
+			if err != nil {
+				return false
+			}
+		}
+
+		err = writer.Write("heartbeat", map[string]any{"ts": time.Now().UnixMilli()})
+
+		return err == nil
+	}
+
+	if !emit() {
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !emit() {
+				return
+			}
+		}
+	}
+}
+
+type adminEventWriter struct {
+	writer  io.Writer
+	flusher http.Flusher
+}
+
+func newAdminEventWriter(writer io.Writer, flusher http.Flusher) *adminEventWriter {
+	return &adminEventWriter{writer: writer, flusher: flusher}
+}
+
+func (w *adminEventWriter) Write(eventName string, payload any) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return ewrap.Wrap(err, "marshal event payload").WithMetadata("event", eventName)
+	}
+
+	_, err = fmt.Fprintf(w.writer, "event: %s\ndata: %s\n\n", eventName, data)
+	if err != nil {
+		return ewrap.Wrap(err, "write event payload").WithMetadata("event", eventName)
+	}
+
+	w.flusher.Flush()
+
+	return nil
+}
+
+func (h *adminGatewayHandler) sendOverviewEvent(ctx context.Context, reqID string, writer *adminEventWriter) error {
+	overviewCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	overviewCtx = metadata.AppendToOutgoingContext(overviewCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetOverview(overviewCtx, &workerpb.GetOverviewRequest{})
+	if err != nil {
+		return err
+	}
+
+	payload := adminOverviewJSON{
+		Stats: overviewStatsJSON{
+			ActiveWorkers: resp.GetStats().GetActiveWorkers(),
+			QueuedTasks:   resp.GetStats().GetQueuedTasks(),
+			Queues:        resp.GetStats().GetQueues(),
+			AvgLatencyMs:  resp.GetStats().GetAvgLatencyMs(),
+			P95LatencyMs:  resp.GetStats().GetP95LatencyMs(),
+		},
+		Coordination: coordinationJSON{
+			GlobalRateLimit: resp.GetCoordination().GetGlobalRateLimit(),
+			LeaderLock:      resp.GetCoordination().GetLeaderLock(),
+			Lease:           resp.GetCoordination().GetLease(),
+			Paused:          resp.GetCoordination().GetPaused(),
+		},
+		Actions: adminActionsJSON{
+			Pause:  resp.GetActions().GetPause(),
+			Resume: resp.GetActions().GetResume(),
+			Replay: resp.GetActions().GetReplay(),
+		},
+	}
+
+	return writer.Write("overview", payload)
+}
+
+func (h *adminGatewayHandler) sendScheduleEventsEvent(ctx context.Context, reqID string, writer *adminEventWriter) error {
+	eventsCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	eventsCtx = metadata.AppendToOutgoingContext(eventsCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListScheduleEvents(eventsCtx, &workerpb.ListScheduleEventsRequest{
+		Limit: clampLimit32(adminEventsMaxCount),
+	})
+	if err != nil {
+		return err
+	}
+
+	events := make([]scheduleEventJSON, 0, len(resp.GetEvents()))
+	for _, event := range resp.GetEvents() {
+		events = append(events, scheduleEventFromProto(event))
+	}
+
+	return writer.Write("schedule_events", adminScheduleEventsJSON{Events: events})
+}
+
+func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleSchedulesList(w, r)
+	case http.MethodPost:
+		h.handleScheduleCreate(w, r)
+	default:
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+	}
+}
+
+func (h *adminGatewayHandler) handleSchedulesList(w http.ResponseWriter, r *http.Request) {
 	reqID := requestID(r, w)
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
 	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
@@ -534,40 +1149,266 @@ func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Req
 
 	schedules := make([]scheduleJSON, 0, len(resp.GetSchedules()))
 	for _, schedule := range resp.GetSchedules() {
-		nextRunMs := schedule.GetNextRunMs()
-		nextRun := time.Time{}
-		lastRun := time.Time{}
-		scheduleStatus := "healthy"
-
-		if nextRunMs <= 0 {
-			scheduleStatus = "paused"
-		} else {
-			nextRun = time.UnixMilli(nextRunMs)
-			if nextRun.Before(time.Now().Add(-adminScheduleLag)) {
-				scheduleStatus = "lagging"
-			}
-		}
-
-		lastRunMs := schedule.GetLastRunMs()
-		if lastRunMs > 0 {
-			lastRun = time.UnixMilli(lastRunMs)
-		}
-
-		schedules = append(schedules, scheduleJSON{
-			Name:     schedule.GetName(),
-			Schedule: schedule.GetSpec(),
-			NextRun:  formatScheduleNext(nextRun),
-			LastRun:  formatScheduleLast(lastRun),
-			Status:   scheduleStatus,
-		})
+		schedules = append(schedules, scheduleFromProto(schedule))
 	}
 
 	writeAdminJSON(w, http.StatusOK, adminSchedulesJSON{Schedules: schedules})
 }
 
+func (h *adminGatewayHandler) handleScheduleCreate(w http.ResponseWriter, r *http.Request) {
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	var payload adminScheduleCreateRequest
+
+	err = json.Unmarshal(body, &payload)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.CreateSchedule(ctx, &workerpb.CreateScheduleRequest{
+		Name:    payload.Name,
+		Spec:    payload.Spec,
+		Durable: payload.Durable,
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminScheduleCreateResponse{
+		Schedule: scheduleFromProto(resp.GetSchedule()),
+	})
+}
+
+func (h *adminGatewayHandler) handleSchedulesPause(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	payload := adminSchedulePauseRequest{Paused: true}
+	if len(body) > 0 {
+		err := json.Unmarshal(body, &payload)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.PauseSchedules(ctx, &workerpb.PauseSchedulesRequest{Paused: payload.Paused})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminSchedulesPauseResponse{
+		Updated: resp.GetUpdated(),
+		Paused:  resp.GetPaused(),
+	})
+}
+
+func (h *adminGatewayHandler) handleSchedule(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/admin/v1/schedules/")
+
+	path = strings.TrimPrefix(path, adminPathSeparator)
+	if path == "" {
+		writeAdminError(w, http.StatusNotFound, "schedule_not_found", "schedule name is required", requestID(r, w))
+
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/pause"); ok {
+		name := before
+		h.handleSchedulePause(w, r, strings.TrimSuffix(name, adminPathSeparator))
+
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/run"); ok {
+		name := before
+		h.handleScheduleRun(w, r, strings.TrimSuffix(name, adminPathSeparator))
+
+		return
+	}
+
+	if r.Method == http.MethodDelete {
+		h.handleScheduleDelete(w, r, path)
+
+		return
+	}
+
+	writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+}
+
+func (h *adminGatewayHandler) handleScheduleDelete(w http.ResponseWriter, r *http.Request, name string) {
+	reqID := requestID(r, w)
+
+	decoded, err := url.PathUnescape(strings.TrimSpace(name))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_name", "invalid schedule name", reqID)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.DeleteSchedule(ctx, &workerpb.DeleteScheduleRequest{Name: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminScheduleDeleteResponse{Deleted: resp.GetDeleted()})
+}
+
+func (h *adminGatewayHandler) handleSchedulePause(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+
+	decoded, err := url.PathUnescape(strings.TrimSpace(name))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_name", "invalid schedule name", reqID)
+
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	payload := adminSchedulePauseRequest{Paused: true}
+	if len(body) > 0 {
+		err := json.Unmarshal(body, &payload)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.PauseSchedule(ctx, &workerpb.PauseScheduleRequest{
+		Name:   decoded,
+		Paused: payload.Paused,
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminSchedulePauseResponse{
+		Schedule: scheduleFromProto(resp.GetSchedule()),
+	})
+}
+
+func (h *adminGatewayHandler) handleScheduleRun(w http.ResponseWriter, r *http.Request, name string) {
+	handleRunAction(w, r, name, "invalid_name", "invalid schedule name",
+		func(ctx context.Context, decoded string) (string, error) {
+			resp, err := h.client.RunSchedule(ctx, &workerpb.RunScheduleRequest{Name: decoded})
+			if err != nil {
+				return "", err
+			}
+
+			return resp.GetTaskId(), nil
+		},
+		func(taskID string) any {
+			return adminScheduleRunResponse{TaskID: taskID}
+		},
+	)
+}
+
+func handleRunAction(
+	w http.ResponseWriter,
+	r *http.Request,
+	name string,
+	invalidCode string,
+	invalidMessage string,
+	run func(ctx context.Context, decoded string) (string, error),
+	response func(taskID string) any,
+) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+
+	decoded, err := url.PathUnescape(strings.TrimSpace(name))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, invalidCode, invalidMessage, reqID)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	taskID, err := run(ctx, decoded)
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, response(taskID))
+}
+
 type adminOverviewJSON struct {
 	Stats        overviewStatsJSON `json:"stats"`
 	Coordination coordinationJSON  `json:"coordination"`
+	Actions      adminActionsJSON  `json:"actions"`
 }
 
 type overviewStatsJSON struct {
@@ -585,6 +1426,12 @@ type coordinationJSON struct {
 	Paused          bool   `json:"paused"`
 }
 
+type adminActionsJSON struct {
+	Pause  int64 `json:"pause"`
+	Resume int64 `json:"resume"`
+	Replay int64 `json:"replay"`
+}
+
 type adminQueuesJSON struct {
 	Queues []queueSummaryJSON `json:"queues"`
 }
@@ -593,16 +1440,133 @@ type adminQueueJSON struct {
 	Queue queueSummaryJSON `json:"queue"`
 }
 
+type adminJobsJSON struct {
+	Jobs []adminJobJSON `json:"jobs"`
+}
+
+type adminJobResponse struct {
+	Job adminJobJSON `json:"job"`
+}
+
+type adminJobDeleteResponse struct {
+	Deleted bool `json:"deleted"`
+}
+
+type adminJobRunResponse struct {
+	TaskID string `json:"taskId"`
+}
+
 type adminSchedulesJSON struct {
 	Schedules []scheduleJSON `json:"schedules"`
 }
 
+type adminScheduleFactoriesJSON struct {
+	Factories []scheduleFactoryJSON `json:"factories"`
+}
+
+type adminScheduleEventsJSON struct {
+	Events []scheduleEventJSON `json:"events"`
+}
+
+type adminQueueWeightRequest struct {
+	Weight int `json:"weight"`
+}
+
+type adminQueuePauseRequest struct {
+	Paused bool `json:"paused"`
+}
+
+type adminJobRequest struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	Repo           string   `json:"repo"`
+	Tag            string   `json:"tag"`
+	Path           string   `json:"path,omitempty"`
+	Dockerfile     string   `json:"dockerfile,omitempty"`
+	Command        []string `json:"command,omitempty"`
+	Env            []string `json:"env,omitempty"`
+	Queue          string   `json:"queue,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
+	TimeoutSeconds int64    `json:"timeoutSeconds,omitempty"`
+}
+
 type scheduleJSON struct {
-	Name     string `json:"name"`
-	Schedule string `json:"schedule"`
-	NextRun  string `json:"nextRun"`
-	LastRun  string `json:"lastRun"`
-	Status   string `json:"status"`
+	Name      string `json:"name"`
+	Schedule  string `json:"schedule"`
+	NextRun   string `json:"nextRun"`
+	LastRun   string `json:"lastRun"`
+	NextRunMs int64  `json:"nextRunMs"`
+	LastRunMs int64  `json:"lastRunMs"`
+	Status    string `json:"status"`
+	Paused    bool   `json:"paused"`
+	Durable   bool   `json:"durable"`
+}
+
+type adminJobJSON struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	Repo           string   `json:"repo"`
+	Tag            string   `json:"tag"`
+	Path           string   `json:"path,omitempty"`
+	Dockerfile     string   `json:"dockerfile,omitempty"`
+	Command        []string `json:"command,omitempty"`
+	Env            []string `json:"env,omitempty"`
+	Queue          string   `json:"queue,omitempty"`
+	Retries        int      `json:"retries,omitempty"`
+	TimeoutSeconds int64    `json:"timeoutSeconds,omitempty"`
+	CreatedAtMs    int64    `json:"createdAtMs"`
+	UpdatedAtMs    int64    `json:"updatedAtMs"`
+}
+
+type scheduleFactoryJSON struct {
+	Name    string `json:"name"`
+	Durable bool   `json:"durable"`
+}
+
+type scheduleEventJSON struct {
+	TaskID       string            `json:"taskId"`
+	Name         string            `json:"name"`
+	Spec         string            `json:"spec"`
+	Durable      bool              `json:"durable"`
+	Status       string            `json:"status"`
+	Queue        string            `json:"queue"`
+	StartedAtMs  int64             `json:"startedAtMs"`
+	FinishedAtMs int64             `json:"finishedAtMs"`
+	DurationMs   int64             `json:"durationMs"`
+	Result       string            `json:"result"`
+	Error        string            `json:"error"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+}
+
+type adminScheduleCreateRequest struct {
+	Name    string `json:"name"`
+	Spec    string `json:"spec"`
+	Durable bool   `json:"durable"`
+}
+
+type adminScheduleCreateResponse struct {
+	Schedule scheduleJSON `json:"schedule"`
+}
+
+type adminSchedulePauseRequest struct {
+	Paused bool `json:"paused"`
+}
+
+type adminSchedulePauseResponse struct {
+	Schedule scheduleJSON `json:"schedule"`
+}
+
+type adminSchedulesPauseResponse struct {
+	Updated int32 `json:"updated"`
+	Paused  bool  `json:"paused"`
+}
+
+type adminScheduleRunResponse struct {
+	TaskID string `json:"taskId"`
+}
+
+type adminScheduleDeleteResponse struct {
+	Deleted bool `json:"deleted"`
 }
 
 type queueSummaryJSON struct {
@@ -611,6 +1575,24 @@ type queueSummaryJSON struct {
 	Processing int64  `json:"processing"`
 	Dead       int64  `json:"dead"`
 	Weight     int32  `json:"weight"`
+	Paused     bool   `json:"paused"`
+}
+
+type adminDLQEntryDetailJSON struct {
+	Entry dlqEntryDetailJSON `json:"entry"`
+}
+
+type dlqEntryDetailJSON struct {
+	ID          string            `json:"id"`
+	Queue       string            `json:"queue"`
+	Handler     string            `json:"handler"`
+	Attempts    int32             `json:"attempts"`
+	AgeMs       int64             `json:"ageMs"`
+	FailedAtMs  int64             `json:"failedAtMs"`
+	UpdatedAtMs int64             `json:"updatedAtMs"`
+	LastError   string            `json:"lastError"`
+	PayloadSize int64             `json:"payloadSize"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 type adminDLQJSON struct {
@@ -791,6 +1773,170 @@ func grpcToHTTPStatus() map[codes.Code]int {
 		codes.Unavailable:        http.StatusServiceUnavailable,
 		codes.Canceled:           http.StatusRequestTimeout,
 		codes.Unknown:            http.StatusBadGateway,
+	}
+}
+
+func scheduleFromProto(schedule *workerpb.ScheduleEntry) scheduleJSON {
+	if schedule == nil {
+		return scheduleJSON{
+			Name:     "",
+			Schedule: "",
+			NextRun:  adminNotAvailable,
+			LastRun:  adminNotAvailable,
+			Status:   "paused",
+			Paused:   true,
+		}
+	}
+
+	paused := schedule.GetPaused()
+	nextRun := time.Time{}
+	lastRun := time.Time{}
+	scheduleStatus := "healthy"
+
+	nextRunMs := schedule.GetNextRunMs()
+	if paused || nextRunMs <= 0 {
+		scheduleStatus = "paused"
+	} else {
+		nextRun = time.UnixMilli(nextRunMs)
+		if nextRun.Before(time.Now().Add(-adminScheduleLag)) {
+			scheduleStatus = "lagging"
+		}
+	}
+
+	lastRunMs := schedule.GetLastRunMs()
+	if lastRunMs > 0 {
+		lastRun = time.UnixMilli(lastRunMs)
+	}
+
+	return scheduleJSON{
+		Name:      schedule.GetName(),
+		Schedule:  schedule.GetSpec(),
+		NextRun:   formatScheduleNext(nextRun),
+		LastRun:   formatScheduleLast(lastRun),
+		NextRunMs: nextRunMs,
+		LastRunMs: lastRunMs,
+		Status:    scheduleStatus,
+		Paused:    paused,
+		Durable:   schedule.GetDurable(),
+	}
+}
+
+func scheduleFactoryFromProto(factory *workerpb.ScheduleFactory) scheduleFactoryJSON {
+	if factory == nil {
+		return scheduleFactoryJSON{}
+	}
+
+	return scheduleFactoryJSON{
+		Name:    factory.GetName(),
+		Durable: factory.GetDurable(),
+	}
+}
+
+func scheduleEventFromProto(event *workerpb.ScheduleEvent) scheduleEventJSON {
+	if event == nil {
+		return scheduleEventJSON{}
+	}
+
+	return scheduleEventJSON{
+		TaskID:       event.GetTaskId(),
+		Name:         event.GetName(),
+		Spec:         event.GetSpec(),
+		Durable:      event.GetDurable(),
+		Status:       event.GetStatus(),
+		Queue:        event.GetQueue(),
+		StartedAtMs:  event.GetStartedAtMs(),
+		FinishedAtMs: event.GetFinishedAtMs(),
+		DurationMs:   event.GetDurationMs(),
+		Result:       event.GetResult(),
+		Error:        event.GetError(),
+		Metadata:     event.GetMetadata(),
+	}
+}
+
+func adminJobFromProto(job *workerpb.Job) adminJobJSON {
+	if job == nil {
+		return adminJobJSON{}
+	}
+
+	spec := job.GetSpec()
+
+	return adminJobJSON{
+		Name:           spec.GetName(),
+		Description:    spec.GetDescription(),
+		Repo:           spec.GetRepo(),
+		Tag:            spec.GetTag(),
+		Path:           spec.GetPath(),
+		Dockerfile:     spec.GetDockerfile(),
+		Command:        append([]string{}, spec.GetCommand()...),
+		Env:            append([]string{}, spec.GetEnv()...),
+		Queue:          spec.GetQueue(),
+		Retries:        int(spec.GetRetries()),
+		TimeoutSeconds: int64(spec.GetTimeoutSeconds()),
+		CreatedAtMs:    job.GetCreatedAtMs(),
+		UpdatedAtMs:    job.GetUpdatedAtMs(),
+	}
+}
+
+func jobSpecToProto(payload adminJobRequest) (*workerpb.JobSpec, error) {
+	retriesValue := max(payload.Retries, 0)
+	timeoutValue := max(payload.TimeoutSeconds, int64(0))
+
+	retries, err := sectconv.ToInt32(retriesValue)
+	if err != nil {
+		return nil, ewrap.Wrap(err, "job retries overflow")
+	}
+
+	timeoutSeconds, err := sectconv.SafeInt32FromInt64(timeoutValue)
+	if err != nil {
+		return nil, ewrap.Wrap(err, "job timeout overflow")
+	}
+
+	return &workerpb.JobSpec{
+		Name:           strings.TrimSpace(payload.Name),
+		Description:    strings.TrimSpace(payload.Description),
+		Repo:           strings.TrimSpace(payload.Repo),
+		Tag:            strings.TrimSpace(payload.Tag),
+		Path:           strings.TrimSpace(payload.Path),
+		Dockerfile:     strings.TrimSpace(payload.Dockerfile),
+		Command:        append([]string{}, payload.Command...),
+		Env:            append([]string{}, payload.Env...),
+		Queue:          strings.TrimSpace(payload.Queue),
+		Retries:        retries,
+		TimeoutSeconds: timeoutSeconds,
+	}, nil
+}
+
+func dlqEntryDetailFromProto(entry *workerpb.DLQEntryDetail) dlqEntryDetailJSON {
+	if entry == nil {
+		return dlqEntryDetailJSON{}
+	}
+
+	return dlqEntryDetailJSON{
+		ID:          entry.GetId(),
+		Queue:       entry.GetQueue(),
+		Handler:     entry.GetHandler(),
+		Attempts:    entry.GetAttempts(),
+		AgeMs:       entry.GetAgeMs(),
+		FailedAtMs:  entry.GetFailedAtMs(),
+		UpdatedAtMs: entry.GetUpdatedAtMs(),
+		LastError:   entry.GetLastError(),
+		PayloadSize: entry.GetPayloadSize(),
+		Metadata:    entry.GetMetadata(),
+	}
+}
+
+func queueSummaryFromProto(queue *workerpb.QueueSummary) queueSummaryJSON {
+	if queue == nil {
+		return queueSummaryJSON{}
+	}
+
+	return queueSummaryJSON{
+		Name:       queue.GetName(),
+		Ready:      queue.GetReady(),
+		Processing: queue.GetProcessing(),
+		Dead:       queue.GetDead(),
+		Weight:     queue.GetWeight(),
+		Paused:     queue.GetPaused(),
 	}
 }
 

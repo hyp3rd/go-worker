@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { QueueWeightEditor } from "@/components/queue-weight-editor";
+import { QueueActions } from "@/components/queue-actions";
 import { SectionHeader } from "@/components/section-header";
 import { StatCard } from "@/components/stat-card";
 import { RefreshControls } from "@/components/refresh-controls";
@@ -59,6 +61,10 @@ export default async function QueueDetailPage({
           value={formatNumber(queue.weight)}
           note="Scheduler weight"
         />
+      </div>
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <QueueWeightEditor name={queue.name} weight={queue.weight} />
+        <QueueActions name={queue.name} paused={queue.paused} />
       </div>
     </section>
   );

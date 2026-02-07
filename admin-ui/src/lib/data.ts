@@ -5,27 +5,35 @@ import {
   fetchOverview,
   fetchQueues,
   fetchQueueDetail,
+  fetchScheduleFactories,
+  fetchScheduleEvents,
   fetchSchedules,
+  fetchJobs,
 } from "@/lib/api";
 import {
   coordinationStatus,
+  adminActionCounters,
   dlqEntries,
   healthInfo,
+  adminJobs,
   jobSchedules,
   overviewStats,
   queueSummaries,
+  scheduleFactories,
+  scheduleEvents,
 } from "@/lib/mock-data";
+
+const allowMockData =
+  process.env.NODE_ENV !== "production" &&
+  (process.env.WORKER_ADMIN_ALLOW_MOCK ??
+    process.env.ADMIN_UI_ALLOW_MOCK) === "true";
 
 export const getOverviewStats = cache(async () => {
   try {
     const { stats } = await fetchOverview();
     return stats;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return overviewStats;
     }
 
@@ -39,11 +47,7 @@ export const getHealthInfo = cache(async () => {
   try {
     return await fetchHealth();
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return healthInfo;
     }
 
@@ -58,11 +62,7 @@ export const getCoordinationStatus = cache(async () => {
     const { coordination } = await fetchOverview();
     return coordination;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return coordinationStatus;
     }
 
@@ -72,16 +72,27 @@ export const getCoordinationStatus = cache(async () => {
   }
 });
 
+export const getAdminActionCounters = cache(async () => {
+  try {
+    const { actions } = await fetchOverview();
+    return actions;
+  } catch (error) {
+    if (allowMockData) {
+      return adminActionCounters;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load admin actions: ${detail}`);
+  }
+});
+
 export const getQueueSummaries = cache(async () => {
   try {
     const { queues } = await fetchQueues();
     return queues;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return queueSummaries;
     }
 
@@ -100,11 +111,7 @@ export const getQueueDetail = cache(async (name: string) => {
     const { queue } = await fetchQueueDetail(name);
     return queue;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       const fallback =
         queueSummaries.find((queue) => queue.name === name) ??
         queueSummaries[0];
@@ -124,17 +131,61 @@ export const getJobSchedules = cache(async () => {
     const { schedules } = await fetchSchedules();
     return schedules;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return jobSchedules;
     }
 
     const detail =
       error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to load job schedules: ${detail}`);
+  }
+});
+
+export const getAdminJobs = cache(async () => {
+  try {
+    const { jobs } = await fetchJobs();
+    return jobs;
+  } catch (error) {
+    if (allowMockData) {
+      return adminJobs;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load admin jobs: ${detail}`);
+  }
+});
+
+export const getScheduleFactories = cache(async () => {
+  try {
+    const { factories } = await fetchScheduleFactories();
+    return factories;
+  } catch (error) {
+    if (allowMockData) {
+      return scheduleFactories;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load schedule factories: ${detail}`);
+  }
+});
+
+export const getScheduleEvents = cache(async (params?: {
+  name?: string;
+  limit?: number;
+}) => {
+  try {
+    const { events } = await fetchScheduleEvents(params);
+    return events;
+  } catch (error) {
+    if (allowMockData) {
+      return scheduleEvents;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load schedule events: ${detail}`);
   }
 });
 
@@ -149,11 +200,7 @@ export const getDlqEntries = cache(async (params?: {
     const { entries, total } = await fetchDlq(params);
     return { entries, total };
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return { entries: dlqEntries, total: dlqEntries.length };
     }
 

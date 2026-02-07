@@ -20,16 +20,32 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AdminService_GetHealth_FullMethodName     = "/worker.v1.AdminService/GetHealth"
-	AdminService_GetOverview_FullMethodName   = "/worker.v1.AdminService/GetOverview"
-	AdminService_ListQueues_FullMethodName    = "/worker.v1.AdminService/ListQueues"
-	AdminService_GetQueue_FullMethodName      = "/worker.v1.AdminService/GetQueue"
-	AdminService_ListSchedules_FullMethodName = "/worker.v1.AdminService/ListSchedules"
-	AdminService_ListDLQ_FullMethodName       = "/worker.v1.AdminService/ListDLQ"
-	AdminService_PauseDequeue_FullMethodName  = "/worker.v1.AdminService/PauseDequeue"
-	AdminService_ResumeDequeue_FullMethodName = "/worker.v1.AdminService/ResumeDequeue"
-	AdminService_ReplayDLQ_FullMethodName     = "/worker.v1.AdminService/ReplayDLQ"
-	AdminService_ReplayDLQByID_FullMethodName = "/worker.v1.AdminService/ReplayDLQByID"
+	AdminService_GetHealth_FullMethodName             = "/worker.v1.AdminService/GetHealth"
+	AdminService_GetOverview_FullMethodName           = "/worker.v1.AdminService/GetOverview"
+	AdminService_ListQueues_FullMethodName            = "/worker.v1.AdminService/ListQueues"
+	AdminService_GetQueue_FullMethodName              = "/worker.v1.AdminService/GetQueue"
+	AdminService_UpdateQueueWeight_FullMethodName     = "/worker.v1.AdminService/UpdateQueueWeight"
+	AdminService_ResetQueueWeight_FullMethodName      = "/worker.v1.AdminService/ResetQueueWeight"
+	AdminService_PauseQueue_FullMethodName            = "/worker.v1.AdminService/PauseQueue"
+	AdminService_ListJobs_FullMethodName              = "/worker.v1.AdminService/ListJobs"
+	AdminService_GetJob_FullMethodName                = "/worker.v1.AdminService/GetJob"
+	AdminService_UpsertJob_FullMethodName             = "/worker.v1.AdminService/UpsertJob"
+	AdminService_DeleteJob_FullMethodName             = "/worker.v1.AdminService/DeleteJob"
+	AdminService_RunJob_FullMethodName                = "/worker.v1.AdminService/RunJob"
+	AdminService_ListScheduleFactories_FullMethodName = "/worker.v1.AdminService/ListScheduleFactories"
+	AdminService_ListScheduleEvents_FullMethodName    = "/worker.v1.AdminService/ListScheduleEvents"
+	AdminService_ListSchedules_FullMethodName         = "/worker.v1.AdminService/ListSchedules"
+	AdminService_CreateSchedule_FullMethodName        = "/worker.v1.AdminService/CreateSchedule"
+	AdminService_DeleteSchedule_FullMethodName        = "/worker.v1.AdminService/DeleteSchedule"
+	AdminService_PauseSchedule_FullMethodName         = "/worker.v1.AdminService/PauseSchedule"
+	AdminService_RunSchedule_FullMethodName           = "/worker.v1.AdminService/RunSchedule"
+	AdminService_PauseSchedules_FullMethodName        = "/worker.v1.AdminService/PauseSchedules"
+	AdminService_ListDLQ_FullMethodName               = "/worker.v1.AdminService/ListDLQ"
+	AdminService_GetDLQEntry_FullMethodName           = "/worker.v1.AdminService/GetDLQEntry"
+	AdminService_PauseDequeue_FullMethodName          = "/worker.v1.AdminService/PauseDequeue"
+	AdminService_ResumeDequeue_FullMethodName         = "/worker.v1.AdminService/ResumeDequeue"
+	AdminService_ReplayDLQ_FullMethodName             = "/worker.v1.AdminService/ReplayDLQ"
+	AdminService_ReplayDLQByID_FullMethodName         = "/worker.v1.AdminService/ReplayDLQByID"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -40,8 +56,24 @@ type AdminServiceClient interface {
 	GetOverview(ctx context.Context, in *GetOverviewRequest, opts ...grpc.CallOption) (*GetOverviewResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
 	GetQueue(ctx context.Context, in *GetQueueRequest, opts ...grpc.CallOption) (*GetQueueResponse, error)
+	UpdateQueueWeight(ctx context.Context, in *UpdateQueueWeightRequest, opts ...grpc.CallOption) (*UpdateQueueWeightResponse, error)
+	ResetQueueWeight(ctx context.Context, in *ResetQueueWeightRequest, opts ...grpc.CallOption) (*ResetQueueWeightResponse, error)
+	PauseQueue(ctx context.Context, in *PauseQueueRequest, opts ...grpc.CallOption) (*PauseQueueResponse, error)
+	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
+	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
+	UpsertJob(ctx context.Context, in *UpsertJobRequest, opts ...grpc.CallOption) (*UpsertJobResponse, error)
+	DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
+	RunJob(ctx context.Context, in *RunJobRequest, opts ...grpc.CallOption) (*RunJobResponse, error)
+	ListScheduleFactories(ctx context.Context, in *ListScheduleFactoriesRequest, opts ...grpc.CallOption) (*ListScheduleFactoriesResponse, error)
+	ListScheduleEvents(ctx context.Context, in *ListScheduleEventsRequest, opts ...grpc.CallOption) (*ListScheduleEventsResponse, error)
 	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
+	CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error)
+	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
+	PauseSchedule(ctx context.Context, in *PauseScheduleRequest, opts ...grpc.CallOption) (*PauseScheduleResponse, error)
+	RunSchedule(ctx context.Context, in *RunScheduleRequest, opts ...grpc.CallOption) (*RunScheduleResponse, error)
+	PauseSchedules(ctx context.Context, in *PauseSchedulesRequest, opts ...grpc.CallOption) (*PauseSchedulesResponse, error)
 	ListDLQ(ctx context.Context, in *ListDLQRequest, opts ...grpc.CallOption) (*ListDLQResponse, error)
+	GetDLQEntry(ctx context.Context, in *GetDLQEntryRequest, opts ...grpc.CallOption) (*GetDLQEntryResponse, error)
 	PauseDequeue(ctx context.Context, in *PauseDequeueRequest, opts ...grpc.CallOption) (*PauseDequeueResponse, error)
 	ResumeDequeue(ctx context.Context, in *ResumeDequeueRequest, opts ...grpc.CallOption) (*ResumeDequeueResponse, error)
 	ReplayDLQ(ctx context.Context, in *ReplayDLQRequest, opts ...grpc.CallOption) (*ReplayDLQResponse, error)
@@ -96,6 +128,106 @@ func (c *adminServiceClient) GetQueue(ctx context.Context, in *GetQueueRequest, 
 	return out, nil
 }
 
+func (c *adminServiceClient) UpdateQueueWeight(ctx context.Context, in *UpdateQueueWeightRequest, opts ...grpc.CallOption) (*UpdateQueueWeightResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateQueueWeightResponse)
+	err := c.cc.Invoke(ctx, AdminService_UpdateQueueWeight_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ResetQueueWeight(ctx context.Context, in *ResetQueueWeightRequest, opts ...grpc.CallOption) (*ResetQueueWeightResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetQueueWeightResponse)
+	err := c.cc.Invoke(ctx, AdminService_ResetQueueWeight_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) PauseQueue(ctx context.Context, in *PauseQueueRequest, opts ...grpc.CallOption) (*PauseQueueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PauseQueueResponse)
+	err := c.cc.Invoke(ctx, AdminService_PauseQueue_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListJobsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListJobs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetJobResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) UpsertJob(ctx context.Context, in *UpsertJobRequest, opts ...grpc.CallOption) (*UpsertJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertJobResponse)
+	err := c.cc.Invoke(ctx, AdminService_UpsertJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteJobResponse)
+	err := c.cc.Invoke(ctx, AdminService_DeleteJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) RunJob(ctx context.Context, in *RunJobRequest, opts ...grpc.CallOption) (*RunJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RunJobResponse)
+	err := c.cc.Invoke(ctx, AdminService_RunJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListScheduleFactories(ctx context.Context, in *ListScheduleFactoriesRequest, opts ...grpc.CallOption) (*ListScheduleFactoriesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListScheduleFactoriesResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListScheduleFactories_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListScheduleEvents(ctx context.Context, in *ListScheduleEventsRequest, opts ...grpc.CallOption) (*ListScheduleEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListScheduleEventsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListScheduleEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListSchedulesResponse)
@@ -106,10 +238,70 @@ func (c *adminServiceClient) ListSchedules(ctx context.Context, in *ListSchedule
 	return out, nil
 }
 
+func (c *adminServiceClient) CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateScheduleResponse)
+	err := c.cc.Invoke(ctx, AdminService_CreateSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteScheduleResponse)
+	err := c.cc.Invoke(ctx, AdminService_DeleteSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) PauseSchedule(ctx context.Context, in *PauseScheduleRequest, opts ...grpc.CallOption) (*PauseScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PauseScheduleResponse)
+	err := c.cc.Invoke(ctx, AdminService_PauseSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) RunSchedule(ctx context.Context, in *RunScheduleRequest, opts ...grpc.CallOption) (*RunScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RunScheduleResponse)
+	err := c.cc.Invoke(ctx, AdminService_RunSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) PauseSchedules(ctx context.Context, in *PauseSchedulesRequest, opts ...grpc.CallOption) (*PauseSchedulesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PauseSchedulesResponse)
+	err := c.cc.Invoke(ctx, AdminService_PauseSchedules_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) ListDLQ(ctx context.Context, in *ListDLQRequest, opts ...grpc.CallOption) (*ListDLQResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListDLQResponse)
 	err := c.cc.Invoke(ctx, AdminService_ListDLQ_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) GetDLQEntry(ctx context.Context, in *GetDLQEntryRequest, opts ...grpc.CallOption) (*GetDLQEntryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDLQEntryResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetDLQEntry_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -164,8 +356,24 @@ type AdminServiceServer interface {
 	GetOverview(context.Context, *GetOverviewRequest) (*GetOverviewResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
 	GetQueue(context.Context, *GetQueueRequest) (*GetQueueResponse, error)
+	UpdateQueueWeight(context.Context, *UpdateQueueWeightRequest) (*UpdateQueueWeightResponse, error)
+	ResetQueueWeight(context.Context, *ResetQueueWeightRequest) (*ResetQueueWeightResponse, error)
+	PauseQueue(context.Context, *PauseQueueRequest) (*PauseQueueResponse, error)
+	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
+	GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error)
+	UpsertJob(context.Context, *UpsertJobRequest) (*UpsertJobResponse, error)
+	DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
+	RunJob(context.Context, *RunJobRequest) (*RunJobResponse, error)
+	ListScheduleFactories(context.Context, *ListScheduleFactoriesRequest) (*ListScheduleFactoriesResponse, error)
+	ListScheduleEvents(context.Context, *ListScheduleEventsRequest) (*ListScheduleEventsResponse, error)
 	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
+	CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error)
+	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
+	PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error)
+	RunSchedule(context.Context, *RunScheduleRequest) (*RunScheduleResponse, error)
+	PauseSchedules(context.Context, *PauseSchedulesRequest) (*PauseSchedulesResponse, error)
 	ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error)
+	GetDLQEntry(context.Context, *GetDLQEntryRequest) (*GetDLQEntryResponse, error)
 	PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error)
 	ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error)
 	ReplayDLQ(context.Context, *ReplayDLQRequest) (*ReplayDLQResponse, error)
@@ -195,12 +403,76 @@ func (UnimplementedAdminServiceServer) GetQueue(context.Context, *GetQueueReques
 	return nil, status.Error(codes.Unimplemented, "method GetQueue not implemented")
 }
 
+func (UnimplementedAdminServiceServer) UpdateQueueWeight(context.Context, *UpdateQueueWeightRequest) (*UpdateQueueWeightResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateQueueWeight not implemented")
+}
+
+func (UnimplementedAdminServiceServer) ResetQueueWeight(context.Context, *ResetQueueWeightRequest) (*ResetQueueWeightResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetQueueWeight not implemented")
+}
+
+func (UnimplementedAdminServiceServer) PauseQueue(context.Context, *PauseQueueRequest) (*PauseQueueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseQueue not implemented")
+}
+
+func (UnimplementedAdminServiceServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListJobs not implemented")
+}
+
+func (UnimplementedAdminServiceServer) GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetJob not implemented")
+}
+
+func (UnimplementedAdminServiceServer) UpsertJob(context.Context, *UpsertJobRequest) (*UpsertJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertJob not implemented")
+}
+
+func (UnimplementedAdminServiceServer) DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteJob not implemented")
+}
+
+func (UnimplementedAdminServiceServer) RunJob(context.Context, *RunJobRequest) (*RunJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RunJob not implemented")
+}
+
+func (UnimplementedAdminServiceServer) ListScheduleFactories(context.Context, *ListScheduleFactoriesRequest) (*ListScheduleFactoriesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListScheduleFactories not implemented")
+}
+
+func (UnimplementedAdminServiceServer) ListScheduleEvents(context.Context, *ListScheduleEventsRequest) (*ListScheduleEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListScheduleEvents not implemented")
+}
+
 func (UnimplementedAdminServiceServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSchedules not implemented")
 }
 
+func (UnimplementedAdminServiceServer) CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSchedule not implemented")
+}
+
+func (UnimplementedAdminServiceServer) DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteSchedule not implemented")
+}
+
+func (UnimplementedAdminServiceServer) PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseSchedule not implemented")
+}
+
+func (UnimplementedAdminServiceServer) RunSchedule(context.Context, *RunScheduleRequest) (*RunScheduleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RunSchedule not implemented")
+}
+
+func (UnimplementedAdminServiceServer) PauseSchedules(context.Context, *PauseSchedulesRequest) (*PauseSchedulesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseSchedules not implemented")
+}
+
 func (UnimplementedAdminServiceServer) ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDLQ not implemented")
+}
+
+func (UnimplementedAdminServiceServer) GetDLQEntry(context.Context, *GetDLQEntryRequest) (*GetDLQEntryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDLQEntry not implemented")
 }
 
 func (UnimplementedAdminServiceServer) PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error) {
@@ -310,6 +582,186 @@ func _AdminService_GetQueue_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_UpdateQueueWeight_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateQueueWeightRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).UpdateQueueWeight(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_UpdateQueueWeight_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).UpdateQueueWeight(ctx, req.(*UpdateQueueWeightRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ResetQueueWeight_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetQueueWeightRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ResetQueueWeight(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ResetQueueWeight_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ResetQueueWeight(ctx, req.(*ResetQueueWeightRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_PauseQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).PauseQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_PauseQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).PauseQueue(ctx, req.(*PauseQueueRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListJobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJobsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListJobs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListJobs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListJobs(ctx, req.(*ListJobsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_GetJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetJob(ctx, req.(*GetJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_UpsertJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).UpsertJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_UpsertJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).UpsertJob(ctx, req.(*UpsertJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_DeleteJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).DeleteJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_DeleteJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).DeleteJob(ctx, req.(*DeleteJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_RunJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RunJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_RunJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RunJob(ctx, req.(*RunJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListScheduleFactories_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListScheduleFactoriesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListScheduleFactories(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListScheduleFactories_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListScheduleFactories(ctx, req.(*ListScheduleFactoriesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListScheduleEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListScheduleEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListScheduleEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListScheduleEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListScheduleEvents(ctx, req.(*ListScheduleEventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_ListSchedules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListSchedulesRequest)
 	if err := dec(in); err != nil {
@@ -328,6 +780,96 @@ func _AdminService_ListSchedules_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_CreateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).CreateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_CreateSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).CreateSchedule(ctx, req.(*CreateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_DeleteSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).DeleteSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_DeleteSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).DeleteSchedule(ctx, req.(*DeleteScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_PauseSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).PauseSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_PauseSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).PauseSchedule(ctx, req.(*PauseScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_RunSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RunSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_RunSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RunSchedule(ctx, req.(*RunScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_PauseSchedules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseSchedulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).PauseSchedules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_PauseSchedules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).PauseSchedules(ctx, req.(*PauseSchedulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_ListDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListDLQRequest)
 	if err := dec(in); err != nil {
@@ -342,6 +884,24 @@ func _AdminService_ListDLQ_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).ListDLQ(ctx, req.(*ListDLQRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_GetDLQEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDLQEntryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetDLQEntry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetDLQEntry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetDLQEntry(ctx, req.(*GetDLQEntryRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -442,12 +1002,76 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_GetQueue_Handler,
 		},
 		{
+			MethodName: "UpdateQueueWeight",
+			Handler:    _AdminService_UpdateQueueWeight_Handler,
+		},
+		{
+			MethodName: "ResetQueueWeight",
+			Handler:    _AdminService_ResetQueueWeight_Handler,
+		},
+		{
+			MethodName: "PauseQueue",
+			Handler:    _AdminService_PauseQueue_Handler,
+		},
+		{
+			MethodName: "ListJobs",
+			Handler:    _AdminService_ListJobs_Handler,
+		},
+		{
+			MethodName: "GetJob",
+			Handler:    _AdminService_GetJob_Handler,
+		},
+		{
+			MethodName: "UpsertJob",
+			Handler:    _AdminService_UpsertJob_Handler,
+		},
+		{
+			MethodName: "DeleteJob",
+			Handler:    _AdminService_DeleteJob_Handler,
+		},
+		{
+			MethodName: "RunJob",
+			Handler:    _AdminService_RunJob_Handler,
+		},
+		{
+			MethodName: "ListScheduleFactories",
+			Handler:    _AdminService_ListScheduleFactories_Handler,
+		},
+		{
+			MethodName: "ListScheduleEvents",
+			Handler:    _AdminService_ListScheduleEvents_Handler,
+		},
+		{
 			MethodName: "ListSchedules",
 			Handler:    _AdminService_ListSchedules_Handler,
 		},
 		{
+			MethodName: "CreateSchedule",
+			Handler:    _AdminService_CreateSchedule_Handler,
+		},
+		{
+			MethodName: "DeleteSchedule",
+			Handler:    _AdminService_DeleteSchedule_Handler,
+		},
+		{
+			MethodName: "PauseSchedule",
+			Handler:    _AdminService_PauseSchedule_Handler,
+		},
+		{
+			MethodName: "RunSchedule",
+			Handler:    _AdminService_RunSchedule_Handler,
+		},
+		{
+			MethodName: "PauseSchedules",
+			Handler:    _AdminService_PauseSchedules_Handler,
+		},
+		{
 			MethodName: "ListDLQ",
 			Handler:    _AdminService_ListDLQ_Handler,
+		},
+		{
+			MethodName: "GetDLQEntry",
+			Handler:    _AdminService_GetDLQEntry_Handler,
 		},
 		{
 			MethodName: "PauseDequeue",

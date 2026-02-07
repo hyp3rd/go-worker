@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hyp3rd/ewrap"
 	"github.com/robfig/cron/v3"
 )
@@ -21,7 +22,20 @@ type CronDurableFactory func(ctx context.Context) (DurableTask, error)
 type cronSpec struct {
 	Spec    string
 	Durable bool
+	Paused  bool
 }
+
+type cronFactory struct {
+	Durable        bool
+	TaskFactory    CronTaskFactory
+	DurableFactory CronDurableFactory
+	Origin         string
+}
+
+const (
+	cronFactoryOriginUser = "user"
+	cronFactoryOriginJob  = "job"
+)
 
 // RegisterCronTask registers a cron job that enqueues a task on each tick.
 func (tm *TaskManager) RegisterCronTask(
@@ -46,29 +60,13 @@ func (tm *TaskManager) RegisterCronTask(
 		return ewrap.New("cron task already registered")
 	}
 
-	entryID := tm.cron.Schedule(schedule, cron.FuncJob(func() {
-		if tm.skipCronTick() {
-			return
-		}
+	tm.cronFactories[normalized] = cronFactory{
+		Durable:     false,
+		TaskFactory: factory,
+		Origin:      cronFactoryOriginUser,
+	}
 
-		task, err := factory(tm.ctx)
-		if err != nil {
-			cronLogError("cron task factory", normalized, err)
-
-			return
-		}
-
-		if task == nil {
-			cronLogError("cron task factory", normalized, ewrap.New("cron task is nil"))
-
-			return
-		}
-
-		err = tm.RegisterTask(tm.ctx, task)
-		if err != nil {
-			cronLogError("cron register task", normalized, err)
-		}
-	}))
+	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
 
 	tm.cronEntries[normalized] = entryID
 	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: false}
@@ -99,28 +97,129 @@ func (tm *TaskManager) RegisterDurableCronTask(
 		return ewrap.New("cron task already registered")
 	}
 
-	entryID := tm.cron.Schedule(schedule, cron.FuncJob(func() {
-		if tm.skipCronTick() {
-			return
-		}
+	tm.cronFactories[normalized] = cronFactory{
+		Durable:        true,
+		DurableFactory: factory,
+		Origin:         cronFactoryOriginUser,
+	}
 
-		task, err := factory(tm.ctx)
-		if err != nil {
-			cronLogError("cron durable task factory", normalized, err)
-
-			return
-		}
-
-		err = tm.RegisterDurableTask(tm.ctx, task)
-		if err != nil {
-			cronLogError("cron register durable task", normalized, err)
-		}
-	}))
+	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
 
 	tm.cronEntries[normalized] = entryID
 	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: true}
 
 	return nil
+}
+
+func (tm *TaskManager) cronJob(name string) func() {
+	return func() {
+		if tm.skipCronTick() {
+			return
+		}
+
+		spec, factory, ok := tm.cronSpecAndFactory(name)
+		if !ok {
+			return
+		}
+
+		if factory.Durable {
+			tm.runDurableCron(name, spec, factory)
+
+			return
+		}
+
+		tm.runInMemoryCron(name, spec, factory)
+	}
+}
+
+func (tm *TaskManager) cronSpecAndFactory(name string) (cronSpec, cronFactory, bool) {
+	tm.cronMu.RLock()
+	spec, specOk := tm.cronSpecs[name]
+	factory, factoryOk := tm.cronFactories[name]
+	tm.cronMu.RUnlock()
+
+	if !specOk || !factoryOk || spec.Paused {
+		return cronSpec{}, cronFactory{}, false
+	}
+
+	return spec, factory, true
+}
+
+func (tm *TaskManager) runDurableCron(name string, spec cronSpec, factory cronFactory) {
+	task, err := factory.DurableFactory(tm.ctx)
+	if err != nil {
+		cronLogError("cron durable task factory", name, err)
+
+		return
+	}
+
+	if task.ID == uuid.Nil {
+		task.ID = uuid.New()
+	}
+
+	ensureCronMetadata(&task, name, spec, tm.defaultQueue)
+
+	queueName := task.Queue
+	if queueName == "" {
+		queueName = tm.defaultQueue
+	}
+
+	metadata := copyStringMap(task.Metadata)
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+
+	if task.Handler != "" {
+		if _, ok := metadata["handler"]; !ok {
+			metadata["handler"] = task.Handler
+		}
+	}
+
+	runInfo := cronRunInfo{
+		id:         task.ID,
+		name:       name,
+		spec:       spec.Spec,
+		durable:    true,
+		queue:      queueName,
+		enqueuedAt: time.Now(),
+		metadata:   metadata,
+	}
+
+	tm.noteCronRun(runInfo)
+
+	err = tm.RegisterDurableTask(tm.ctx, task)
+	if err != nil {
+		tm.dropCronRun(task.ID)
+		cronLogError("cron register durable task", name, err)
+	}
+}
+
+func (tm *TaskManager) runInMemoryCron(name string, spec cronSpec, factory cronFactory) {
+	task, err := factory.TaskFactory(tm.ctx)
+	if err != nil {
+		cronLogError("cron task factory", name, err)
+
+		return
+	}
+
+	if task == nil {
+		cronLogError("cron task factory", name, ewrap.New("cron task is nil"))
+
+		return
+	}
+
+	if task.ID == uuid.Nil {
+		task.ID = uuid.New()
+	}
+
+	runInfo := cronRunInfoFromTask(name, spec, task, tm.defaultQueue)
+	tm.noteCronRun(runInfo)
+
+	err = tm.RegisterTask(tm.ctx, task)
+	if err != nil {
+		tm.dropCronRun(task.ID)
+		cronLogError("cron register task", name, err)
+	}
 }
 
 func (tm *TaskManager) prepareCronRegistration(

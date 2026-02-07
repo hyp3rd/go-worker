@@ -4,6 +4,7 @@ export type QueueSummary = {
   processing: number;
   dead: number;
   weight: number;
+  paused: boolean;
 };
 
 export type QueueDetail = QueueSummary;
@@ -13,7 +14,47 @@ export type JobSchedule = {
   schedule: string;
   nextRun: string;
   lastRun: string;
+  nextRunMs?: number;
+  lastRunMs?: number;
   status: "healthy" | "lagging" | "paused";
+  paused: boolean;
+  durable: boolean;
+};
+
+export type ScheduleFactory = {
+  name: string;
+  durable: boolean;
+};
+
+export type ScheduleEvent = {
+  taskId: string;
+  name: string;
+  spec: string;
+  durable: boolean;
+  status: string;
+  queue: string;
+  startedAtMs?: number;
+  finishedAtMs?: number;
+  durationMs?: number;
+  result?: string;
+  error?: string;
+  metadata?: Record<string, string>;
+};
+
+export type AdminJob = {
+  name: string;
+  description?: string;
+  repo: string;
+  tag: string;
+  path?: string;
+  dockerfile?: string;
+  command?: string[];
+  env?: string[];
+  queue?: string;
+  retries?: number;
+  timeoutSeconds?: number;
+  createdAtMs?: number;
+  updatedAtMs?: number;
 };
 
 export type OverviewStats = {
@@ -24,12 +65,31 @@ export type OverviewStats = {
   p95LatencyMs: number;
 };
 
+export type AdminActionCounters = {
+  pause: number;
+  resume: number;
+  replay: number;
+};
+
 export type DlqEntry = {
   id: string;
   queue: string;
   handler: string;
   age: string;
   attempts: number;
+};
+
+export type DlqEntryDetail = {
+  id: string;
+  queue: string;
+  handler: string;
+  attempts: number;
+  ageMs: number;
+  failedAtMs: number;
+  updatedAtMs: number;
+  lastError: string;
+  payloadSize: number;
+  metadata?: Record<string, string>;
 };
 
 export type CoordinationStatus = {

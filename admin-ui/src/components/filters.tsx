@@ -35,8 +35,8 @@ export function FilterBar({
   }, [onStatus, status]);
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-soft bg-[var(--card)] p-4 md:flex-row md:items-center md:justify-between">
-      <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center">
+    <div className="flex flex-col gap-3 rounded-2xl border border-soft bg-[var(--card)] p-4 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-end">
         <div className="flex-1">
           <label className="text-xs uppercase tracking-[0.2em] text-muted">
             Search
@@ -67,7 +67,9 @@ export function FilterBar({
           </div>
         ) : null}
       </div>
-      {rightSlot ? <div>{rightSlot}</div> : null}
+      {rightSlot ? (
+        <div className="md:self-end md:pt-6">{rightSlot}</div>
+      ) : null}
     </div>
   );
 }
