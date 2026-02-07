@@ -313,6 +313,24 @@ func (*RedisDurableBackend) AdminPauseSchedule(ctx context.Context, _ string, _ 
 	return AdminSchedule{}, ErrAdminUnsupported
 }
 
+// AdminPauseSchedules is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminPauseSchedules(ctx context.Context, _ bool) (int, error) {
+	if ctx == nil {
+		return 0, ErrInvalidTaskContext
+	}
+
+	return 0, ErrAdminUnsupported
+}
+
+// AdminRunSchedule is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminRunSchedule(ctx context.Context, _ string) (string, error) {
+	if ctx == nil {
+		return "", ErrInvalidTaskContext
+	}
+
+	return "", ErrAdminUnsupported
+}
+
 // AdminDLQ returns entries from the dead letter queue.
 func (b *RedisDurableBackend) AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error) {
 	if ctx == nil {

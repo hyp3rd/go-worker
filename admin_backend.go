@@ -164,6 +164,8 @@ type adminSchedules interface {
 	AdminSchedules(ctx context.Context) ([]AdminSchedule, error)
 	AdminScheduleFactories(ctx context.Context) ([]AdminScheduleFactory, error)
 	AdminScheduleEvents(ctx context.Context, filter AdminScheduleEventFilter) (AdminScheduleEventPage, error)
+	AdminPauseSchedules(ctx context.Context, paused bool) (int, error)
+	AdminRunSchedule(ctx context.Context, name string) (string, error)
 	AdminCreateSchedule(ctx context.Context, spec AdminScheduleSpec) (AdminSchedule, error)
 	AdminDeleteSchedule(ctx context.Context, name string) (bool, error)
 	AdminPauseSchedule(ctx context.Context, name string, paused bool) (AdminSchedule, error)

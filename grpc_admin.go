@@ -372,6 +372,52 @@ func (s *GRPCServer) PauseSchedule(ctx context.Context, req *workerpb.PauseSched
 	return &workerpb.PauseScheduleResponse{Schedule: scheduleToProto(schedule)}, nil
 }
 
+// PauseSchedules pauses or resumes all cron schedules.
+func (s *GRPCServer) PauseSchedules(
+	ctx context.Context,
+	req *workerpb.PauseSchedulesRequest,
+) (*workerpb.PauseSchedulesResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_PauseSchedules_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	updated, err := backend.AdminPauseSchedules(ctx, req.GetPaused())
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.PauseSchedulesResponse{
+		Updated: clampInt32(updated),
+		Paused:  req.GetPaused(),
+	}, nil
+}
+
+// RunSchedule triggers a cron schedule immediately.
+func (s *GRPCServer) RunSchedule(ctx context.Context, req *workerpb.RunScheduleRequest) (*workerpb.RunScheduleResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_RunSchedule_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	taskID, err := backend.AdminRunSchedule(ctx, req.GetName())
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.RunScheduleResponse{TaskId: taskID}, nil
+}
+
 // ListDLQ returns DLQ entries.
 func (s *GRPCServer) ListDLQ(ctx context.Context, req *workerpb.ListDLQRequest) (*workerpb.ListDLQResponse, error) {
 	err := s.authorize(ctx, workerpb.AdminService_ListDLQ_FullMethodName, req)

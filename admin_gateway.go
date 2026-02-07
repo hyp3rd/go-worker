@@ -37,6 +37,9 @@ const (
 	adminMaxInt32         = 2147483647
 	adminErrMethodBlocked = "method_not_allowed"
 	adminErrMethodMessage = "Method not allowed"
+	adminErrInvalidJSON   = "invalid_json"
+	adminErrReadBodyMsg   = "failed to read request body"
+	adminErrParseBodyMsg  = "failed to parse request body"
 	adminErrInvalidBody   = "invalid_body"
 	adminRequestTimeout   = 5 * time.Second
 	adminRequestIDHeader  = "X-Request-Id"
@@ -158,6 +161,7 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	mux.HandleFunc("/admin/v1/schedules", handler.handleSchedules)
 	mux.HandleFunc("/admin/v1/schedules/factories", handler.handleScheduleFactories)
 	mux.HandleFunc("/admin/v1/schedules/events", handler.handleScheduleEvents)
+	mux.HandleFunc("/admin/v1/schedules/pause", handler.handleSchedulesPause)
 	mux.HandleFunc("/admin/v1/schedules/", handler.handleSchedule)
 	mux.HandleFunc("/admin/v1/dlq", handler.handleDLQ)
 	mux.HandleFunc("/admin/v1/pause", handler.handlePause)
@@ -393,7 +397,7 @@ func (h *adminGatewayHandler) handleQueueWeightUpdate(w http.ResponseWriter, r *
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, "failed to read request body", reqID)
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
 
 		return
 	}
@@ -402,7 +406,7 @@ func (h *adminGatewayHandler) handleQueueWeightUpdate(w http.ResponseWriter, r *
 
 	err = json.Unmarshal(body, &payload)
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, "invalid_json", "failed to parse request body", reqID)
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
 
 		return
 	}
@@ -721,7 +725,7 @@ func (h *adminGatewayHandler) handleScheduleCreate(w http.ResponseWriter, r *htt
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, "failed to read request body", reqID)
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
 
 		return
 	}
@@ -730,7 +734,7 @@ func (h *adminGatewayHandler) handleScheduleCreate(w http.ResponseWriter, r *htt
 
 	err = json.Unmarshal(body, &payload)
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, "invalid_json", "failed to parse request body", reqID)
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
 
 		return
 	}
@@ -756,6 +760,50 @@ func (h *adminGatewayHandler) handleScheduleCreate(w http.ResponseWriter, r *htt
 	})
 }
 
+func (h *adminGatewayHandler) handleSchedulesPause(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	payload := adminSchedulePauseRequest{Paused: true}
+	if len(body) > 0 {
+		err := json.Unmarshal(body, &payload)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.PauseSchedules(ctx, &workerpb.PauseSchedulesRequest{Paused: payload.Paused})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminSchedulesPauseResponse{
+		Updated: resp.GetUpdated(),
+		Paused:  resp.GetPaused(),
+	})
+}
+
 func (h *adminGatewayHandler) handleSchedule(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/admin/v1/schedules/")
 
@@ -769,6 +817,13 @@ func (h *adminGatewayHandler) handleSchedule(w http.ResponseWriter, r *http.Requ
 	if before, ok := strings.CutSuffix(path, "/pause"); ok {
 		name := before
 		h.handleSchedulePause(w, r, strings.TrimSuffix(name, adminPathSeparator))
+
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/run"); ok {
+		name := before
+		h.handleScheduleRun(w, r, strings.TrimSuffix(name, adminPathSeparator))
 
 		return
 	}
@@ -825,7 +880,7 @@ func (h *adminGatewayHandler) handleSchedulePause(w http.ResponseWriter, r *http
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
 	if err != nil {
-		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, "failed to read request body", reqID)
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
 
 		return
 	}
@@ -834,7 +889,7 @@ func (h *adminGatewayHandler) handleSchedulePause(w http.ResponseWriter, r *http
 	if len(body) > 0 {
 		err := json.Unmarshal(body, &payload)
 		if err != nil {
-			writeAdminError(w, http.StatusBadRequest, "invalid_json", "failed to parse request body", reqID)
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
 
 			return
 		}
@@ -858,6 +913,37 @@ func (h *adminGatewayHandler) handleSchedulePause(w http.ResponseWriter, r *http
 	writeAdminJSON(w, http.StatusOK, adminSchedulePauseResponse{
 		Schedule: scheduleFromProto(resp.GetSchedule()),
 	})
+}
+
+func (h *adminGatewayHandler) handleScheduleRun(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+
+	decoded, err := url.PathUnescape(strings.TrimSpace(name))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_name", "invalid schedule name", reqID)
+
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.RunSchedule(ctx, &workerpb.RunScheduleRequest{Name: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminScheduleRunResponse{TaskID: resp.GetTaskId()})
 }
 
 type adminOverviewJSON struct {
@@ -959,6 +1045,15 @@ type adminSchedulePauseRequest struct {
 
 type adminSchedulePauseResponse struct {
 	Schedule scheduleJSON `json:"schedule"`
+}
+
+type adminSchedulesPauseResponse struct {
+	Updated int32 `json:"updated"`
+	Paused  bool  `json:"paused"`
+}
+
+type adminScheduleRunResponse struct {
+	TaskID string `json:"taskId"`
 }
 
 type adminScheduleDeleteResponse struct {

@@ -159,6 +159,23 @@ message PauseScheduleResponse {
   ScheduleEntry schedule = 1;
 }
 
+message RunScheduleRequest {
+  string name = 1;
+}
+
+message RunScheduleResponse {
+  string task_id = 1;
+}
+
+message PauseSchedulesRequest {
+  bool paused = 1;
+}
+
+message PauseSchedulesResponse {
+  int32 updated = 1;
+  bool paused = 2;
+}
+
 message DLQEntry {
   string id = 1;
   string queue = 2;
@@ -221,6 +238,8 @@ service AdminService {
   rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
   rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
   rpc PauseSchedule(PauseScheduleRequest) returns (PauseScheduleResponse);
+  rpc RunSchedule(RunScheduleRequest) returns (RunScheduleResponse);
+  rpc PauseSchedules(PauseSchedulesRequest) returns (PauseSchedulesResponse);
   rpc ListDLQ(ListDLQRequest) returns (ListDLQResponse);
   rpc PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse);
   rpc ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse);

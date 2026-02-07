@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/hyp3rd/ewrap"
 	"github.com/robfig/cron/v3"
 )
 
@@ -212,6 +214,158 @@ func (tm *TaskManager) AdminScheduleEvents(
 	}
 
 	return AdminScheduleEventPage{Events: filtered}, nil
+}
+
+// AdminPauseSchedules pauses or resumes all cron schedules.
+func (tm *TaskManager) AdminPauseSchedules(ctx context.Context, paused bool) (int, error) {
+	if tm == nil {
+		return 0, ErrAdminBackendUnavailable
+	}
+
+	if ctx == nil {
+		return 0, ErrInvalidTaskContext
+	}
+
+	tm.cronMu.Lock()
+	defer tm.cronMu.Unlock()
+
+	if tm.cron == nil {
+		return 0, ErrAdminBackendUnavailable
+	}
+
+	updated := 0
+
+	for name, spec := range tm.cronSpecs {
+		if spec.Paused == paused {
+			continue
+		}
+
+		spec.Paused = paused
+		tm.cronSpecs[name] = spec
+		updated++
+	}
+
+	return updated, nil
+}
+
+// AdminRunSchedule triggers a cron schedule immediately.
+func (tm *TaskManager) AdminRunSchedule(ctx context.Context, name string) (string, error) {
+	if tm == nil {
+		return "", ErrAdminBackendUnavailable
+	}
+
+	if ctx == nil {
+		return "", ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ErrAdminScheduleNameRequired
+	}
+
+	tm.cronMu.RLock()
+	spec, specOk := tm.cronSpecs[name]
+	factory, factoryOk := tm.cronFactories[name]
+	tm.cronMu.RUnlock()
+
+	if !specOk {
+		return "", ErrAdminScheduleNotFound
+	}
+
+	if !factoryOk {
+		return "", ErrAdminScheduleFactoryMissing
+	}
+
+	if factory.Durable != spec.Durable {
+		return "", ErrAdminScheduleDurableMismatch
+	}
+
+	return tm.adminRunCron(name, spec, factory)
+}
+
+func (tm *TaskManager) adminRunCron(name string, spec cronSpec, factory cronFactory) (string, error) {
+	if factory.Durable {
+		return tm.adminRunDurableCron(name, spec, factory)
+	}
+
+	return tm.adminRunInMemoryCron(name, spec, factory)
+}
+
+func (tm *TaskManager) adminRunDurableCron(name string, spec cronSpec, factory cronFactory) (string, error) {
+	task, err := factory.DurableFactory(tm.ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if task.ID == uuid.Nil {
+		task.ID = uuid.New()
+	}
+
+	ensureCronMetadata(&task, name, spec, tm.defaultQueue)
+
+	queueName := task.Queue
+	if queueName == "" {
+		queueName = tm.defaultQueue
+	}
+
+	metadata := copyStringMap(task.Metadata)
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+
+	if task.Handler != "" {
+		if _, ok := metadata["handler"]; !ok {
+			metadata["handler"] = task.Handler
+		}
+	}
+
+	runInfo := cronRunInfo{
+		id:         task.ID,
+		name:       name,
+		spec:       spec.Spec,
+		durable:    true,
+		queue:      queueName,
+		enqueuedAt: time.Now(),
+		metadata:   metadata,
+	}
+
+	tm.noteCronRun(runInfo)
+
+	err = tm.RegisterDurableTask(tm.ctx, task)
+	if err != nil {
+		tm.dropCronRun(task.ID)
+
+		return "", err
+	}
+
+	return task.ID.String(), nil
+}
+
+func (tm *TaskManager) adminRunInMemoryCron(name string, spec cronSpec, factory cronFactory) (string, error) {
+	task, err := factory.TaskFactory(tm.ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if task == nil {
+		return "", ewrap.New("cron task is nil")
+	}
+
+	if task.ID == uuid.Nil {
+		task.ID = uuid.New()
+	}
+
+	runInfo := cronRunInfoFromTask(name, spec, task, tm.defaultQueue)
+	tm.noteCronRun(runInfo)
+
+	err = tm.RegisterTask(tm.ctx, task)
+	if err != nil {
+		tm.dropCronRun(task.ID)
+
+		return "", err
+	}
+
+	return task.ID.String(), nil
 }
 
 // AdminCreateSchedule creates or updates a cron schedule by name.

@@ -32,6 +32,8 @@ const (
 	AdminService_CreateSchedule_FullMethodName        = "/worker.v1.AdminService/CreateSchedule"
 	AdminService_DeleteSchedule_FullMethodName        = "/worker.v1.AdminService/DeleteSchedule"
 	AdminService_PauseSchedule_FullMethodName         = "/worker.v1.AdminService/PauseSchedule"
+	AdminService_RunSchedule_FullMethodName           = "/worker.v1.AdminService/RunSchedule"
+	AdminService_PauseSchedules_FullMethodName        = "/worker.v1.AdminService/PauseSchedules"
 	AdminService_ListDLQ_FullMethodName               = "/worker.v1.AdminService/ListDLQ"
 	AdminService_PauseDequeue_FullMethodName          = "/worker.v1.AdminService/PauseDequeue"
 	AdminService_ResumeDequeue_FullMethodName         = "/worker.v1.AdminService/ResumeDequeue"
@@ -55,6 +57,8 @@ type AdminServiceClient interface {
 	CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error)
 	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
 	PauseSchedule(ctx context.Context, in *PauseScheduleRequest, opts ...grpc.CallOption) (*PauseScheduleResponse, error)
+	RunSchedule(ctx context.Context, in *RunScheduleRequest, opts ...grpc.CallOption) (*RunScheduleResponse, error)
+	PauseSchedules(ctx context.Context, in *PauseSchedulesRequest, opts ...grpc.CallOption) (*PauseSchedulesResponse, error)
 	ListDLQ(ctx context.Context, in *ListDLQRequest, opts ...grpc.CallOption) (*ListDLQResponse, error)
 	PauseDequeue(ctx context.Context, in *PauseDequeueRequest, opts ...grpc.CallOption) (*PauseDequeueResponse, error)
 	ResumeDequeue(ctx context.Context, in *ResumeDequeueRequest, opts ...grpc.CallOption) (*ResumeDequeueResponse, error)
@@ -190,6 +194,26 @@ func (c *adminServiceClient) PauseSchedule(ctx context.Context, in *PauseSchedul
 	return out, nil
 }
 
+func (c *adminServiceClient) RunSchedule(ctx context.Context, in *RunScheduleRequest, opts ...grpc.CallOption) (*RunScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RunScheduleResponse)
+	err := c.cc.Invoke(ctx, AdminService_RunSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) PauseSchedules(ctx context.Context, in *PauseSchedulesRequest, opts ...grpc.CallOption) (*PauseSchedulesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PauseSchedulesResponse)
+	err := c.cc.Invoke(ctx, AdminService_PauseSchedules_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) ListDLQ(ctx context.Context, in *ListDLQRequest, opts ...grpc.CallOption) (*ListDLQResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListDLQResponse)
@@ -256,6 +280,8 @@ type AdminServiceServer interface {
 	CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error)
 	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
 	PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error)
+	RunSchedule(context.Context, *RunScheduleRequest) (*RunScheduleResponse, error)
+	PauseSchedules(context.Context, *PauseSchedulesRequest) (*PauseSchedulesResponse, error)
 	ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error)
 	PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error)
 	ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error)
@@ -316,6 +342,14 @@ func (UnimplementedAdminServiceServer) DeleteSchedule(context.Context, *DeleteSc
 
 func (UnimplementedAdminServiceServer) PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseSchedule not implemented")
+}
+
+func (UnimplementedAdminServiceServer) RunSchedule(context.Context, *RunScheduleRequest) (*RunScheduleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RunSchedule not implemented")
+}
+
+func (UnimplementedAdminServiceServer) PauseSchedules(context.Context, *PauseSchedulesRequest) (*PauseSchedulesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseSchedules not implemented")
 }
 
 func (UnimplementedAdminServiceServer) ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error) {
@@ -573,6 +607,42 @@ func _AdminService_PauseSchedule_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_RunSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RunSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_RunSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RunSchedule(ctx, req.(*RunScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_PauseSchedules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseSchedulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).PauseSchedules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_PauseSchedules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).PauseSchedules(ctx, req.(*PauseSchedulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_ListDLQ_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListDLQRequest)
 	if err := dec(in); err != nil {
@@ -717,6 +787,14 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PauseSchedule",
 			Handler:    _AdminService_PauseSchedule_Handler,
+		},
+		{
+			MethodName: "RunSchedule",
+			Handler:    _AdminService_RunSchedule_Handler,
+		},
+		{
+			MethodName: "PauseSchedules",
+			Handler:    _AdminService_PauseSchedules_Handler,
 		},
 		{
 			MethodName: "ListDLQ",
