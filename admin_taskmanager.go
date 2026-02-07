@@ -67,6 +67,26 @@ func (tm *TaskManager) AdminQueue(ctx context.Context, name string) (AdminQueueS
 	return backend.AdminQueue(ctx, name)
 }
 
+// AdminSetQueueWeight updates queue weight and returns the updated summary.
+func (tm *TaskManager) AdminSetQueueWeight(ctx context.Context, name string, weight int) (AdminQueueSummary, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	return backend.AdminSetQueueWeight(ctx, name, weight)
+}
+
+// AdminResetQueueWeight resets a queue weight to default.
+func (tm *TaskManager) AdminResetQueueWeight(ctx context.Context, name string) (AdminQueueSummary, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	return backend.AdminResetQueueWeight(ctx, name)
+}
+
 // AdminSchedules lists cron schedules.
 func (tm *TaskManager) AdminSchedules(ctx context.Context) ([]AdminSchedule, error) {
 	if tm == nil {
@@ -118,6 +138,80 @@ func (tm *TaskManager) AdminSchedules(ctx context.Context) ([]AdminSchedule, err
 	})
 
 	return results, nil
+}
+
+// AdminScheduleFactories lists registered schedule factories.
+func (tm *TaskManager) AdminScheduleFactories(ctx context.Context) ([]AdminScheduleFactory, error) {
+	if tm == nil {
+		return nil, ErrAdminBackendUnavailable
+	}
+
+	if ctx == nil {
+		return nil, ErrInvalidTaskContext
+	}
+
+	tm.cronMu.RLock()
+	defer tm.cronMu.RUnlock()
+
+	if tm.cron == nil {
+		return []AdminScheduleFactory{}, nil
+	}
+
+	factories := make([]AdminScheduleFactory, 0, len(tm.cronFactories))
+	for name, factory := range tm.cronFactories {
+		factories = append(factories, AdminScheduleFactory{
+			Name:    name,
+			Durable: factory.Durable,
+		})
+	}
+
+	sort.Slice(factories, func(i, j int) bool {
+		return factories[i].Name < factories[j].Name
+	})
+
+	return factories, nil
+}
+
+// AdminScheduleEvents returns recent cron schedule execution events.
+func (tm *TaskManager) AdminScheduleEvents(
+	ctx context.Context,
+	filter AdminScheduleEventFilter,
+) (AdminScheduleEventPage, error) {
+	if tm == nil {
+		return AdminScheduleEventPage{}, ErrAdminBackendUnavailable
+	}
+
+	if ctx == nil {
+		return AdminScheduleEventPage{}, ErrInvalidTaskContext
+	}
+
+	name := strings.TrimSpace(filter.Name)
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = defaultAdminScheduleEventLimit
+	}
+
+	if tm.cronEventLimit > 0 && limit > tm.cronEventLimit {
+		limit = tm.cronEventLimit
+	}
+
+	tm.cronEventsMu.RLock()
+	events := make([]AdminScheduleEvent, len(tm.cronEvents))
+	copy(events, tm.cronEvents)
+	tm.cronEventsMu.RUnlock()
+
+	filtered := make([]AdminScheduleEvent, 0, min(limit, len(events)))
+	for i := len(events) - 1; i >= 0 && len(filtered) < limit; i-- {
+		event := events[i]
+		if name != "" && event.Name != name {
+			continue
+		}
+
+		filtered = append(filtered, event)
+	}
+
+	return AdminScheduleEventPage{Events: filtered}, nil
 }
 
 // AdminCreateSchedule creates or updates a cron schedule by name.

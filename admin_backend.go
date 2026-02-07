@@ -16,6 +16,8 @@ var (
 	ErrAdminQueueNotFound = ewrap.New("admin queue not found")
 	// ErrAdminQueueNameRequired indicates a queue name is required.
 	ErrAdminQueueNameRequired = ewrap.New("admin queue name is required")
+	// ErrAdminQueueWeightInvalid indicates a queue weight is invalid.
+	ErrAdminQueueWeightInvalid = ewrap.New("admin queue weight is invalid")
 	// ErrAdminDLQFilterTooLarge indicates the DLQ is too large for filtered queries.
 	ErrAdminDLQFilterTooLarge = ewrap.New("DLQ too large for filtered query")
 	// ErrAdminReplayIDsRequired indicates replay-by-id requires at least one id.
@@ -81,6 +83,39 @@ type AdminSchedule struct {
 	Paused  bool
 }
 
+// AdminScheduleEvent describes a cron schedule execution event.
+type AdminScheduleEvent struct {
+	TaskID     string
+	Name       string
+	Spec       string
+	Durable    bool
+	Status     string
+	Queue      string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	DurationMs int64
+	Result     string
+	Error      string
+	Metadata   map[string]string
+}
+
+// AdminScheduleEventFilter filters schedule events.
+type AdminScheduleEventFilter struct {
+	Name  string
+	Limit int
+}
+
+// AdminScheduleEventPage represents schedule events.
+type AdminScheduleEventPage struct {
+	Events []AdminScheduleEvent
+}
+
+// AdminScheduleFactory describes a registered schedule factory.
+type AdminScheduleFactory struct {
+	Name    string
+	Durable bool
+}
+
 // AdminScheduleSpec defines a schedule request.
 type AdminScheduleSpec struct {
 	Name    string
@@ -121,10 +156,14 @@ type AdminBackend interface {
 type adminQueues interface {
 	AdminQueues(ctx context.Context) ([]AdminQueueSummary, error)
 	AdminQueue(ctx context.Context, name string) (AdminQueueSummary, error)
+	AdminSetQueueWeight(ctx context.Context, name string, weight int) (AdminQueueSummary, error)
+	AdminResetQueueWeight(ctx context.Context, name string) (AdminQueueSummary, error)
 }
 
 type adminSchedules interface {
 	AdminSchedules(ctx context.Context) ([]AdminSchedule, error)
+	AdminScheduleFactories(ctx context.Context) ([]AdminScheduleFactory, error)
+	AdminScheduleEvents(ctx context.Context, filter AdminScheduleEventFilter) (AdminScheduleEventPage, error)
 	AdminCreateSchedule(ctx context.Context, spec AdminScheduleSpec) (AdminSchedule, error)
 	AdminDeleteSchedule(ctx context.Context, name string) (bool, error)
 	AdminPauseSchedule(ctx context.Context, name string, paused bool) (AdminSchedule, error)

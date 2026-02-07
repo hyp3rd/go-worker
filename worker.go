@@ -102,6 +102,11 @@ type TaskManager struct {
 	cronLoc       *time.Location
 	cronSpecs     map[string]cronSpec
 	cronFactories map[string]cronFactory
+
+	cronEventsMu   sync.RWMutex
+	cronEvents     []AdminScheduleEvent
+	cronEventLimit int
+	cronRuns       map[uuid.UUID]cronRunInfo
 }
 
 // NewTaskManagerWithDefaults creates a new task manager with default values.
@@ -228,6 +233,8 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 		cronEntries:         map[string]cron.EntryID{},
 		cronSpecs:           map[string]cronSpec{},
 		cronFactories:       map[string]cronFactory{},
+		cronEventLimit:      defaultAdminScheduleEventLimit,
+		cronRuns:            map[uuid.UUID]cronRunInfo{},
 	}
 
 	tm.queueCond = sync.NewCond(&tm.queueMu)
@@ -1188,6 +1195,7 @@ func (tm *TaskManager) finishTask(task *Task, status TaskStatus, result any, err
 		tm.incrementMetric(status)
 		tm.recordLatency(task)
 		tm.hookFinish(task, status, result, err)
+		tm.recordCronCompletion(task, status, result, err)
 
 		tm.results.Publish(Result{Task: task, Result: result, Error: err})
 		tm.maybePruneRegistry()

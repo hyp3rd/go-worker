@@ -8,6 +8,8 @@ import type {
   OverviewStats,
   QueueDetail,
   QueueSummary,
+  ScheduleFactory,
+  ScheduleEvent,
 } from "@/lib/types";
 
 const getOrigin = async () => {
@@ -80,6 +82,28 @@ export async function fetchQueueDetail(
 
 export async function fetchSchedules(): Promise<{ schedules: JobSchedule[] }> {
   return fetchJson("/api/schedules");
+}
+
+export async function fetchScheduleFactories(): Promise<{
+  factories: ScheduleFactory[];
+}> {
+  return fetchJson("/api/schedules/factories");
+}
+
+export async function fetchScheduleEvents(params?: {
+  name?: string;
+  limit?: number;
+}): Promise<{ events: ScheduleEvent[] }> {
+  const search = new URLSearchParams();
+  if (params?.name) {
+    search.set("name", params.name);
+  }
+  if (params?.limit) {
+    search.set("limit", String(params.limit));
+  }
+  const suffix = search.toString();
+  const path = suffix ? `/api/schedules/events?${suffix}` : "/api/schedules/events";
+  return fetchJson(path);
 }
 
 export async function fetchDlq(params?: {

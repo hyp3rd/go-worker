@@ -188,6 +188,55 @@ export function DlqTable({
     }
   };
 
+  const replayOne = async (id: string) => {
+    const ok = window.confirm(
+      "Replay this DLQ item? Replays are at-least-once."
+    );
+    if (!ok) {
+      return;
+    }
+
+    setMessage(null);
+    try {
+      const res = await fetch("/api/actions/dlq/replay-ids", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [id] }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json()) as { error?: string };
+        throw new Error(payload?.error ?? "Replay failed");
+      }
+
+      const payload = (await res.json()) as { message?: string };
+      setMessage({
+        tone: "success",
+        text: payload.message ?? "Replay complete",
+      });
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Replay failed",
+      });
+    }
+  };
+
+  const copyOne = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setMessage({ tone: "info", text: "Copied ID to clipboard." });
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Copy failed",
+      });
+    }
+  };
+
   return (
     <div className="mt-6 space-y-4">
       {message ? (
@@ -284,6 +333,7 @@ export function DlqTable({
           { key: "handler", label: "Handler" },
           { key: "age", label: "Age" },
           { key: "attempts", label: "Attempts" },
+          { key: "actions", label: "Actions" },
         ]}
       >
         {entries.map((entry) => (
@@ -303,6 +353,22 @@ export function DlqTable({
             <TableCell>{entry.handler}</TableCell>
             <TableCell>{entry.age}</TableCell>
             <TableCell>{entry.attempts}</TableCell>
+            <TableCell>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => replayOne(entry.id)}
+                  className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-slate-700"
+                >
+                  Replay
+                </button>
+                <button
+                  onClick={() => copyOne(entry.id)}
+                  className="rounded-full border border-soft px-3 py-1 text-[11px] font-semibold text-muted"
+                >
+                  Copy
+                </button>
+              </div>
+            </TableCell>
           </TableRow>
         ))}
       </Table>

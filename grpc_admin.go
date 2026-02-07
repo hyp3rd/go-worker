@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/hyp3rd/ewrap"
 	"google.golang.org/grpc/codes"
@@ -147,6 +148,73 @@ func (s *GRPCServer) GetQueue(ctx context.Context, req *workerpb.GetQueueRequest
 	}, nil
 }
 
+// UpdateQueueWeight updates a queue weight.
+func (s *GRPCServer) UpdateQueueWeight(
+	ctx context.Context,
+	req *workerpb.UpdateQueueWeightRequest,
+) (*workerpb.UpdateQueueWeightResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_UpdateQueueWeight_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	name := strings.TrimSpace(req.GetName())
+	weight := int(req.GetWeight())
+
+	queue, err := backend.AdminSetQueueWeight(ctx, name, weight)
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.UpdateQueueWeightResponse{
+		Queue: &workerpb.QueueSummary{
+			Name:       queue.Name,
+			Ready:      queue.Ready,
+			Processing: queue.Processing,
+			Dead:       queue.Dead,
+			Weight:     clampInt32(queue.Weight),
+		},
+	}, nil
+}
+
+// ResetQueueWeight resets a queue weight to default.
+func (s *GRPCServer) ResetQueueWeight(
+	ctx context.Context,
+	req *workerpb.ResetQueueWeightRequest,
+) (*workerpb.ResetQueueWeightResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_ResetQueueWeight_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	name := strings.TrimSpace(req.GetName())
+
+	queue, err := backend.AdminResetQueueWeight(ctx, name)
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.ResetQueueWeightResponse{
+		Queue: &workerpb.QueueSummary{
+			Name:       queue.Name,
+			Ready:      queue.Ready,
+			Processing: queue.Processing,
+			Dead:       queue.Dead,
+			Weight:     clampInt32(queue.Weight),
+		},
+	}, nil
+}
+
 // ListSchedules returns cron schedule summaries.
 func (s *GRPCServer) ListSchedules(ctx context.Context, req *workerpb.ListSchedulesRequest) (*workerpb.ListSchedulesResponse, error) {
 	err := s.authorize(ctx, workerpb.AdminService_ListSchedules_FullMethodName, req)
@@ -170,6 +238,71 @@ func (s *GRPCServer) ListSchedules(ctx context.Context, req *workerpb.ListSchedu
 
 	for _, schedule := range schedules {
 		resp.Schedules = append(resp.Schedules, scheduleToProto(schedule))
+	}
+
+	return resp, nil
+}
+
+// ListScheduleFactories returns registered schedule factories.
+func (s *GRPCServer) ListScheduleFactories(
+	ctx context.Context,
+	req *workerpb.ListScheduleFactoriesRequest,
+) (*workerpb.ListScheduleFactoriesResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_ListScheduleFactories_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	factories, err := backend.AdminScheduleFactories(ctx)
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	resp := &workerpb.ListScheduleFactoriesResponse{
+		Factories: make([]*workerpb.ScheduleFactory, 0, len(factories)),
+	}
+
+	for _, factory := range factories {
+		resp.Factories = append(resp.Factories, scheduleFactoryToProto(factory))
+	}
+
+	return resp, nil
+}
+
+// ListScheduleEvents returns recent cron schedule execution events.
+func (s *GRPCServer) ListScheduleEvents(
+	ctx context.Context,
+	req *workerpb.ListScheduleEventsRequest,
+) (*workerpb.ListScheduleEventsResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_ListScheduleEvents_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	page, err := backend.AdminScheduleEvents(ctx, AdminScheduleEventFilter{
+		Name:  req.GetName(),
+		Limit: int(req.GetLimit()),
+	})
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	resp := &workerpb.ListScheduleEventsResponse{
+		Events: make([]*workerpb.ScheduleEvent, 0, len(page.Events)),
+	}
+
+	for _, event := range page.Events {
+		resp.Events = append(resp.Events, scheduleEventToProto(event))
 	}
 
 	return resp, nil
@@ -386,6 +519,14 @@ func clampInt32(value int) int32 {
 	return int32(value)
 }
 
+func timeToMillis(value time.Time) int64 {
+	if value.IsZero() {
+		return 0
+	}
+
+	return value.UnixMilli()
+}
+
 func scheduleToProto(schedule AdminSchedule) *workerpb.ScheduleEntry {
 	nextRun := int64(0)
 	if !schedule.NextRun.IsZero() {
@@ -404,6 +545,30 @@ func scheduleToProto(schedule AdminSchedule) *workerpb.ScheduleEntry {
 		LastRunMs: lastRun,
 		Durable:   schedule.Durable,
 		Paused:    schedule.Paused,
+	}
+}
+
+func scheduleFactoryToProto(factory AdminScheduleFactory) *workerpb.ScheduleFactory {
+	return &workerpb.ScheduleFactory{
+		Name:    factory.Name,
+		Durable: factory.Durable,
+	}
+}
+
+func scheduleEventToProto(event AdminScheduleEvent) *workerpb.ScheduleEvent {
+	return &workerpb.ScheduleEvent{
+		TaskId:       event.TaskID,
+		Name:         event.Name,
+		Spec:         event.Spec,
+		Durable:      event.Durable,
+		Status:       event.Status,
+		Queue:        event.Queue,
+		StartedAtMs:  timeToMillis(event.StartedAt),
+		FinishedAtMs: timeToMillis(event.FinishedAt),
+		DurationMs:   event.DurationMs,
+		Result:       event.Result,
+		Error:        event.Error,
+		Metadata:     event.Metadata,
 	}
 }
 
@@ -427,6 +592,10 @@ func toAdminStatus(err error) error {
 
 	if errors.Is(err, ErrAdminQueueNotFound) {
 		return ewrap.Wrap(status.Error(codes.NotFound, err.Error()), "queue not found")
+	}
+
+	if errors.Is(err, ErrAdminQueueWeightInvalid) {
+		return ewrap.Wrap(status.Error(codes.InvalidArgument, err.Error()), "queue weight invalid")
 	}
 
 	if errors.Is(err, ErrAdminDLQFilterTooLarge) {

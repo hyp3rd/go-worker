@@ -5,6 +5,8 @@ import {
   fetchOverview,
   fetchQueues,
   fetchQueueDetail,
+  fetchScheduleFactories,
+  fetchScheduleEvents,
   fetchSchedules,
 } from "@/lib/api";
 import {
@@ -15,6 +17,8 @@ import {
   jobSchedules,
   overviewStats,
   queueSummaries,
+  scheduleFactories,
+  scheduleEvents,
 } from "@/lib/mock-data";
 
 export const getOverviewStats = cache(async () => {
@@ -155,6 +159,47 @@ export const getJobSchedules = cache(async () => {
     const detail =
       error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to load job schedules: ${detail}`);
+  }
+});
+
+export const getScheduleFactories = cache(async () => {
+  try {
+    const { factories } = await fetchScheduleFactories();
+    return factories;
+  } catch (error) {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
+        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
+    ) {
+      return scheduleFactories;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load schedule factories: ${detail}`);
+  }
+});
+
+export const getScheduleEvents = cache(async (params?: {
+  name?: string;
+  limit?: number;
+}) => {
+  try {
+    const { events } = await fetchScheduleEvents(params);
+    return events;
+  } catch (error) {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
+        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
+    ) {
+      return scheduleEvents;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load schedule events: ${detail}`);
   }
 });
 

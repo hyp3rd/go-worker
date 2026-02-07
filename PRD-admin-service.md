@@ -59,6 +59,7 @@ Service: `worker.v1.AdminService`
 - `GetHealth(GetHealthRequest) returns (GetHealthResponse)`
 - `ListQueues(ListQueuesRequest) returns (ListQueuesResponse)`
 - `GetQueue(GetQueueRequest) returns (GetQueueResponse)`
+- `ListScheduleFactories(ListScheduleFactoriesRequest) returns (ListScheduleFactoriesResponse)`
 - `ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse)`
 - `CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse)`
 - `DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse)`
@@ -67,6 +68,7 @@ Service: `worker.v1.AdminService`
 - `PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse)`
 - `ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse)`
 - `ReplayDLQ(ReplayDLQRequest) returns (ReplayDLQResponse)`
+- `ReplayDLQByID(ReplayDLQByIDRequest) returns (ReplayDLQByIDResponse)`
 
 ### HTTP Gateway
 
@@ -76,6 +78,7 @@ Service: `worker.v1.AdminService`
 - `GET /admin/v1/queues/{name}`
 - `POST /admin/v1/queues/{name}/weight` (body: `{ "weight": 3 }`)
 - `DELETE /admin/v1/queues/{name}/weight`
+- `GET /admin/v1/schedules/factories`
 - `GET /admin/v1/schedules`
 - `POST /admin/v1/schedules` (body: `{ "name": "...", "spec": "...", "durable": false }`)
 - `DELETE /admin/v1/schedules/{name}`
@@ -84,6 +87,7 @@ Service: `worker.v1.AdminService`
 - `POST /admin/v1/pause`
 - `POST /admin/v1/resume`
 - `POST /admin/v1/dlq/replay` (body: `{ "limit": 100 }`)
+- `POST /admin/v1/dlq/replay/ids` (body: `{ "ids": ["..."] }`)
 
 ## Security
 
@@ -121,6 +125,7 @@ Worker service cron presets (when using the bundled worker-service):
 - **DLQ pagination + filters**: Implemented in API; UI supports search + queue/handler filters with paging.
 - **DLQ replay**: Implemented (bulk replay by limit + replay by ID/selection).
 - **Schedules**: Implemented from in-memory cron registry; UI shows next/last run. Durable backends report schedules via TaskManager.
+- **Schedule factories**: Implemented (gRPC + gateway).
 - **Health/version**: Implemented (gateway + UI).
 - **Observability counters**: Implemented (pause/resume/replay action counts in overview).
 - **Schedule management endpoints**: Implemented (create/delete/pause via gRPC + gateway + UI).

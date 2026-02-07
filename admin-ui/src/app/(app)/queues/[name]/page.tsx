@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { QueueWeightEditor } from "@/components/queue-weight-editor";
 import { SectionHeader } from "@/components/section-header";
 import { StatCard } from "@/components/stat-card";
 import { RefreshControls } from "@/components/refresh-controls";
@@ -60,6 +61,7 @@ export default async function QueueDetailPage({
           note="Scheduler weight"
         />
       </div>
+      <QueueWeightEditor name={queue.name} weight={queue.weight} />
     </section>
   );
 }

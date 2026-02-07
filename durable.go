@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hyp3rd/ewrap"
+	"google.golang.org/protobuf/proto"
 )
 
 const errMsgDurableHandlerMissing = "durable handler not registered"
@@ -196,19 +197,38 @@ func (tm *TaskManager) taskFromLease(ctx context.Context, lease DurableTaskLease
 		return nil, ewrap.New("durable task missing id")
 	}
 
+	spec, msg, err := tm.unmarshalLeasePayload(task)
+	if err != nil {
+		return nil, err
+	}
+
+	tm.normalizeLeaseTask(&task)
+
+	return tm.buildTaskFromLease(ctx, task, lease, spec, msg)
+}
+
+func (tm *TaskManager) unmarshalLeasePayload(task DurableTask) (DurableHandlerSpec, proto.Message, error) {
 	spec, ok := tm.durableHandlers[task.Handler]
 	if !ok {
-		return nil, ewrap.Wrapf(ewrap.New(errMsgDurableHandlerMissing), "handler %q", task.Handler)
+		return DurableHandlerSpec{}, nil, ewrap.Wrapf(ewrap.New(errMsgDurableHandlerMissing), "handler %q", task.Handler)
 	}
 
 	msg := spec.Make()
 	if msg == nil {
-		return nil, ewrap.New("durable handler payload maker is nil")
+		return DurableHandlerSpec{}, nil, ewrap.New("durable handler payload maker is nil")
 	}
 
 	err := tm.durableCodec.Unmarshal(task.Payload, msg)
 	if err != nil {
-		return nil, ewrap.Wrap(err, "unmarshal durable payload")
+		return DurableHandlerSpec{}, nil, ewrap.Wrap(err, "unmarshal durable payload")
+	}
+
+	return spec, msg, nil
+}
+
+func (tm *TaskManager) normalizeLeaseTask(task *DurableTask) {
+	if task == nil {
+		return
 	}
 
 	if task.RetryDelay <= 0 {
@@ -218,7 +238,15 @@ func (tm *TaskManager) taskFromLease(ctx context.Context, lease DurableTaskLease
 	if task.Retries < 0 {
 		task.Retries = 0
 	}
+}
 
+func (tm *TaskManager) buildTaskFromLease(
+	ctx context.Context,
+	task DurableTask,
+	lease DurableTaskLease,
+	spec DurableHandlerSpec,
+	msg proto.Message,
+) (*Task, error) {
 	exec := func(ctx context.Context, _ ...any) (any, error) {
 		return spec.Fn(ctx, msg)
 	}
@@ -233,22 +261,20 @@ func (tm *TaskManager) taskFromLease(ctx context.Context, lease DurableTaskLease
 	tmTask.Priority = task.Priority
 	tmTask.Retries = task.Retries
 	tmTask.RetryDelay = task.RetryDelay
-
 	tmTask.Queue = task.Queue
-	if tmTask.Queue == "" {
-		tmTask.Queue = tm.defaultQueue
-	}
-
 	tmTask.Weight = task.Weight
-	if tmTask.Weight <= 0 {
-		tmTask.Weight = DefaultTaskWeight
-	}
+
+	tm.applyQueueDefaults(tmTask)
 
 	tmTask.durableLease = &lease
 
 	tm.registryMu.Lock()
 	tm.registry[tmTask.ID] = tmTask
 	tm.registryMu.Unlock()
+
+	if info, ok := cronRunInfoFromDurable(task, tm.defaultQueue); ok {
+		tm.noteCronRun(info)
+	}
 
 	return tmTask, nil
 }

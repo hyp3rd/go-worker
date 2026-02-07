@@ -6,6 +6,8 @@ import type {
   JobSchedule,
   OverviewStats,
   QueueSummary,
+  ScheduleFactory,
+  ScheduleEvent,
 } from "@/lib/types";
 
 export const overviewStats: OverviewStats = {
@@ -86,6 +88,63 @@ export const jobSchedules: JobSchedule[] = [
     status: "lagging",
     paused: false,
     durable: true,
+  },
+];
+
+export const scheduleFactories: ScheduleFactory[] = [
+  { name: "hourly-report", durable: false },
+  { name: "daily-email", durable: true },
+  { name: "ledger-sync", durable: true },
+];
+
+export const scheduleEvents: ScheduleEvent[] = [
+  {
+    taskId: "b5a0c2b3-2ed5-47f8-8d1e-2e1e2c29f2b0",
+    name: "ledger-sync",
+    spec: "*/5 * * * *",
+    durable: true,
+    status: "completed",
+    queue: "default",
+    startedAtMs: Date.now() - 75 * 1000,
+    finishedAtMs: Date.now() - 48 * 1000,
+    durationMs: 27 * 1000,
+    result: "synced 128 accounts",
+    metadata: {
+      handler: "ledger_sync",
+      command: "sync --batch",
+    },
+  },
+  {
+    taskId: "c9cbb1a8-3c11-4a17-8a83-3a5a720c2b8a",
+    name: "daily-email",
+    spec: "0 0 * * *",
+    durable: true,
+    status: "failed",
+    queue: "emails",
+    startedAtMs: Date.now() - 12 * 60 * 1000,
+    finishedAtMs: Date.now() - 11 * 60 * 1000,
+    durationMs: 45 * 1000,
+    error: "smtp timeout",
+    metadata: {
+      handler: "send_email",
+      command: "send --daily",
+    },
+  },
+  {
+    taskId: "f15e59d7-1b76-4ed6-9a0c-f4572bfe55b0",
+    name: "hourly-report",
+    spec: "0 * * * *",
+    durable: false,
+    status: "completed",
+    queue: "default",
+    startedAtMs: Date.now() - 4 * 60 * 1000,
+    finishedAtMs: Date.now() - 3 * 60 * 1000,
+    durationMs: 18 * 1000,
+    result: "report stored",
+    metadata: {
+      task_name: "report_generator",
+      description: "Generate the hourly SLA report.",
+    },
   },
 ];
 

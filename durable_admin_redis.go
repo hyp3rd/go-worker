@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -121,6 +122,8 @@ func (b *RedisDurableBackend) AdminQueues(ctx context.Context) ([]AdminQueueSumm
 		return nil, err
 	}
 
+	queues = mergeQueueNames(queues, weights)
+
 	deadCounts, err := b.deadCountsByQueue(ctx, queues, adminDLQScanLimit)
 	if err != nil {
 		return nil, err
@@ -143,7 +146,7 @@ func (b *RedisDurableBackend) AdminQueues(ctx context.Context) ([]AdminQueueSumm
 			Ready:      readyCount,
 			Processing: processingCount,
 			Dead:       deadCount,
-			Weight:     weights[queue],
+			Weight:     b.queueWeight(weights, queue),
 		})
 	}
 
@@ -198,6 +201,64 @@ func (b *RedisDurableBackend) AdminQueue(ctx context.Context, name string) (Admi
 	}, nil
 }
 
+// AdminSetQueueWeight updates the scheduler weight for a queue.
+func (b *RedisDurableBackend) AdminSetQueueWeight(ctx context.Context, name string, weight int) (AdminQueueSummary, error) {
+	if ctx == nil {
+		return AdminQueueSummary{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminQueueSummary{}, ErrAdminQueueNameRequired
+	}
+
+	if weight <= 0 {
+		return AdminQueueSummary{}, ErrAdminQueueWeightInvalid
+	}
+
+	weight = normalizeQueueWeight(weight)
+
+	name = normalizeQueueName(name)
+
+	b.queueMu.Lock()
+
+	if b.queueWeights == nil {
+		b.queueWeights = map[string]int{}
+	}
+
+	b.queueWeights[name] = weight
+	b.queueMu.Unlock()
+
+	resp := b.client.Do(ctx, b.client.B().Sadd().Key(b.queuesKey()).Member(name).Build())
+
+	err := resp.Error()
+	if err != nil {
+		return AdminQueueSummary{}, ewrap.Wrap(err, "register queue")
+	}
+
+	return b.AdminQueue(ctx, name)
+}
+
+// AdminResetQueueWeight resets a queue weight to the default.
+func (b *RedisDurableBackend) AdminResetQueueWeight(ctx context.Context, name string) (AdminQueueSummary, error) {
+	if ctx == nil {
+		return AdminQueueSummary{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminQueueSummary{}, ErrAdminQueueNameRequired
+	}
+
+	name = normalizeQueueName(name)
+
+	b.queueMu.Lock()
+	delete(b.queueWeights, name)
+	b.queueMu.Unlock()
+
+	return b.AdminQueue(ctx, name)
+}
+
 // AdminSchedules returns cron schedule data if supported.
 func (*RedisDurableBackend) AdminSchedules(ctx context.Context) ([]AdminSchedule, error) {
 	if ctx == nil {
@@ -205,6 +266,24 @@ func (*RedisDurableBackend) AdminSchedules(ctx context.Context) ([]AdminSchedule
 	}
 
 	return nil, ErrAdminUnsupported
+}
+
+// AdminScheduleFactories is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminScheduleFactories(ctx context.Context) ([]AdminScheduleFactory, error) {
+	if ctx == nil {
+		return nil, ErrInvalidTaskContext
+	}
+
+	return nil, ErrAdminUnsupported
+}
+
+// AdminScheduleEvents is not supported by the Redis durable backend.
+func (*RedisDurableBackend) AdminScheduleEvents(ctx context.Context, _ AdminScheduleEventFilter) (AdminScheduleEventPage, error) {
+	if ctx == nil {
+		return AdminScheduleEventPage{}, ErrInvalidTaskContext
+	}
+
+	return AdminScheduleEventPage{}, ErrAdminUnsupported
 }
 
 // AdminCreateSchedule is not supported by the Redis durable backend.
@@ -256,6 +335,45 @@ func (b *RedisDurableBackend) AdminDLQ(ctx context.Context, filter AdminDLQFilte
 	}
 
 	return b.dlqPageWithFilters(ctx, filters, total)
+}
+
+func mergeQueueNames(queues []string, weights map[string]int) []string {
+	if len(weights) == 0 {
+		return queues
+	}
+
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(queues)+len(weights))
+
+	for _, queue := range queues {
+		if queue == "" {
+			continue
+		}
+
+		if _, ok := seen[queue]; ok {
+			continue
+		}
+
+		seen[queue] = struct{}{}
+		out = append(out, queue)
+	}
+
+	for queue := range weights {
+		if queue == "" {
+			continue
+		}
+
+		if _, ok := seen[queue]; ok {
+			continue
+		}
+
+		seen[queue] = struct{}{}
+		out = append(out, queue)
+	}
+
+	sort.Strings(out)
+
+	return out
 }
 
 // AdminPause pauses dequeueing of tasks.

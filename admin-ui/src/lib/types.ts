@@ -20,6 +20,26 @@ export type JobSchedule = {
   durable: boolean;
 };
 
+export type ScheduleFactory = {
+  name: string;
+  durable: boolean;
+};
+
+export type ScheduleEvent = {
+  taskId: string;
+  name: string;
+  spec: string;
+  durable: boolean;
+  status: string;
+  queue: string;
+  startedAtMs?: number;
+  finishedAtMs?: number;
+  durationMs?: number;
+  result?: string;
+  error?: string;
+  metadata?: Record<string, string>;
+};
+
 export type OverviewStats = {
   activeWorkers: number;
   queuedTasks: number;

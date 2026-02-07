@@ -65,6 +65,23 @@ message GetQueueResponse {
   QueueSummary queue = 1;
 }
 
+message UpdateQueueWeightRequest {
+  string name = 1;
+  int32 weight = 2;
+}
+
+message UpdateQueueWeightResponse {
+  QueueSummary queue = 1;
+}
+
+message ResetQueueWeightRequest {
+  string name = 1;
+}
+
+message ResetQueueWeightResponse {
+  QueueSummary queue = 1;
+}
+
 message ScheduleEntry {
   string name = 1;
   string spec = 2;
@@ -72,6 +89,41 @@ message ScheduleEntry {
   int64 last_run_ms = 4;
   bool durable = 5;
   bool paused = 6;
+}
+
+message ScheduleFactory {
+  string name = 1;
+  bool durable = 2;
+}
+
+message ScheduleEvent {
+  string task_id = 1;
+  string name = 2;
+  string spec = 3;
+  bool durable = 4;
+  string status = 5;
+  string queue = 6;
+  int64 started_at_ms = 7;
+  int64 finished_at_ms = 8;
+  int64 duration_ms = 9;
+  string result = 10;
+  string error = 11;
+  map<string, string> metadata = 12;
+}
+
+message ListScheduleFactoriesRequest {}
+
+message ListScheduleFactoriesResponse {
+  repeated ScheduleFactory factories = 1;
+}
+
+message ListScheduleEventsRequest {
+  string name = 1;
+  int32 limit = 2;
+}
+
+message ListScheduleEventsResponse {
+  repeated ScheduleEvent events = 1;
 }
 
 message ListSchedulesRequest {}
@@ -161,6 +213,10 @@ service AdminService {
   rpc GetOverview(GetOverviewRequest) returns (GetOverviewResponse);
   rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
   rpc GetQueue(GetQueueRequest) returns (GetQueueResponse);
+  rpc UpdateQueueWeight(UpdateQueueWeightRequest) returns (UpdateQueueWeightResponse);
+  rpc ResetQueueWeight(ResetQueueWeightRequest) returns (ResetQueueWeightResponse);
+  rpc ListScheduleFactories(ListScheduleFactoriesRequest) returns (ListScheduleFactoriesResponse);
+  rpc ListScheduleEvents(ListScheduleEventsRequest) returns (ListScheduleEventsResponse);
   rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
   rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
   rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
