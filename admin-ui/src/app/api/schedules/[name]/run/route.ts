@@ -10,22 +10,13 @@ type RouteParams = {
   }>;
 };
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function POST(_request: NextRequest, { params }: RouteParams) {
   try {
-    const { name } = await params;
-    const decoded = decodeURIComponent(name ?? "");
-    const payload = await gatewayRequest<{
-      queue: {
-        name: string;
-        ready: number;
-        processing: number;
-        dead: number;
-        weight: number;
-        paused: boolean;
-      };
-    }>({
-      method: "GET",
-      path: `/admin/v1/queues/${encodeURIComponent(decoded)}`,
+    const resolved = await params;
+    const name = resolved?.name ?? "";
+    const payload = await gatewayRequest<{ taskId: string }>({
+      method: "POST",
+      path: `/admin/v1/schedules/${encodeURIComponent(name)}/run`,
     });
 
     return NextResponse.json(payload);

@@ -21,16 +21,17 @@ import {
   scheduleEvents,
 } from "@/lib/mock-data";
 
+const allowMockData =
+  process.env.NODE_ENV !== "production" &&
+  (process.env.WORKER_ADMIN_ALLOW_MOCK ??
+    process.env.ADMIN_UI_ALLOW_MOCK) === "true";
+
 export const getOverviewStats = cache(async () => {
   try {
     const { stats } = await fetchOverview();
     return stats;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return overviewStats;
     }
 
@@ -44,11 +45,7 @@ export const getHealthInfo = cache(async () => {
   try {
     return await fetchHealth();
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return healthInfo;
     }
 
@@ -63,11 +60,7 @@ export const getCoordinationStatus = cache(async () => {
     const { coordination } = await fetchOverview();
     return coordination;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return coordinationStatus;
     }
 
@@ -82,11 +75,7 @@ export const getAdminActionCounters = cache(async () => {
     const { actions } = await fetchOverview();
     return actions;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return adminActionCounters;
     }
 
@@ -101,11 +90,7 @@ export const getQueueSummaries = cache(async () => {
     const { queues } = await fetchQueues();
     return queues;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return queueSummaries;
     }
 
@@ -124,11 +109,7 @@ export const getQueueDetail = cache(async (name: string) => {
     const { queue } = await fetchQueueDetail(name);
     return queue;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       const fallback =
         queueSummaries.find((queue) => queue.name === name) ??
         queueSummaries[0];
@@ -148,11 +129,7 @@ export const getJobSchedules = cache(async () => {
     const { schedules } = await fetchSchedules();
     return schedules;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return jobSchedules;
     }
 
@@ -167,11 +144,7 @@ export const getScheduleFactories = cache(async () => {
     const { factories } = await fetchScheduleFactories();
     return factories;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return scheduleFactories;
     }
 
@@ -189,11 +162,7 @@ export const getScheduleEvents = cache(async (params?: {
     const { events } = await fetchScheduleEvents(params);
     return events;
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return scheduleEvents;
     }
 
@@ -214,11 +183,7 @@ export const getDlqEntries = cache(async (params?: {
     const { entries, total } = await fetchDlq(params);
     return { entries, total };
   } catch (error) {
-    if (
-      process.env.NODE_ENV !== "production" &&
-      (process.env.WORKER_ADMIN_ALLOW_MOCK ??
-        process.env.ADMIN_UI_ALLOW_MOCK) !== "false"
-    ) {
+    if (allowMockData) {
       return { entries: dlqEntries, total: dlqEntries.length };
     }
 

@@ -112,6 +112,7 @@ func (s *GRPCServer) ListQueues(ctx context.Context, req *workerpb.ListQueuesReq
 			Processing: queue.Processing,
 			Dead:       queue.Dead,
 			Weight:     clampInt32(queue.Weight),
+			Paused:     queue.Paused,
 		})
 	}
 
@@ -144,6 +145,7 @@ func (s *GRPCServer) GetQueue(ctx context.Context, req *workerpb.GetQueueRequest
 			Processing: queue.Processing,
 			Dead:       queue.Dead,
 			Weight:     clampInt32(queue.Weight),
+			Paused:     queue.Paused,
 		},
 	}, nil
 }
@@ -178,6 +180,7 @@ func (s *GRPCServer) UpdateQueueWeight(
 			Processing: queue.Processing,
 			Dead:       queue.Dead,
 			Weight:     clampInt32(queue.Weight),
+			Paused:     queue.Paused,
 		},
 	}, nil
 }
@@ -211,6 +214,36 @@ func (s *GRPCServer) ResetQueueWeight(
 			Processing: queue.Processing,
 			Dead:       queue.Dead,
 			Weight:     clampInt32(queue.Weight),
+			Paused:     queue.Paused,
+		},
+	}, nil
+}
+
+// PauseQueue pauses or resumes a queue.
+func (s *GRPCServer) PauseQueue(ctx context.Context, req *workerpb.PauseQueueRequest) (*workerpb.PauseQueueResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_PauseQueue_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	queue, err := backend.AdminPauseQueue(ctx, req.GetName(), req.GetPaused())
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.PauseQueueResponse{
+		Queue: &workerpb.QueueSummary{
+			Name:       queue.Name,
+			Ready:      queue.Ready,
+			Processing: queue.Processing,
+			Dead:       queue.Dead,
+			Weight:     clampInt32(queue.Weight),
+			Paused:     queue.Paused,
 		},
 	}, nil
 }
@@ -468,6 +501,39 @@ func (s *GRPCServer) ListDLQ(ctx context.Context, req *workerpb.ListDLQRequest) 
 	return resp, nil
 }
 
+// GetDLQEntry returns a detailed DLQ entry by id.
+func (s *GRPCServer) GetDLQEntry(ctx context.Context, req *workerpb.GetDLQEntryRequest) (*workerpb.GetDLQEntryResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_GetDLQEntry_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	entry, err := backend.AdminDLQEntry(ctx, req.GetId())
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	return &workerpb.GetDLQEntryResponse{
+		Entry: &workerpb.DLQEntryDetail{
+			Id:          entry.ID,
+			Queue:       entry.Queue,
+			Handler:     entry.Handler,
+			Attempts:    clampInt32(entry.Attempts),
+			AgeMs:       entry.AgeMs,
+			FailedAtMs:  entry.FailedAtMs,
+			UpdatedAtMs: entry.UpdatedAtMs,
+			LastError:   entry.LastError,
+			PayloadSize: entry.PayloadSize,
+			Metadata:    entry.Metadata,
+		},
+	}, nil
+}
+
 // PauseDequeue pauses durable dequeue.
 func (s *GRPCServer) PauseDequeue(ctx context.Context, req *workerpb.PauseDequeueRequest) (*workerpb.PauseDequeueResponse, error) {
 	err := s.authorize(ctx, workerpb.AdminService_PauseDequeue_FullMethodName, req)
@@ -646,6 +712,14 @@ func toAdminStatus(err error) error {
 
 	if errors.Is(err, ErrAdminDLQFilterTooLarge) {
 		return ewrap.Wrap(status.Error(codes.ResourceExhausted, err.Error()), "dlq filter too large")
+	}
+
+	if errors.Is(err, ErrAdminDLQEntryIDRequired) {
+		return ewrap.Wrap(status.Error(codes.InvalidArgument, err.Error()), "dlq id required")
+	}
+
+	if errors.Is(err, ErrAdminDLQEntryNotFound) {
+		return ewrap.Wrap(status.Error(codes.NotFound, err.Error()), "dlq entry not found")
 	}
 
 	if errors.Is(err, ErrAdminReplayIDsRequired) {

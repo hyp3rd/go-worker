@@ -6,26 +6,17 @@ export const dynamic = "force-dynamic";
 
 type RouteParams = {
   params: Promise<{
-    name: string;
+    id: string;
   }>;
 };
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
-    const { name } = await params;
-    const decoded = decodeURIComponent(name ?? "");
-    const payload = await gatewayRequest<{
-      queue: {
-        name: string;
-        ready: number;
-        processing: number;
-        dead: number;
-        weight: number;
-        paused: boolean;
-      };
-    }>({
+    const { id } = await params;
+    const decoded = decodeURIComponent(id ?? "");
+    const payload = await gatewayRequest<{ entry: unknown }>({
       method: "GET",
-      path: `/admin/v1/queues/${encodeURIComponent(decoded)}`,
+      path: `/admin/v1/dlq/${encodeURIComponent(decoded)}`,
     });
 
     return NextResponse.json(payload);

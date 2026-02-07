@@ -69,6 +69,16 @@ func (tm *TaskManager) AdminQueue(ctx context.Context, name string) (AdminQueueS
 	return backend.AdminQueue(ctx, name)
 }
 
+// AdminPauseQueue pauses or resumes a specific queue.
+func (tm *TaskManager) AdminPauseQueue(ctx context.Context, name string, paused bool) (AdminQueueSummary, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	return backend.AdminPauseQueue(ctx, name, paused)
+}
+
 // AdminSetQueueWeight updates queue weight and returns the updated summary.
 func (tm *TaskManager) AdminSetQueueWeight(ctx context.Context, name string, weight int) (AdminQueueSummary, error) {
 	backend, err := tm.adminBackend()
@@ -519,6 +529,16 @@ func (tm *TaskManager) AdminDLQ(ctx context.Context, filter AdminDLQFilter) (Adm
 	}
 
 	return backend.AdminDLQ(ctx, filter)
+}
+
+// AdminDLQEntry returns a detailed DLQ entry by ID.
+func (tm *TaskManager) AdminDLQEntry(ctx context.Context, id string) (AdminDLQEntryDetail, error) {
+	backend, err := tm.adminBackend()
+	if err != nil {
+		return AdminDLQEntryDetail{}, err
+	}
+
+	return backend.AdminDLQEntry(ctx, id)
 }
 
 // AdminPause pauses durable dequeue.

@@ -52,9 +52,12 @@ export default async function Home() {
             action={
               <div className="flex flex-wrap items-center gap-3">
                 <RefreshControls />
-                <button className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white">
+                <Link
+                  href="/queues?create=1"
+                  className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white"
+                >
                   Add queue
-                </button>
+                </Link>
               </div>
             }
           />
@@ -130,18 +133,21 @@ export default async function Home() {
       </section>
 
       <section className="rounded-3xl border border-soft bg-white/95 p-6 shadow-soft">
-        <SectionHeader
-          title="Scheduled jobs"
-          description="Cron schedules across in‑memory and durable workers."
-          action={
-            <div className="flex gap-2">
-              <button className="rounded-full border border-soft px-4 py-2 text-xs font-semibold">
-                Export
-              </button>
-              <Link
-                href="/schedules"
-                className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-[var(--accent-ink)]"
-              >
+          <SectionHeader
+            title="Scheduled jobs"
+            description="Cron schedules across in‑memory and durable workers."
+            action={
+              <div className="flex gap-2">
+                <Link
+                  href="/schedules#schedule-events"
+                  className="rounded-full border border-soft px-4 py-2 text-xs font-semibold"
+                >
+                  Event log
+                </Link>
+                <Link
+                  href="/schedules"
+                  className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-[var(--accent-ink)]"
+                >
                 Manage schedules
               </Link>
             </div>

@@ -20,6 +20,8 @@ const (
 	adminDLQAttemptsIndex        = 2
 	adminDLQFailedAtIndex        = 3
 	adminDLQUpdatedAtIndex       = 4
+	adminDLQLastErrorIndex       = 5
+	adminDLQMetadataIndex        = 6
 	adminDLQReplayMaxIDs         = 1000
 	adminSecondsPerMinute        = 60
 	adminMinutesPerHour          = 60
@@ -124,6 +126,11 @@ func (b *RedisDurableBackend) AdminQueues(ctx context.Context) ([]AdminQueueSumm
 
 	queues = mergeQueueNames(queues, weights)
 
+	pausedQueues, err := b.pausedQueues(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	deadCounts, err := b.deadCountsByQueue(ctx, queues, adminDLQScanLimit)
 	if err != nil {
 		return nil, err
@@ -147,6 +154,7 @@ func (b *RedisDurableBackend) AdminQueues(ctx context.Context) ([]AdminQueueSumm
 			Processing: processingCount,
 			Dead:       deadCount,
 			Weight:     b.queueWeight(weights, queue),
+			Paused:     pausedQueues[queue],
 		})
 	}
 
@@ -177,6 +185,11 @@ func (b *RedisDurableBackend) AdminQueue(ctx context.Context, name string) (Admi
 		}
 	}
 
+	pausedQueues, err := b.pausedQueues(ctx)
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
 	readyCount, processingCount, err := b.queueCounts(ctx, name)
 	if err != nil {
 		return AdminQueueSummary{}, err
@@ -198,7 +211,50 @@ func (b *RedisDurableBackend) AdminQueue(ctx context.Context, name string) (Admi
 		Processing: processingCount,
 		Dead:       deadCount,
 		Weight:     b.queueWeight(weights, name),
+		Paused:     pausedQueues[name],
 	}, nil
+}
+
+// AdminPauseQueue pauses or resumes a specific queue.
+func (b *RedisDurableBackend) AdminPauseQueue(ctx context.Context, name string, paused bool) (AdminQueueSummary, error) {
+	if ctx == nil {
+		return AdminQueueSummary{}, ErrInvalidTaskContext
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return AdminQueueSummary{}, ErrAdminQueueNameRequired
+	}
+
+	name = normalizeQueueName(name)
+
+	queues, err := b.queueList(ctx)
+	if err != nil {
+		return AdminQueueSummary{}, err
+	}
+
+	queues = ensureQueueList(queues, b.defaultQueueName())
+	if !containsQueue(queues, name) {
+		return AdminQueueSummary{}, ErrAdminQueueNotFound
+	}
+
+	if paused {
+		resp := b.client.Do(ctx, b.client.B().Sadd().Key(b.pausedQueuesKey()).Member(name).Build())
+
+		err := resp.Error()
+		if err != nil {
+			return AdminQueueSummary{}, ewrap.Wrap(err, "pause queue")
+		}
+	} else {
+		resp := b.client.Do(ctx, b.client.B().Srem().Key(b.pausedQueuesKey()).Member(name).Build())
+
+		err := resp.Error()
+		if err != nil {
+			return AdminQueueSummary{}, ewrap.Wrap(err, "resume queue")
+		}
+	}
+
+	return b.AdminQueue(ctx, name)
 }
 
 // AdminSetQueueWeight updates the scheduler weight for a queue.
@@ -353,6 +409,153 @@ func (b *RedisDurableBackend) AdminDLQ(ctx context.Context, filter AdminDLQFilte
 	}
 
 	return b.dlqPageWithFilters(ctx, filters, total)
+}
+
+// AdminDLQEntry returns detailed DLQ entry information.
+func (b *RedisDurableBackend) AdminDLQEntry(ctx context.Context, id string) (AdminDLQEntryDetail, error) {
+	if ctx == nil {
+		return AdminDLQEntryDetail{}, ErrInvalidTaskContext
+	}
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return AdminDLQEntryDetail{}, ErrAdminDLQEntryIDRequired
+	}
+
+	taskKey := b.taskPrefixKey() + id
+
+	fields, err := b.dlqEntryFields(ctx, taskKey, id)
+	if err != nil {
+		return AdminDLQEntryDetail{}, err
+	}
+
+	payloadSize, err := b.dlqEntryPayloadSize(ctx, taskKey)
+	if err != nil {
+		return AdminDLQEntryDetail{}, err
+	}
+
+	age := dlqEntryAge(fields.failedAt, fields.updatedAt)
+
+	return AdminDLQEntryDetail{
+		ID:          id,
+		Queue:       fields.queue,
+		Handler:     fields.handler,
+		Attempts:    fields.attempts,
+		AgeMs:       age.Milliseconds(),
+		FailedAtMs:  fields.failedAt,
+		UpdatedAtMs: fields.updatedAt,
+		LastError:   fields.lastError,
+		PayloadSize: payloadSize,
+		Metadata:    fields.metadata,
+	}, nil
+}
+
+type dlqEntryFields struct {
+	queue     string
+	handler   string
+	attempts  int
+	failedAt  int64
+	updatedAt int64
+	lastError string
+	metadata  map[string]string
+}
+
+func (b *RedisDurableBackend) dlqEntryFields(ctx context.Context, taskKey, id string) (dlqEntryFields, error) {
+	err := b.ensureDLQEntryExists(ctx, taskKey, id)
+	if err != nil {
+		return dlqEntryFields{}, err
+	}
+
+	values, err := b.fetchDLQEntryValues(ctx, taskKey, id)
+	if err != nil {
+		return dlqEntryFields{}, err
+	}
+
+	queue := valueAt(values, adminDLQQueueIndex)
+	if queue == "" {
+		queue = b.defaultQueueName()
+	}
+
+	handler := valueAt(values, adminDLQHandlerIndex)
+	attempts := parseInt(valueAt(values, adminDLQAttemptsIndex))
+	failedAt := parseInt64(valueAt(values, adminDLQFailedAtIndex))
+	updatedAt := parseInt64(valueAt(values, adminDLQUpdatedAtIndex))
+	lastError := valueAt(values, adminDLQLastErrorIndex)
+	metadataRaw := valueAt(values, adminDLQMetadataIndex)
+
+	metadata, err := decodeMetadata(metadataRaw)
+	if err != nil {
+		return dlqEntryFields{}, err
+	}
+
+	return dlqEntryFields{
+		queue:     queue,
+		handler:   handler,
+		attempts:  attempts,
+		failedAt:  failedAt,
+		updatedAt: updatedAt,
+		lastError: lastError,
+		metadata:  metadata,
+	}, nil
+}
+
+func (b *RedisDurableBackend) ensureDLQEntryExists(ctx context.Context, taskKey, id string) error {
+	existsResp := b.client.Do(ctx, b.client.B().Exists().Key(taskKey).Build())
+
+	exists, err := existsResp.AsInt64()
+	if err != nil {
+		return ewrap.Wrapf(err, "read DLQ task %s", id)
+	}
+
+	if exists == 0 {
+		return ErrAdminDLQEntryNotFound
+	}
+
+	return nil
+}
+
+func (b *RedisDurableBackend) fetchDLQEntryValues(ctx context.Context, taskKey, id string) ([]string, error) {
+	fields := []string{
+		redisFieldQueue,
+		redisFieldHandler,
+		redisFieldAttempts,
+		redisFieldFailedAtMs,
+		redisFieldUpdatedAtMs,
+		redisFieldLastError,
+		redisFieldMetadata,
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Hmget().Key(taskKey).Field(fields...).Build())
+
+	values, err := resp.AsStrSlice()
+	if err != nil {
+		return nil, ewrap.Wrapf(err, "read DLQ task %s", id)
+	}
+
+	return values, nil
+}
+
+func (b *RedisDurableBackend) dlqEntryPayloadSize(ctx context.Context, taskKey string) (int64, error) {
+	sizeResp := b.client.Do(ctx, b.client.B().Hstrlen().Key(taskKey).Field(redisFieldPayload).Build())
+
+	payloadSize, err := sizeResp.AsInt64()
+	if err != nil {
+		return 0, ewrap.Wrapf(err, "read DLQ task payload size %s", taskKey)
+	}
+
+	return payloadSize, nil
+}
+
+func dlqEntryAge(failedAt, updatedAt int64) time.Duration {
+	if failedAt > 0 {
+		return time.Since(time.UnixMilli(failedAt))
+	}
+
+	if updatedAt > 0 {
+		return time.Since(time.UnixMilli(updatedAt))
+	}
+
+	return 0
 }
 
 func mergeQueueNames(queues []string, weights map[string]int) []string {

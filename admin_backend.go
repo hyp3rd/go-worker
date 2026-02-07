@@ -18,8 +18,14 @@ var (
 	ErrAdminQueueNameRequired = ewrap.New("admin queue name is required")
 	// ErrAdminQueueWeightInvalid indicates a queue weight is invalid.
 	ErrAdminQueueWeightInvalid = ewrap.New("admin queue weight is invalid")
+	// ErrAdminQueuePauseUnsupported indicates pausing queues is not supported.
+	ErrAdminQueuePauseUnsupported = ewrap.New("admin queue pause unsupported")
 	// ErrAdminDLQFilterTooLarge indicates the DLQ is too large for filtered queries.
 	ErrAdminDLQFilterTooLarge = ewrap.New("DLQ too large for filtered query")
+	// ErrAdminDLQEntryIDRequired indicates a DLQ id is required.
+	ErrAdminDLQEntryIDRequired = ewrap.New("admin DLQ id is required")
+	// ErrAdminDLQEntryNotFound indicates the DLQ entry was not found.
+	ErrAdminDLQEntryNotFound = ewrap.New("admin DLQ entry not found")
 	// ErrAdminReplayIDsRequired indicates replay-by-id requires at least one id.
 	ErrAdminReplayIDsRequired = ewrap.New("admin replay ids are required")
 	// ErrAdminReplayIDsTooLarge indicates too many ids were provided.
@@ -62,6 +68,7 @@ type AdminQueueSummary struct {
 	Processing int64
 	Dead       int64
 	Weight     int
+	Paused     bool
 }
 
 // AdminDLQEntry represents a DLQ entry.
@@ -71,6 +78,20 @@ type AdminDLQEntry struct {
 	Handler  string
 	Attempts int
 	AgeMs    int64
+}
+
+// AdminDLQEntryDetail represents a detailed DLQ entry.
+type AdminDLQEntryDetail struct {
+	ID          string
+	Queue       string
+	Handler     string
+	Attempts    int
+	AgeMs       int64
+	FailedAtMs  int64
+	UpdatedAtMs int64
+	LastError   string
+	PayloadSize int64
+	Metadata    map[string]string
 }
 
 // AdminSchedule represents a cron schedule entry.
@@ -156,6 +177,7 @@ type AdminBackend interface {
 type adminQueues interface {
 	AdminQueues(ctx context.Context) ([]AdminQueueSummary, error)
 	AdminQueue(ctx context.Context, name string) (AdminQueueSummary, error)
+	AdminPauseQueue(ctx context.Context, name string, paused bool) (AdminQueueSummary, error)
 	AdminSetQueueWeight(ctx context.Context, name string, weight int) (AdminQueueSummary, error)
 	AdminResetQueueWeight(ctx context.Context, name string) (AdminQueueSummary, error)
 }
@@ -173,6 +195,7 @@ type adminSchedules interface {
 
 type adminDLQ interface {
 	AdminDLQ(ctx context.Context, filter AdminDLQFilter) (AdminDLQPage, error)
+	AdminDLQEntry(ctx context.Context, id string) (AdminDLQEntryDetail, error)
 	AdminPause(ctx context.Context) error
 	AdminResume(ctx context.Context) error
 	AdminReplayDLQ(ctx context.Context, limit int) (int, error)

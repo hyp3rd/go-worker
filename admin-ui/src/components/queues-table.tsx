@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { QueueSummary } from "@/lib/types";
 import { formatNumber } from "@/lib/format";
 import { FilterBar } from "@/components/filters";
@@ -13,9 +13,12 @@ const PAGE_SIZE = 5;
 
 export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(
+    () => searchParams.get("create") === "1"
+  );
   const [createName, setCreateName] = useState("");
   const [createWeight, setCreateWeight] = useState("1");
   const [message, setMessage] = useState<{
@@ -162,6 +165,11 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
               >
                 {queue.name}
               </Link>
+              {queue.paused ? (
+                <span className="ml-2 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700">
+                  paused
+                </span>
+              ) : null}
             </TableCell>
             <TableCell>{formatNumber(queue.ready)}</TableCell>
             <TableCell>{formatNumber(queue.processing)}</TableCell>

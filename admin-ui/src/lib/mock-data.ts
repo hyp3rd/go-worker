@@ -38,6 +38,7 @@ export const queueSummaries: QueueSummary[] = [
     processing: 6,
     dead: 2,
     weight: 1,
+    paused: false,
   },
   {
     name: "critical",
@@ -45,6 +46,7 @@ export const queueSummaries: QueueSummary[] = [
     processing: 3,
     dead: 0,
     weight: 3,
+    paused: false,
   },
   {
     name: "emails",
@@ -52,6 +54,7 @@ export const queueSummaries: QueueSummary[] = [
     processing: 4,
     dead: 1,
     weight: 2,
+    paused: false,
   },
 ];
 

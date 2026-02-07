@@ -29,6 +29,9 @@ export function SchedulesGrid({
     text: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const hasSchedules = schedules.length > 0;
+  const allPaused =
+    hasSchedules && schedules.every((schedule) => schedule.paused);
 
   const existingSchedule = useMemo(() => {
     const name = createName.trim();
@@ -202,6 +205,89 @@ export function SchedulesGrid({
     }
   };
 
+  const runSchedule = async (job: JobSchedule) => {
+    const ok = window.confirm(`Run schedule "${job.name}" now?`);
+    if (!ok) {
+      return;
+    }
+
+    setMessage(null);
+    try {
+      const res = await fetch(
+        `/api/schedules/${encodeURIComponent(job.name)}/run`,
+        { method: "POST" }
+      );
+
+      if (!res.ok) {
+        const payload = (await res.json()) as { error?: string };
+        throw new Error(payload?.error ?? "Schedule run failed");
+      }
+
+      const payload = (await res.json()) as { taskId?: string };
+      setMessage({
+        tone: "success",
+        text: payload.taskId
+          ? `Schedule run queued (${payload.taskId}).`
+          : "Schedule run queued.",
+      });
+      startTransition(() => router.refresh());
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Schedule run failed",
+      });
+    }
+  };
+
+  const toggleAllSchedules = async () => {
+    if (!hasSchedules) {
+      return;
+    }
+
+    const targetPaused = !allPaused;
+    const ok = window.confirm(
+      targetPaused
+        ? "Pause all schedules? Scheduled runs will be skipped."
+        : "Resume all schedules?"
+    );
+    if (!ok) {
+      return;
+    }
+
+    setMessage(null);
+    try {
+      const res = await fetch("/api/schedules/pause", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused: targetPaused }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json()) as { error?: string };
+        throw new Error(payload?.error ?? "Schedules update failed");
+      }
+
+      const payload = (await res.json()) as {
+        updated?: number;
+        paused?: boolean;
+      };
+      const updated = payload.updated ?? 0;
+      setMessage({
+        tone: "success",
+        text: targetPaused
+          ? `Paused ${updated} schedule(s).`
+          : `Resumed ${updated} schedule(s).`,
+      });
+      startTransition(() => router.refresh());
+    } catch (error) {
+      setMessage({
+        tone: "error",
+        text:
+          error instanceof Error ? error.message : "Schedules update failed",
+      });
+    }
+  };
+
   return (
     <div className="mt-6 space-y-4">
       {message ? (
@@ -221,12 +307,21 @@ export function SchedulesGrid({
         onQuery={setQuery}
         onStatus={setStatus}
         rightSlot={
-          <button
-            onClick={() => setCreateOpen((prev) => !prev)}
-            className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-[var(--accent-ink)]"
-          >
-            {createOpen ? "Close" : "New schedule"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={toggleAllSchedules}
+              disabled={pending || !hasSchedules}
+              className="rounded-full border border-soft bg-white px-4 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50"
+            >
+              {allPaused ? "Resume all" : "Pause all"}
+            </button>
+            <button
+              onClick={() => setCreateOpen((prev) => !prev)}
+              className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-[var(--accent-ink)]"
+            >
+              {createOpen ? "Close" : "New schedule"}
+            </button>
+          </div>
         }
       />
       {createOpen ? (
@@ -366,6 +461,13 @@ export function SchedulesGrid({
               </div>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => runSchedule(job)}
+                disabled={pending}
+                className="rounded-full border border-soft px-3 py-1 text-xs font-semibold disabled:opacity-50"
+              >
+                Run now
+              </button>
               <button
                 onClick={() => togglePause(job)}
                 disabled={pending}

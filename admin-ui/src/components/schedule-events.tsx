@@ -29,6 +29,10 @@ export function ScheduleEvents({ events }: { events: ScheduleEvent[] }) {
   }, [events]);
 
   useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let source: EventSource | null = null;
+    let active = true;
+
     const refresh = async () => {
       try {
         const res = await fetch(`/api/schedules/events?limit=25`, {
@@ -46,13 +50,56 @@ export function ScheduleEvents({ events }: { events: ScheduleEvent[] }) {
       }
     };
 
+    const startPolling = () => {
+      if (timer) {
+        return;
+      }
+      timer = setInterval(refresh, refreshIntervalMs);
+    };
+
+    const startSSE = () => {
+      source = new EventSource("/api/events");
+      source.addEventListener("schedule_events", (event) => {
+        try {
+          const payload = JSON.parse(event.data) as {
+            events?: ScheduleEvent[];
+          };
+          if (payload?.events) {
+            setItems(payload.events);
+          }
+        } catch {
+          // ignore parsing errors
+        }
+      });
+      source.onerror = () => {
+        if (!active) {
+          return;
+        }
+        source?.close();
+        source = null;
+        startPolling();
+      };
+    };
+
     refresh();
-    const timer = setInterval(refresh, refreshIntervalMs);
-    return () => clearInterval(timer);
+    startSSE();
+
+    return () => {
+      active = false;
+      if (source) {
+        source.close();
+      }
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
   }, []);
 
   return (
-    <section className="mt-6 rounded-2xl border border-soft bg-[var(--card)] p-4">
+    <section
+      id="schedule-events"
+      className="mt-6 rounded-2xl border border-soft bg-[var(--card)] p-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-muted">

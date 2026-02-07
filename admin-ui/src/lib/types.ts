@@ -4,6 +4,7 @@ export type QueueSummary = {
   processing: number;
   dead: number;
   weight: number;
+  paused: boolean;
 };
 
 export type QueueDetail = QueueSummary;
@@ -60,6 +61,19 @@ export type DlqEntry = {
   handler: string;
   age: string;
   attempts: number;
+};
+
+export type DlqEntryDetail = {
+  id: string;
+  queue: string;
+  handler: string;
+  attempts: number;
+  ageMs: number;
+  failedAtMs: number;
+  updatedAtMs: number;
+  lastError: string;
+  payloadSize: number;
+  metadata?: Record<string, string>;
 };
 
 export type CoordinationStatus = {

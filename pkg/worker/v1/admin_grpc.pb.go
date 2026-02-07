@@ -26,6 +26,7 @@ const (
 	AdminService_GetQueue_FullMethodName              = "/worker.v1.AdminService/GetQueue"
 	AdminService_UpdateQueueWeight_FullMethodName     = "/worker.v1.AdminService/UpdateQueueWeight"
 	AdminService_ResetQueueWeight_FullMethodName      = "/worker.v1.AdminService/ResetQueueWeight"
+	AdminService_PauseQueue_FullMethodName            = "/worker.v1.AdminService/PauseQueue"
 	AdminService_ListScheduleFactories_FullMethodName = "/worker.v1.AdminService/ListScheduleFactories"
 	AdminService_ListScheduleEvents_FullMethodName    = "/worker.v1.AdminService/ListScheduleEvents"
 	AdminService_ListSchedules_FullMethodName         = "/worker.v1.AdminService/ListSchedules"
@@ -35,6 +36,7 @@ const (
 	AdminService_RunSchedule_FullMethodName           = "/worker.v1.AdminService/RunSchedule"
 	AdminService_PauseSchedules_FullMethodName        = "/worker.v1.AdminService/PauseSchedules"
 	AdminService_ListDLQ_FullMethodName               = "/worker.v1.AdminService/ListDLQ"
+	AdminService_GetDLQEntry_FullMethodName           = "/worker.v1.AdminService/GetDLQEntry"
 	AdminService_PauseDequeue_FullMethodName          = "/worker.v1.AdminService/PauseDequeue"
 	AdminService_ResumeDequeue_FullMethodName         = "/worker.v1.AdminService/ResumeDequeue"
 	AdminService_ReplayDLQ_FullMethodName             = "/worker.v1.AdminService/ReplayDLQ"
@@ -51,6 +53,7 @@ type AdminServiceClient interface {
 	GetQueue(ctx context.Context, in *GetQueueRequest, opts ...grpc.CallOption) (*GetQueueResponse, error)
 	UpdateQueueWeight(ctx context.Context, in *UpdateQueueWeightRequest, opts ...grpc.CallOption) (*UpdateQueueWeightResponse, error)
 	ResetQueueWeight(ctx context.Context, in *ResetQueueWeightRequest, opts ...grpc.CallOption) (*ResetQueueWeightResponse, error)
+	PauseQueue(ctx context.Context, in *PauseQueueRequest, opts ...grpc.CallOption) (*PauseQueueResponse, error)
 	ListScheduleFactories(ctx context.Context, in *ListScheduleFactoriesRequest, opts ...grpc.CallOption) (*ListScheduleFactoriesResponse, error)
 	ListScheduleEvents(ctx context.Context, in *ListScheduleEventsRequest, opts ...grpc.CallOption) (*ListScheduleEventsResponse, error)
 	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
@@ -60,6 +63,7 @@ type AdminServiceClient interface {
 	RunSchedule(ctx context.Context, in *RunScheduleRequest, opts ...grpc.CallOption) (*RunScheduleResponse, error)
 	PauseSchedules(ctx context.Context, in *PauseSchedulesRequest, opts ...grpc.CallOption) (*PauseSchedulesResponse, error)
 	ListDLQ(ctx context.Context, in *ListDLQRequest, opts ...grpc.CallOption) (*ListDLQResponse, error)
+	GetDLQEntry(ctx context.Context, in *GetDLQEntryRequest, opts ...grpc.CallOption) (*GetDLQEntryResponse, error)
 	PauseDequeue(ctx context.Context, in *PauseDequeueRequest, opts ...grpc.CallOption) (*PauseDequeueResponse, error)
 	ResumeDequeue(ctx context.Context, in *ResumeDequeueRequest, opts ...grpc.CallOption) (*ResumeDequeueResponse, error)
 	ReplayDLQ(ctx context.Context, in *ReplayDLQRequest, opts ...grpc.CallOption) (*ReplayDLQResponse, error)
@@ -128,6 +132,16 @@ func (c *adminServiceClient) ResetQueueWeight(ctx context.Context, in *ResetQueu
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResetQueueWeightResponse)
 	err := c.cc.Invoke(ctx, AdminService_ResetQueueWeight_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) PauseQueue(ctx context.Context, in *PauseQueueRequest, opts ...grpc.CallOption) (*PauseQueueResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PauseQueueResponse)
+	err := c.cc.Invoke(ctx, AdminService_PauseQueue_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -224,6 +238,16 @@ func (c *adminServiceClient) ListDLQ(ctx context.Context, in *ListDLQRequest, op
 	return out, nil
 }
 
+func (c *adminServiceClient) GetDLQEntry(ctx context.Context, in *GetDLQEntryRequest, opts ...grpc.CallOption) (*GetDLQEntryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDLQEntryResponse)
+	err := c.cc.Invoke(ctx, AdminService_GetDLQEntry_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) PauseDequeue(ctx context.Context, in *PauseDequeueRequest, opts ...grpc.CallOption) (*PauseDequeueResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PauseDequeueResponse)
@@ -274,6 +298,7 @@ type AdminServiceServer interface {
 	GetQueue(context.Context, *GetQueueRequest) (*GetQueueResponse, error)
 	UpdateQueueWeight(context.Context, *UpdateQueueWeightRequest) (*UpdateQueueWeightResponse, error)
 	ResetQueueWeight(context.Context, *ResetQueueWeightRequest) (*ResetQueueWeightResponse, error)
+	PauseQueue(context.Context, *PauseQueueRequest) (*PauseQueueResponse, error)
 	ListScheduleFactories(context.Context, *ListScheduleFactoriesRequest) (*ListScheduleFactoriesResponse, error)
 	ListScheduleEvents(context.Context, *ListScheduleEventsRequest) (*ListScheduleEventsResponse, error)
 	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
@@ -283,6 +308,7 @@ type AdminServiceServer interface {
 	RunSchedule(context.Context, *RunScheduleRequest) (*RunScheduleResponse, error)
 	PauseSchedules(context.Context, *PauseSchedulesRequest) (*PauseSchedulesResponse, error)
 	ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error)
+	GetDLQEntry(context.Context, *GetDLQEntryRequest) (*GetDLQEntryResponse, error)
 	PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error)
 	ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error)
 	ReplayDLQ(context.Context, *ReplayDLQRequest) (*ReplayDLQResponse, error)
@@ -320,6 +346,10 @@ func (UnimplementedAdminServiceServer) ResetQueueWeight(context.Context, *ResetQ
 	return nil, status.Error(codes.Unimplemented, "method ResetQueueWeight not implemented")
 }
 
+func (UnimplementedAdminServiceServer) PauseQueue(context.Context, *PauseQueueRequest) (*PauseQueueResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseQueue not implemented")
+}
+
 func (UnimplementedAdminServiceServer) ListScheduleFactories(context.Context, *ListScheduleFactoriesRequest) (*ListScheduleFactoriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListScheduleFactories not implemented")
 }
@@ -354,6 +384,10 @@ func (UnimplementedAdminServiceServer) PauseSchedules(context.Context, *PauseSch
 
 func (UnimplementedAdminServiceServer) ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDLQ not implemented")
+}
+
+func (UnimplementedAdminServiceServer) GetDLQEntry(context.Context, *GetDLQEntryRequest) (*GetDLQEntryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDLQEntry not implemented")
 }
 
 func (UnimplementedAdminServiceServer) PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error) {
@@ -495,6 +529,24 @@ func _AdminService_ResetQueueWeight_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).ResetQueueWeight(ctx, req.(*ResetQueueWeightRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_PauseQueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseQueueRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).PauseQueue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_PauseQueue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).PauseQueue(ctx, req.(*PauseQueueRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -661,6 +713,24 @@ func _AdminService_ListDLQ_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_GetDLQEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDLQEntryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetDLQEntry(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_GetDLQEntry_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetDLQEntry(ctx, req.(*GetDLQEntryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_PauseDequeue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PauseDequeueRequest)
 	if err := dec(in); err != nil {
@@ -765,6 +835,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_ResetQueueWeight_Handler,
 		},
 		{
+			MethodName: "PauseQueue",
+			Handler:    _AdminService_PauseQueue_Handler,
+		},
+		{
 			MethodName: "ListScheduleFactories",
 			Handler:    _AdminService_ListScheduleFactories_Handler,
 		},
@@ -799,6 +873,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListDLQ",
 			Handler:    _AdminService_ListDLQ_Handler,
+		},
+		{
+			MethodName: "GetDLQEntry",
+			Handler:    _AdminService_GetDLQEntry_Handler,
 		},
 		{
 			MethodName: "PauseDequeue",

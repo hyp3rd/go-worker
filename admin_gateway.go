@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -41,11 +42,15 @@ const (
 	adminErrReadBodyMsg   = "failed to read request body"
 	adminErrParseBodyMsg  = "failed to parse request body"
 	adminErrInvalidBody   = "invalid_body"
+	adminErrMissingQueue  = "missing_queue"
+	adminErrQueueRequired = "Queue name is required"
 	adminRequestTimeout   = 5 * time.Second
 	adminRequestIDHeader  = "X-Request-Id"
 	adminRequestIDMetaKey = "x-request-id"
 	adminPathSeparator    = "/"
 	adminScheduleLag      = 2 * time.Minute
+	adminEventsInterval   = 10 * time.Second
+	adminEventsMaxCount   = 25
 )
 
 // AdminGatewayConfig configures the admin HTTP gateway.
@@ -163,7 +168,9 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	mux.HandleFunc("/admin/v1/schedules/events", handler.handleScheduleEvents)
 	mux.HandleFunc("/admin/v1/schedules/pause", handler.handleSchedulesPause)
 	mux.HandleFunc("/admin/v1/schedules/", handler.handleSchedule)
+	mux.HandleFunc("/admin/v1/events", handler.handleEvents)
 	mux.HandleFunc("/admin/v1/dlq", handler.handleDLQ)
+	mux.HandleFunc("/admin/v1/dlq/", handler.handleDLQEntry)
 	mux.HandleFunc("/admin/v1/pause", handler.handlePause)
 	mux.HandleFunc("/admin/v1/resume", handler.handleResume)
 	mux.HandleFunc("/admin/v1/dlq/replay", handler.handleReplay)
@@ -287,13 +294,7 @@ func (h *adminGatewayHandler) handleQueues(w http.ResponseWriter, r *http.Reques
 
 	queues := make([]queueSummaryJSON, 0, len(resp.GetQueues()))
 	for _, queue := range resp.GetQueues() {
-		queues = append(queues, queueSummaryJSON{
-			Name:       queue.GetName(),
-			Ready:      queue.GetReady(),
-			Processing: queue.GetProcessing(),
-			Dead:       queue.GetDead(),
-			Weight:     queue.GetWeight(),
-		})
+		queues = append(queues, queueSummaryFromProto(queue))
 	}
 
 	writeAdminJSON(w, http.StatusOK, adminQueuesJSON{Queues: queues})
@@ -304,7 +305,7 @@ func (h *adminGatewayHandler) handleQueue(w http.ResponseWriter, r *http.Request
 
 	path = strings.Trim(path, adminPathSeparator)
 	if path == "" {
-		writeAdminError(w, http.StatusBadRequest, "missing_queue", "Queue name is required", requestID(r, w))
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
 
 		return
 	}
@@ -312,6 +313,13 @@ func (h *adminGatewayHandler) handleQueue(w http.ResponseWriter, r *http.Request
 	if before, ok := strings.CutSuffix(path, "/weight"); ok {
 		name := strings.TrimSuffix(before, adminPathSeparator)
 		h.handleQueueWeight(w, r, name)
+
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/pause"); ok {
+		name := strings.TrimSuffix(before, adminPathSeparator)
+		h.handleQueuePause(w, r, name)
 
 		return
 	}
@@ -328,7 +336,7 @@ func (h *adminGatewayHandler) handleQueue(w http.ResponseWriter, r *http.Request
 func (h *adminGatewayHandler) handleQueueGet(w http.ResponseWriter, r *http.Request, name string) {
 	name = strings.Trim(name, adminPathSeparator)
 	if name == "" {
-		writeAdminError(w, http.StatusBadRequest, "missing_queue", "Queue name is required", requestID(r, w))
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
 
 		return
 	}
@@ -361,6 +369,7 @@ func (h *adminGatewayHandler) handleQueueGet(w http.ResponseWriter, r *http.Requ
 			Processing: queue.GetProcessing(),
 			Dead:       queue.GetDead(),
 			Weight:     queue.GetWeight(),
+			Paused:     queue.GetPaused(),
 		},
 	}
 
@@ -370,7 +379,7 @@ func (h *adminGatewayHandler) handleQueueGet(w http.ResponseWriter, r *http.Requ
 func (h *adminGatewayHandler) handleQueueWeight(w http.ResponseWriter, r *http.Request, name string) {
 	name = strings.Trim(name, adminPathSeparator)
 	if name == "" {
-		writeAdminError(w, http.StatusBadRequest, "missing_queue", "Queue name is required", requestID(r, w))
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
 
 		return
 	}
@@ -447,6 +456,64 @@ func (h *adminGatewayHandler) handleQueueWeightReset(w http.ResponseWriter, r *h
 	writeAdminJSON(w, http.StatusOK, adminQueueJSON{Queue: queueSummaryFromProto(resp.GetQueue())})
 }
 
+func (h *adminGatewayHandler) handleQueuePause(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	name = strings.Trim(name, adminPathSeparator)
+	if name == "" {
+		writeAdminError(w, http.StatusBadRequest, adminErrMissingQueue, adminErrQueueRequired, requestID(r, w))
+
+		return
+	}
+
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_queue", "Invalid queue name", requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, adminBodyLimitBytes))
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidBody, adminErrReadBodyMsg, reqID)
+
+		return
+	}
+
+	payload := adminQueuePauseRequest{Paused: true}
+	if len(body) > 0 {
+		err := json.Unmarshal(body, &payload)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, adminErrInvalidJSON, adminErrParseBodyMsg, reqID)
+
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.PauseQueue(ctx, &workerpb.PauseQueueRequest{
+		Name:   decoded,
+		Paused: payload.Paused,
+	})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminQueueJSON{Queue: queueSummaryFromProto(resp.GetQueue())})
+}
+
 func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
@@ -492,6 +559,47 @@ func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeAdminJSON(w, http.StatusOK, adminDLQJSON{Entries: entries, Total: resp.GetTotal()})
+}
+
+func (h *adminGatewayHandler) handleDLQEntry(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/admin/v1/dlq/")
+
+	id := strings.Trim(path, adminPathSeparator)
+	if id == "" {
+		writeAdminError(w, http.StatusBadRequest, "missing_dlq_id", "DLQ id is required", requestID(r, w))
+
+		return
+	}
+
+	decoded, err := url.PathUnescape(id)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid_dlq_id", "Invalid DLQ id", requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetDLQEntry(ctx, &workerpb.GetDLQEntryRequest{Id: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminDLQEntryDetailJSON{
+		Entry: dlqEntryDetailFromProto(resp.GetEntry()),
+	})
 }
 
 func (h *adminGatewayHandler) handlePause(w http.ResponseWriter, r *http.Request) {
@@ -685,6 +793,151 @@ func (h *adminGatewayHandler) handleScheduleEvents(w http.ResponseWriter, r *htt
 	}
 
 	writeAdminJSON(w, http.StatusOK, adminScheduleEventsJSON{Events: events})
+}
+
+func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeAdminError(w, http.StatusInternalServerError, "stream_not_supported", "streaming unsupported", requestID(r, w))
+
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	reqID := requestID(r, w)
+	ctx := r.Context()
+
+	ticker := time.NewTicker(adminEventsInterval)
+	defer ticker.Stop()
+
+	writer := newAdminEventWriter(w, flusher)
+	emit := func() bool {
+		err := h.sendOverviewEvent(ctx, reqID, writer)
+		if err != nil {
+			err := writer.Write("error", map[string]any{"message": err.Error()})
+			if err != nil {
+				return false
+			}
+		}
+
+		err = h.sendScheduleEventsEvent(ctx, reqID, writer)
+		if err != nil {
+			err := writer.Write("error", map[string]any{"message": err.Error()})
+			if err != nil {
+				return false
+			}
+		}
+
+		err = writer.Write("heartbeat", map[string]any{"ts": time.Now().UnixMilli()})
+
+		return err == nil
+	}
+
+	if !emit() {
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !emit() {
+				return
+			}
+		}
+	}
+}
+
+type adminEventWriter struct {
+	writer  io.Writer
+	flusher http.Flusher
+}
+
+func newAdminEventWriter(writer io.Writer, flusher http.Flusher) *adminEventWriter {
+	return &adminEventWriter{writer: writer, flusher: flusher}
+}
+
+func (w *adminEventWriter) Write(eventName string, payload any) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return ewrap.Wrap(err, "marshal event payload").WithMetadata("event", eventName)
+	}
+
+	_, err = fmt.Fprintf(w.writer, "event: %s\ndata: %s\n\n", eventName, data)
+	if err != nil {
+		return ewrap.Wrap(err, "write event payload").WithMetadata("event", eventName)
+	}
+
+	w.flusher.Flush()
+
+	return nil
+}
+
+func (h *adminGatewayHandler) sendOverviewEvent(ctx context.Context, reqID string, writer *adminEventWriter) error {
+	overviewCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	overviewCtx = metadata.AppendToOutgoingContext(overviewCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetOverview(overviewCtx, &workerpb.GetOverviewRequest{})
+	if err != nil {
+		return err
+	}
+
+	payload := adminOverviewJSON{
+		Stats: overviewStatsJSON{
+			ActiveWorkers: resp.GetStats().GetActiveWorkers(),
+			QueuedTasks:   resp.GetStats().GetQueuedTasks(),
+			Queues:        resp.GetStats().GetQueues(),
+			AvgLatencyMs:  resp.GetStats().GetAvgLatencyMs(),
+			P95LatencyMs:  resp.GetStats().GetP95LatencyMs(),
+		},
+		Coordination: coordinationJSON{
+			GlobalRateLimit: resp.GetCoordination().GetGlobalRateLimit(),
+			LeaderLock:      resp.GetCoordination().GetLeaderLock(),
+			Lease:           resp.GetCoordination().GetLease(),
+			Paused:          resp.GetCoordination().GetPaused(),
+		},
+		Actions: adminActionsJSON{
+			Pause:  resp.GetActions().GetPause(),
+			Resume: resp.GetActions().GetResume(),
+			Replay: resp.GetActions().GetReplay(),
+		},
+	}
+
+	return writer.Write("overview", payload)
+}
+
+func (h *adminGatewayHandler) sendScheduleEventsEvent(ctx context.Context, reqID string, writer *adminEventWriter) error {
+	eventsCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	eventsCtx = metadata.AppendToOutgoingContext(eventsCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListScheduleEvents(eventsCtx, &workerpb.ListScheduleEventsRequest{
+		Limit: clampLimit32(adminEventsMaxCount),
+	})
+	if err != nil {
+		return err
+	}
+
+	events := make([]scheduleEventJSON, 0, len(resp.GetEvents()))
+	for _, event := range resp.GetEvents() {
+		events = append(events, scheduleEventFromProto(event))
+	}
+
+	return writer.Write("schedule_events", adminScheduleEventsJSON{Events: events})
 }
 
 func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Request) {
@@ -997,6 +1250,10 @@ type adminQueueWeightRequest struct {
 	Weight int `json:"weight"`
 }
 
+type adminQueuePauseRequest struct {
+	Paused bool `json:"paused"`
+}
+
 type scheduleJSON struct {
 	Name      string `json:"name"`
 	Schedule  string `json:"schedule"`
@@ -1066,6 +1323,24 @@ type queueSummaryJSON struct {
 	Processing int64  `json:"processing"`
 	Dead       int64  `json:"dead"`
 	Weight     int32  `json:"weight"`
+	Paused     bool   `json:"paused"`
+}
+
+type adminDLQEntryDetailJSON struct {
+	Entry dlqEntryDetailJSON `json:"entry"`
+}
+
+type dlqEntryDetailJSON struct {
+	ID          string            `json:"id"`
+	Queue       string            `json:"queue"`
+	Handler     string            `json:"handler"`
+	Attempts    int32             `json:"attempts"`
+	AgeMs       int64             `json:"ageMs"`
+	FailedAtMs  int64             `json:"failedAtMs"`
+	UpdatedAtMs int64             `json:"updatedAtMs"`
+	LastError   string            `json:"lastError"`
+	PayloadSize int64             `json:"payloadSize"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 type adminDLQJSON struct {
@@ -1326,6 +1601,25 @@ func scheduleEventFromProto(event *workerpb.ScheduleEvent) scheduleEventJSON {
 	}
 }
 
+func dlqEntryDetailFromProto(entry *workerpb.DLQEntryDetail) dlqEntryDetailJSON {
+	if entry == nil {
+		return dlqEntryDetailJSON{}
+	}
+
+	return dlqEntryDetailJSON{
+		ID:          entry.GetId(),
+		Queue:       entry.GetQueue(),
+		Handler:     entry.GetHandler(),
+		Attempts:    entry.GetAttempts(),
+		AgeMs:       entry.GetAgeMs(),
+		FailedAtMs:  entry.GetFailedAtMs(),
+		UpdatedAtMs: entry.GetUpdatedAtMs(),
+		LastError:   entry.GetLastError(),
+		PayloadSize: entry.GetPayloadSize(),
+		Metadata:    entry.GetMetadata(),
+	}
+}
+
 func queueSummaryFromProto(queue *workerpb.QueueSummary) queueSummaryJSON {
 	if queue == nil {
 		return queueSummaryJSON{}
@@ -1337,6 +1631,7 @@ func queueSummaryFromProto(queue *workerpb.QueueSummary) queueSummaryJSON {
 		Processing: queue.GetProcessing(),
 		Dead:       queue.GetDead(),
 		Weight:     queue.GetWeight(),
+		Paused:     queue.GetPaused(),
 	}
 }
 

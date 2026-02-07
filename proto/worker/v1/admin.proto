@@ -49,6 +49,7 @@ message QueueSummary {
   int64 processing = 3;
   int64 dead = 4;
   int32 weight = 5;
+  bool paused = 6;
 }
 
 message ListQueuesRequest {}
@@ -79,6 +80,15 @@ message ResetQueueWeightRequest {
 }
 
 message ResetQueueWeightResponse {
+  QueueSummary queue = 1;
+}
+
+message PauseQueueRequest {
+  string name = 1;
+  bool paused = 2;
+}
+
+message PauseQueueResponse {
   QueueSummary queue = 1;
 }
 
@@ -184,6 +194,27 @@ message DLQEntry {
   int64 age_ms = 5;
 }
 
+message DLQEntryDetail {
+  string id = 1;
+  string queue = 2;
+  string handler = 3;
+  int32 attempts = 4;
+  int64 age_ms = 5;
+  int64 failed_at_ms = 6;
+  int64 updated_at_ms = 7;
+  string last_error = 8;
+  int64 payload_size = 9;
+  map<string, string> metadata = 10;
+}
+
+message GetDLQEntryRequest {
+  string id = 1;
+}
+
+message GetDLQEntryResponse {
+  DLQEntryDetail entry = 1;
+}
+
 message ListDLQRequest {
   int32 limit = 1;
   int32 offset = 2;
@@ -232,6 +263,7 @@ service AdminService {
   rpc GetQueue(GetQueueRequest) returns (GetQueueResponse);
   rpc UpdateQueueWeight(UpdateQueueWeightRequest) returns (UpdateQueueWeightResponse);
   rpc ResetQueueWeight(ResetQueueWeightRequest) returns (ResetQueueWeightResponse);
+  rpc PauseQueue(PauseQueueRequest) returns (PauseQueueResponse);
   rpc ListScheduleFactories(ListScheduleFactoriesRequest) returns (ListScheduleFactoriesResponse);
   rpc ListScheduleEvents(ListScheduleEventsRequest) returns (ListScheduleEventsResponse);
   rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
@@ -241,6 +273,7 @@ service AdminService {
   rpc RunSchedule(RunScheduleRequest) returns (RunScheduleResponse);
   rpc PauseSchedules(PauseSchedulesRequest) returns (PauseSchedulesResponse);
   rpc ListDLQ(ListDLQRequest) returns (ListDLQResponse);
+  rpc GetDLQEntry(GetDLQEntryRequest) returns (GetDLQEntryResponse);
   rpc PauseDequeue(PauseDequeueRequest) returns (PauseDequeueResponse);
   rpc ResumeDequeue(ResumeDequeueRequest) returns (ResumeDequeueResponse);
   rpc ReplayDLQ(ReplayDLQRequest) returns (ReplayDLQResponse);
