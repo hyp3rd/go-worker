@@ -167,6 +167,7 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	mux.HandleFunc("/admin/v1/overview", handler.handleOverview)
 	mux.HandleFunc("/admin/v1/queues", handler.handleQueues)
 	mux.HandleFunc("/admin/v1/queues/", handler.handleQueue)
+	mux.HandleFunc("/admin/v1/jobs/events", handler.handleJobEvents)
 	mux.HandleFunc("/admin/v1/jobs", handler.handleJobs)
 	mux.HandleFunc("/admin/v1/jobs/", handler.handleJob)
 	mux.HandleFunc("/admin/v1/schedules", handler.handleSchedules)
@@ -949,32 +950,35 @@ func (h *adminGatewayHandler) handleScheduleEvents(w http.ResponseWriter, r *htt
 		return
 	}
 
-	queryValues := r.URL.Query()
-	limit := parseIntParam(queryValues.Get("limit"), defaultAdminDLQLimit)
-	name := strings.TrimSpace(queryValues.Get("name"))
+	name, limit := parseAdminEventQuery(r, defaultAdminScheduleEventLimit)
 
-	reqID := requestID(r, w)
-	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
-	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
-
-	defer cancel()
-
-	resp, err := h.client.ListScheduleEvents(ctx, &workerpb.ListScheduleEventsRequest{
-		Name:  name,
-		Limit: clampLimit32(limit),
-	})
+	events, err := h.fetchScheduleEvents(r.Context(), requestID(r, w), name, limit)
 	if err != nil {
-		writeAdminGRPCError(w, reqID, err)
+		writeAdminGRPCError(w, requestID(r, w), err)
 
 		return
 	}
 
-	events := make([]scheduleEventJSON, 0, len(resp.GetEvents()))
-	for _, event := range resp.GetEvents() {
-		events = append(events, scheduleEventFromProto(event))
+	writeAdminJSON(w, http.StatusOK, adminScheduleEventsJSON{Events: events})
+}
+
+func (h *adminGatewayHandler) handleJobEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
 	}
 
-	writeAdminJSON(w, http.StatusOK, adminScheduleEventsJSON{Events: events})
+	name, limit := parseAdminEventQuery(r, defaultAdminJobEventLimit)
+
+	events, err := h.fetchJobEvents(r.Context(), requestID(r, w), name, limit)
+	if err != nil {
+		writeAdminGRPCError(w, requestID(r, w), err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobEventsJSON{Events: events})
 }
 
 func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -1003,29 +1007,8 @@ func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Reques
 	defer ticker.Stop()
 
 	writer := newAdminEventWriter(w, flusher)
-	emit := func() bool {
-		err := h.sendOverviewEvent(ctx, reqID, writer)
-		if err != nil {
-			err := writer.Write("error", map[string]any{"message": err.Error()})
-			if err != nil {
-				return false
-			}
-		}
 
-		err = h.sendScheduleEventsEvent(ctx, reqID, writer)
-		if err != nil {
-			err := writer.Write("error", map[string]any{"message": err.Error()})
-			if err != nil {
-				return false
-			}
-		}
-
-		err = writer.Write("heartbeat", map[string]any{"ts": time.Now().UnixMilli()})
-
-		return err == nil
-	}
-
-	if !emit() {
+	if !h.emitAdminEvents(ctx, reqID, writer) {
 		return
 	}
 
@@ -1034,11 +1017,101 @@ func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Reques
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if !emit() {
+			if !h.emitAdminEvents(ctx, reqID, writer) {
 				return
 			}
 		}
 	}
+}
+
+func parseAdminEventQuery(r *http.Request, defaultLimit int) (string, int) {
+	queryValues := r.URL.Query()
+	limit := parseIntParam(queryValues.Get("limit"), defaultLimit)
+	name := strings.TrimSpace(queryValues.Get("name"))
+
+	return name, limit
+}
+
+func (h *adminGatewayHandler) fetchScheduleEvents(
+	ctx context.Context,
+	reqID string,
+	name string,
+	limit int,
+) ([]scheduleEventJSON, error) {
+	eventsCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	eventsCtx = metadata.AppendToOutgoingContext(eventsCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListScheduleEvents(eventsCtx, &workerpb.ListScheduleEventsRequest{
+		Name:  name,
+		Limit: clampLimit32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]scheduleEventJSON, 0, len(resp.GetEvents()))
+	for _, event := range resp.GetEvents() {
+		events = append(events, scheduleEventFromProto(event))
+	}
+
+	return events, nil
+}
+
+func (h *adminGatewayHandler) fetchJobEvents(
+	ctx context.Context,
+	reqID string,
+	name string,
+	limit int,
+) ([]jobEventJSON, error) {
+	eventsCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	eventsCtx = metadata.AppendToOutgoingContext(eventsCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListJobEvents(eventsCtx, &workerpb.ListJobEventsRequest{
+		Name:  name,
+		Limit: clampLimit32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]jobEventJSON, 0, len(resp.GetEvents()))
+	for _, event := range resp.GetEvents() {
+		events = append(events, jobEventFromProto(event))
+	}
+
+	return events, nil
+}
+
+func (h *adminGatewayHandler) emitAdminEvents(
+	ctx context.Context,
+	reqID string,
+	writer *adminEventWriter,
+) bool {
+	if !writeAdminEventOrError(writer, h.sendOverviewEvent(ctx, reqID, writer)) {
+		return false
+	}
+
+	if !writeAdminEventOrError(writer, h.sendScheduleEventsEvent(ctx, reqID, writer)) {
+		return false
+	}
+
+	if !writeAdminEventOrError(writer, h.sendJobEventsEvent(ctx, reqID, writer)) {
+		return false
+	}
+
+	return writer.Write("heartbeat", map[string]any{"ts": time.Now().UnixMilli()}) == nil
+}
+
+func writeAdminEventOrError(writer *adminEventWriter, err error) bool {
+	if err == nil {
+		return true
+	}
+
+	return writer.Write("error", map[string]any{"message": err.Error()}) == nil
 }
 
 type adminEventWriter struct {
@@ -1120,6 +1193,27 @@ func (h *adminGatewayHandler) sendScheduleEventsEvent(ctx context.Context, reqID
 	}
 
 	return writer.Write("schedule_events", adminScheduleEventsJSON{Events: events})
+}
+
+func (h *adminGatewayHandler) sendJobEventsEvent(ctx context.Context, reqID string, writer *adminEventWriter) error {
+	eventsCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	eventsCtx = metadata.AppendToOutgoingContext(eventsCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListJobEvents(eventsCtx, &workerpb.ListJobEventsRequest{
+		Limit: clampLimit32(adminEventsMaxCount),
+	})
+	if err != nil {
+		return err
+	}
+
+	events := make([]jobEventJSON, 0, len(resp.GetEvents()))
+	for _, event := range resp.GetEvents() {
+		events = append(events, jobEventFromProto(event))
+	}
+
+	return writer.Write("job_events", adminJobEventsJSON{Events: events})
 }
 
 func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Request) {
@@ -1468,6 +1562,10 @@ type adminScheduleEventsJSON struct {
 	Events []scheduleEventJSON `json:"events"`
 }
 
+type adminJobEventsJSON struct {
+	Events []jobEventJSON `json:"events"`
+}
+
 type adminQueueWeightRequest struct {
 	Weight int `json:"weight"`
 }
@@ -1481,6 +1579,10 @@ type adminJobRequest struct {
 	Description    string   `json:"description,omitempty"`
 	Repo           string   `json:"repo"`
 	Tag            string   `json:"tag"`
+	Source         string   `json:"source,omitempty"`
+	TarballURL     string   `json:"tarballUrl,omitempty"`
+	TarballPath    string   `json:"tarballPath,omitempty"`
+	TarballSHA     string   `json:"tarballSha256,omitempty"`
 	Path           string   `json:"path,omitempty"`
 	Dockerfile     string   `json:"dockerfile,omitempty"`
 	Command        []string `json:"command,omitempty"`
@@ -1507,6 +1609,10 @@ type adminJobJSON struct {
 	Description    string   `json:"description,omitempty"`
 	Repo           string   `json:"repo"`
 	Tag            string   `json:"tag"`
+	Source         string   `json:"source,omitempty"`
+	TarballURL     string   `json:"tarballUrl,omitempty"`
+	TarballPath    string   `json:"tarballPath,omitempty"`
+	TarballSHA     string   `json:"tarballSha256,omitempty"`
 	Path           string   `json:"path,omitempty"`
 	Dockerfile     string   `json:"dockerfile,omitempty"`
 	Command        []string `json:"command,omitempty"`
@@ -1535,6 +1641,26 @@ type scheduleEventJSON struct {
 	DurationMs   int64             `json:"durationMs"`
 	Result       string            `json:"result"`
 	Error        string            `json:"error"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+}
+
+type jobEventJSON struct {
+	TaskID       string            `json:"taskId"`
+	Name         string            `json:"name"`
+	Status       string            `json:"status"`
+	Queue        string            `json:"queue"`
+	Repo         string            `json:"repo"`
+	Tag          string            `json:"tag"`
+	Path         string            `json:"path,omitempty"`
+	Dockerfile   string            `json:"dockerfile,omitempty"`
+	Command      string            `json:"command,omitempty"`
+	ScheduleName string            `json:"scheduleName,omitempty"`
+	ScheduleSpec string            `json:"scheduleSpec,omitempty"`
+	StartedAtMs  int64             `json:"startedAtMs"`
+	FinishedAtMs int64             `json:"finishedAtMs"`
+	DurationMs   int64             `json:"durationMs"`
+	Result       string            `json:"result,omitempty"`
+	Error        string            `json:"error,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
 }
 
@@ -1853,6 +1979,32 @@ func scheduleEventFromProto(event *workerpb.ScheduleEvent) scheduleEventJSON {
 	}
 }
 
+func jobEventFromProto(event *workerpb.JobEvent) jobEventJSON {
+	if event == nil {
+		return jobEventJSON{}
+	}
+
+	return jobEventJSON{
+		TaskID:       event.GetTaskId(),
+		Name:         event.GetName(),
+		Status:       event.GetStatus(),
+		Queue:        event.GetQueue(),
+		Repo:         event.GetRepo(),
+		Tag:          event.GetTag(),
+		Path:         event.GetPath(),
+		Dockerfile:   event.GetDockerfile(),
+		Command:      event.GetCommand(),
+		ScheduleName: event.GetScheduleName(),
+		ScheduleSpec: event.GetScheduleSpec(),
+		StartedAtMs:  event.GetStartedAtMs(),
+		FinishedAtMs: event.GetFinishedAtMs(),
+		DurationMs:   event.GetDurationMs(),
+		Result:       event.GetResult(),
+		Error:        event.GetError(),
+		Metadata:     event.GetMetadata(),
+	}
+}
+
 func adminJobFromProto(job *workerpb.Job) adminJobJSON {
 	if job == nil {
 		return adminJobJSON{}
@@ -1865,6 +2017,10 @@ func adminJobFromProto(job *workerpb.Job) adminJobJSON {
 		Description:    spec.GetDescription(),
 		Repo:           spec.GetRepo(),
 		Tag:            spec.GetTag(),
+		Source:         spec.GetSource(),
+		TarballURL:     spec.GetTarballUrl(),
+		TarballPath:    spec.GetTarballPath(),
+		TarballSHA:     spec.GetTarballSha256(),
 		Path:           spec.GetPath(),
 		Dockerfile:     spec.GetDockerfile(),
 		Command:        append([]string{}, spec.GetCommand()...),
@@ -1896,6 +2052,10 @@ func jobSpecToProto(payload adminJobRequest) (*workerpb.JobSpec, error) {
 		Description:    strings.TrimSpace(payload.Description),
 		Repo:           strings.TrimSpace(payload.Repo),
 		Tag:            strings.TrimSpace(payload.Tag),
+		Source:         strings.TrimSpace(payload.Source),
+		TarballUrl:     strings.TrimSpace(payload.TarballURL),
+		TarballPath:    strings.TrimSpace(payload.TarballPath),
+		TarballSha256:  strings.TrimSpace(payload.TarballSHA),
 		Path:           strings.TrimSpace(payload.Path),
 		Dockerfile:     strings.TrimSpace(payload.Dockerfile),
 		Command:        append([]string{}, payload.Command...),

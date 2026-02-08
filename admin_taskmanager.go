@@ -197,33 +197,71 @@ func (tm *TaskManager) AdminScheduleEvents(
 		return AdminScheduleEventPage{}, ErrInvalidTaskContext
 	}
 
-	name := strings.TrimSpace(filter.Name)
-
-	limit := filter.Limit
-	if limit <= 0 {
-		limit = defaultAdminScheduleEventLimit
-	}
-
-	if tm.cronEventLimit > 0 && limit > tm.cronEventLimit {
-		limit = tm.cronEventLimit
-	}
-
 	tm.cronEventsMu.RLock()
 	events := make([]AdminScheduleEvent, len(tm.cronEvents))
 	copy(events, tm.cronEvents)
 	tm.cronEventsMu.RUnlock()
 
-	filtered := make([]AdminScheduleEvent, 0, min(limit, len(events)))
+	name := strings.TrimSpace(filter.Name)
+	limit := normalizeAdminEventLimit(filter.Limit, defaultAdminScheduleEventLimit, tm.cronEventLimit)
+	filtered := filterAdminEvents(events, name, limit, func(event AdminScheduleEvent) string {
+		return event.Name
+	})
+
+	return AdminScheduleEventPage{Events: filtered}, nil
+}
+
+// AdminJobEvents returns recent job execution events.
+func (tm *TaskManager) AdminJobEvents(
+	ctx context.Context,
+	filter AdminJobEventFilter,
+) (AdminJobEventPage, error) {
+	if tm == nil {
+		return AdminJobEventPage{}, ErrAdminBackendUnavailable
+	}
+
+	if ctx == nil {
+		return AdminJobEventPage{}, ErrInvalidTaskContext
+	}
+
+	tm.jobEventsMu.RLock()
+	events := make([]AdminJobEvent, len(tm.jobEvents))
+	copy(events, tm.jobEvents)
+	tm.jobEventsMu.RUnlock()
+
+	name := strings.TrimSpace(filter.Name)
+	limit := normalizeAdminEventLimit(filter.Limit, defaultAdminJobEventLimit, tm.jobEventLimit)
+	filtered := filterAdminEvents(events, name, limit, func(event AdminJobEvent) string {
+		return event.Name
+	})
+
+	return AdminJobEventPage{Events: filtered}, nil
+}
+
+func normalizeAdminEventLimit(limit, defaultLimit, maxLimit int) int {
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+
+	if maxLimit > 0 && limit > maxLimit {
+		limit = maxLimit
+	}
+
+	return limit
+}
+
+func filterAdminEvents[T any](events []T, name string, limit int, nameFn func(T) string) []T {
+	filtered := make([]T, 0, min(limit, len(events)))
 	for i := len(events) - 1; i >= 0 && len(filtered) < limit; i-- {
 		event := events[i]
-		if name != "" && event.Name != name {
+		if name != "" && nameFn(event) != name {
 			continue
 		}
 
 		filtered = append(filtered, event)
 	}
 
-	return AdminScheduleEventPage{Events: filtered}, nil
+	return filtered
 }
 
 // AdminPauseSchedules pauses or resumes all cron schedules.

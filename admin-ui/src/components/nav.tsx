@@ -10,6 +10,7 @@ const navItems = [
   { href: "/jobs", label: "Jobs" },
   { href: "/dlq", label: "DLQ" },
   { href: "/settings", label: "Settings" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function Nav() {

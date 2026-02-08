@@ -1,6 +1,7 @@
 import { DlqTable } from "@/components/dlq-table";
 import { RefreshControls } from "@/components/refresh-controls";
 import { SectionHeader } from "@/components/section-header";
+import { HelpPopover } from "@/components/help-popover";
 import { getDlqEntries } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,20 @@ export default async function DlqPage({ searchParams }: DlqPageProps) {
       <SectionHeader
         title="Dead Letter Queue"
         description="Failed tasks awaiting replay or inspection."
-        action={<RefreshControls />}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <HelpPopover
+              title="DLQ tips"
+              items={[
+                "Replay is at-least-once; ensure handlers are idempotent.",
+                "Use filters to narrow by queue, handler, or search text.",
+                "Open a row to see payload size, metadata, and last error.",
+              ]}
+              href="/docs#dlq"
+            />
+            <RefreshControls />
+          </div>
+        }
       />
       <DlqTable
         entries={entries}

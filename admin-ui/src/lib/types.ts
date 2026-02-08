@@ -46,6 +46,10 @@ export type AdminJob = {
   description?: string;
   repo: string;
   tag: string;
+  source?: string;
+  tarballUrl?: string;
+  tarballPath?: string;
+  tarballSha256?: string;
   path?: string;
   dockerfile?: string;
   command?: string[];
@@ -55,6 +59,26 @@ export type AdminJob = {
   timeoutSeconds?: number;
   createdAtMs?: number;
   updatedAtMs?: number;
+};
+
+export type JobEvent = {
+  taskId: string;
+  name: string;
+  status: string;
+  queue: string;
+  repo: string;
+  tag: string;
+  path?: string;
+  dockerfile?: string;
+  command?: string;
+  scheduleName?: string;
+  scheduleSpec?: string;
+  startedAtMs?: number;
+  finishedAtMs?: number;
+  durationMs?: number;
+  result?: string;
+  error?: string;
+  metadata?: Record<string, string>;
 };
 
 export type OverviewStats = {

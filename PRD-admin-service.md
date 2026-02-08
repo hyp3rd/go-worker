@@ -49,7 +49,7 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
          - Pause durable dequeue.
          - Resume durable dequeue.
 1. **Events**
-         - Stream overview + schedule events to power the UI event log.
+         - Stream overview + schedule + job events to power the UI event log.
 1. **Backend abstraction**
          - Admin API should not depend on Redis directly; use backend interface.
 
@@ -112,6 +112,7 @@ Service: `worker.v1.AdminService`
 - `POST /admin/v1/jobs` (body: `{ "name": "...", "repo": "...", "tag": "v1.2.3", "path": "subdir", "dockerfile": "Dockerfile", "command": ["..."], "env": ["ENV_KEY"], "queue": "default", "retries": 2, "timeoutSeconds": 600 }`)
 - `DELETE /admin/v1/jobs/{name}`
 - `POST /admin/v1/jobs/{name}/run`
+- `GET /admin/v1/jobs/events?name=job_name&limit=25`
 - `GET /admin/v1/dlq?limit=100&offset=0&queue=default&handler=send_email&query=oops`
 - `GET /admin/v1/dlq/{id}`
 - `POST /admin/v1/pause`
@@ -170,8 +171,8 @@ Worker service job runner (containerized):
 - **Health/version**: Implemented (gateway + UI).
 - **Observability counters**: Implemented (pause/resume/replay action counts in overview).
 - **Schedule management endpoints**: Implemented (create/delete/pause/run + pause-all via gRPC + gateway + UI).
-- **Events stream**: Implemented (gateway SSE + UI schedule event log via `/api/events`).
-- **Jobs (containerized runner)**: Implemented in API + worker-service; UI pending.
+- **Events stream**: Implemented (gateway SSE + UI schedule + job event logs via `/api/events`).
+- **Jobs (containerized runner)**: Implemented (API + worker-service + UI + event feed).
 
 ## Milestones
 

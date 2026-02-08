@@ -16,7 +16,11 @@ export async function GET() {
             return;
           }
           closed = true;
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            // ignore double-close
+          }
         };
         const isAbortError = (err: unknown) => {
           if (!err || typeof err !== "object") {
@@ -31,7 +35,14 @@ export async function GET() {
         };
 
         stream.on("data", (chunk) => {
-          controller.enqueue(new Uint8Array(chunk));
+          if (closed) {
+            return;
+          }
+          try {
+            controller.enqueue(new Uint8Array(chunk));
+          } catch {
+            closeOnce();
+          }
         });
         stream.on("end", closeOnce);
         stream.on("close", closeOnce);
@@ -40,7 +51,14 @@ export async function GET() {
             closeOnce();
             return;
           }
-          controller.error(err);
+          if (closed) {
+            return;
+          }
+          try {
+            controller.error(err);
+          } catch {
+            closeOnce();
+          }
         });
       },
       cancel() {

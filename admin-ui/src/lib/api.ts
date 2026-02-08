@@ -5,6 +5,7 @@ import type {
   CoordinationStatus,
   DlqEntry,
   HealthInfo,
+  JobEvent,
   JobSchedule,
   OverviewStats,
   QueueDetail,
@@ -108,6 +109,22 @@ export async function fetchScheduleEvents(params?: {
   }
   const suffix = search.toString();
   const path = suffix ? `/api/schedules/events?${suffix}` : "/api/schedules/events";
+  return fetchJson(path);
+}
+
+export async function fetchJobEvents(params?: {
+  name?: string;
+  limit?: number;
+}): Promise<{ events: JobEvent[] }> {
+  const search = new URLSearchParams();
+  if (params?.name) {
+    search.set("name", params.name);
+  }
+  if (params?.limit) {
+    search.set("limit", String(params.limit));
+  }
+  const suffix = search.toString();
+  const path = suffix ? `/api/jobs/events?${suffix}` : "/api/jobs/events";
   return fetchJson(path);
 }
 

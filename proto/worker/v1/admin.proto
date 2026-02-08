@@ -198,6 +198,10 @@ message JobSpec {
   string queue = 9;
   int32 retries = 10;
   int32 timeout_seconds = 11;
+  string source = 12;
+  string tarball_url = 13;
+  string tarball_path = 14;
+  string tarball_sha256 = 15;
 }
 
 message Job {
@@ -206,10 +210,39 @@ message Job {
   int64 updated_at_ms = 3;
 }
 
+message JobEvent {
+  string task_id = 1;
+  string name = 2;
+  string status = 3;
+  string queue = 4;
+  string repo = 5;
+  string tag = 6;
+  string path = 7;
+  string dockerfile = 8;
+  string command = 9;
+  string schedule_name = 10;
+  string schedule_spec = 11;
+  int64 started_at_ms = 12;
+  int64 finished_at_ms = 13;
+  int64 duration_ms = 14;
+  string result = 15;
+  string error = 16;
+  map<string, string> metadata = 17;
+}
+
 message ListJobsRequest {}
 
 message ListJobsResponse {
   repeated Job jobs = 1;
+}
+
+message ListJobEventsRequest {
+  string name = 1;
+  int32 limit = 2;
+}
+
+message ListJobEventsResponse {
+  repeated JobEvent events = 1;
 }
 
 message GetJobRequest {
@@ -323,6 +356,7 @@ service AdminService {
   rpc ResetQueueWeight(ResetQueueWeightRequest) returns (ResetQueueWeightResponse);
   rpc PauseQueue(PauseQueueRequest) returns (PauseQueueResponse);
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc ListJobEvents(ListJobEventsRequest) returns (ListJobEventsResponse);
   rpc GetJob(GetJobRequest) returns (GetJobResponse);
   rpc UpsertJob(UpsertJobRequest) returns (UpsertJobResponse);
   rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse);
