@@ -1052,6 +1052,10 @@ type adminJobRecord struct {
 	Description    string   `json:"description,omitempty"`
 	Repo           string   `json:"repo"`
 	Tag            string   `json:"tag"`
+	Source         string   `json:"source,omitempty"`
+	TarballURL     string   `json:"tarball_url,omitempty"`
+	TarballPath    string   `json:"tarball_path,omitempty"`
+	TarballSHA     string   `json:"tarball_sha256,omitempty"`
 	Path           string   `json:"path,omitempty"`
 	Dockerfile     string   `json:"dockerfile,omitempty"`
 	Command        []string `json:"command,omitempty"`
@@ -1150,6 +1154,10 @@ func (b *RedisDurableBackend) AdminUpsertJob(ctx context.Context, spec AdminJobS
 		Description:    spec.Description,
 		Repo:           spec.Repo,
 		Tag:            spec.Tag,
+		Source:         spec.Source,
+		TarballURL:     spec.TarballURL,
+		TarballPath:    spec.TarballPath,
+		TarballSHA:     spec.TarballSHA,
 		Path:           spec.Path,
 		Dockerfile:     spec.Dockerfile,
 		Command:        spec.Command,
@@ -1195,42 +1203,29 @@ func (b *RedisDurableBackend) AdminDeleteJob(ctx context.Context, name string) (
 	return count > 0, nil
 }
 
+// AdminJobEvents returns job execution events; Redis backend does not persist them.
+func (*RedisDurableBackend) AdminJobEvents(ctx context.Context, _ AdminJobEventFilter) (AdminJobEventPage, error) {
+	if ctx == nil {
+		return AdminJobEventPage{}, ErrInvalidTaskContext
+	}
+
+	return AdminJobEventPage{}, ErrAdminUnsupported
+}
+
 func (b *RedisDurableBackend) normalizeJobSpec(spec AdminJobSpec) (AdminJobSpec, error) {
 	name := strings.TrimSpace(spec.Name)
 	if name == "" {
 		return AdminJobSpec{}, ErrAdminJobNameRequired
 	}
 
-	repo := strings.TrimSpace(spec.Repo)
-	if repo == "" {
-		return AdminJobSpec{}, ErrAdminJobRepoRequired
-	}
-
-	tag := strings.TrimSpace(spec.Tag)
-	if tag == "" {
-		return AdminJobSpec{}, ErrAdminJobTagRequired
-	}
-
-	if strings.Contains(tag, " ") {
-		return AdminJobSpec{}, ErrAdminJobTagRequired
-	}
-
-	queue := strings.TrimSpace(spec.Queue)
-	if queue == "" {
-		queue = b.defaultQueueName()
-	}
-
-	pathValue, err := sanitizeJobPath(spec.Path)
+	source, err := normalizeAdminJobSource(spec)
 	if err != nil {
 		return AdminJobSpec{}, err
 	}
 
-	dockerfile := strings.TrimSpace(spec.Dockerfile)
-	if dockerfile == "" {
-		dockerfile = adminJobDefaultDockerfile
-	}
+	queue := normalizeJobQueue(strings.TrimSpace(spec.Queue), b.defaultQueueName())
 
-	dockerfile, err = sanitizeJobPath(dockerfile)
+	pathValue, dockerfile, err := normalizeJobPaths(spec.Path, spec.Dockerfile)
 	if err != nil {
 		return AdminJobSpec{}, err
 	}
@@ -1241,8 +1236,12 @@ func (b *RedisDurableBackend) normalizeJobSpec(spec AdminJobSpec) (AdminJobSpec,
 	return AdminJobSpec{
 		Name:        name,
 		Description: strings.TrimSpace(spec.Description),
-		Repo:        repo,
-		Tag:         tag,
+		Repo:        source.repo,
+		Tag:         source.tag,
+		Source:      source.source,
+		TarballURL:  source.tarballURL,
+		TarballPath: source.tarballPath,
+		TarballSHA:  source.tarballSHA,
 		Path:        pathValue,
 		Dockerfile:  dockerfile,
 		Command:     command,
@@ -1251,6 +1250,158 @@ func (b *RedisDurableBackend) normalizeJobSpec(spec AdminJobSpec) (AdminJobSpec,
 		Retries:     max(0, spec.Retries),
 		Timeout:     spec.Timeout,
 	}, nil
+}
+
+type normalizedJobSource struct {
+	source      string
+	repo        string
+	tag         string
+	tarballURL  string
+	tarballPath string
+	tarballSHA  string
+}
+
+const tarballSHA256Len = 64
+
+func normalizeAdminJobSource(spec AdminJobSpec) (normalizedJobSource, error) {
+	sourceRaw := strings.TrimSpace(spec.Source)
+
+	source := NormalizeJobSource(sourceRaw)
+	if sourceRaw != "" && sourceRaw != source {
+		return normalizedJobSource{}, ErrAdminJobSourceInvalid
+	}
+
+	repo := strings.TrimSpace(spec.Repo)
+	tag := strings.TrimSpace(spec.Tag)
+	tarballURL := strings.TrimSpace(spec.TarballURL)
+	tarballPath := strings.TrimSpace(spec.TarballPath)
+	tarballSHA := strings.TrimSpace(spec.TarballSHA)
+
+	source, err := inferAdminJobSource(sourceRaw, source, tarballURL, tarballPath)
+	if err != nil {
+		return normalizedJobSource{}, err
+	}
+
+	err = validateAdminJobSource(source, repo, tag, tarballURL, tarballPath)
+	if err != nil {
+		return normalizedJobSource{}, err
+	}
+
+	tarballPath, err = normalizeAdminTarballPath(tarballPath)
+	if err != nil {
+		return normalizedJobSource{}, err
+	}
+
+	err = validateAdminTarballSHA(tarballSHA)
+	if err != nil {
+		return normalizedJobSource{}, err
+	}
+
+	return normalizedJobSource{
+		source:      source,
+		repo:        repo,
+		tag:         tag,
+		tarballURL:  tarballURL,
+		tarballPath: tarballPath,
+		tarballSHA:  tarballSHA,
+	}, nil
+}
+
+func inferAdminJobSource(sourceRaw, source, tarballURL, tarballPath string) (string, error) {
+	if sourceRaw != "" {
+		return source, nil
+	}
+
+	if tarballURL != "" && tarballPath != "" {
+		return "", ErrAdminJobSourceInvalid
+	}
+
+	if tarballURL != "" {
+		return JobSourceTarballURL, nil
+	}
+
+	if tarballPath != "" {
+		return JobSourceTarballPath, nil
+	}
+
+	return source, nil
+}
+
+func validateAdminJobSource(source, repo, tag, tarballURL, tarballPath string) error {
+	switch source {
+	case JobSourceGitTag:
+		if repo == "" {
+			return ErrAdminJobRepoRequired
+		}
+
+		if tag == "" || strings.Contains(tag, " ") {
+			return ErrAdminJobTagRequired
+		}
+
+		return nil
+	case JobSourceTarballURL:
+		if tarballURL == "" {
+			return ErrAdminJobTarballURLRequired
+		}
+
+		return nil
+	case JobSourceTarballPath:
+		if tarballPath == "" {
+			return ErrAdminJobTarballPathRequired
+		}
+
+		return nil
+	default:
+		return ErrAdminJobSourceInvalid
+	}
+}
+
+func normalizeAdminTarballPath(tarballPath string) (string, error) {
+	if tarballPath == "" {
+		return "", nil
+	}
+
+	clean, err := sanitizeJobPath(tarballPath)
+	if err != nil {
+		return "", err
+	}
+
+	return clean, nil
+}
+
+func validateAdminTarballSHA(tarballSHA string) error {
+	if tarballSHA != "" && len(tarballSHA) != tarballSHA256Len {
+		return ErrAdminJobTarballSHAInvalid
+	}
+
+	return nil
+}
+
+func normalizeJobPaths(pathValue, dockerfile string) (normalizedPath, normalizedDockerfile string, err error) {
+	normalizedPath, err = sanitizeJobPath(pathValue)
+	if err != nil {
+		return "", "", err
+	}
+
+	dockerfile = strings.TrimSpace(dockerfile)
+	if dockerfile == "" {
+		dockerfile = adminJobDefaultDockerfile
+	}
+
+	normalizedDockerfile, err = sanitizeJobPath(dockerfile)
+	if err != nil {
+		return "", "", err
+	}
+
+	return normalizedPath, normalizedDockerfile, nil
+}
+
+func normalizeJobQueue(queue, fallback string) string {
+	if queue == "" {
+		return fallback
+	}
+
+	return queue
 }
 
 func (b *RedisDurableBackend) jobsKey() string {
@@ -1275,6 +1426,10 @@ func adminJobFromRecord(record adminJobRecord) AdminJob {
 			Description: record.Description,
 			Repo:        record.Repo,
 			Tag:         record.Tag,
+			Source:      record.Source,
+			TarballURL:  record.TarballURL,
+			TarballPath: record.TarballPath,
+			TarballSHA:  record.TarballSHA,
 			Path:        record.Path,
 			Dockerfile:  record.Dockerfile,
 			Command:     record.Command,

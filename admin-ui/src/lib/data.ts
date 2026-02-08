@@ -9,6 +9,7 @@ import {
   fetchScheduleEvents,
   fetchSchedules,
   fetchJobs,
+  fetchJobEvents,
 } from "@/lib/api";
 import {
   coordinationStatus,
@@ -21,6 +22,7 @@ import {
   queueSummaries,
   scheduleFactories,
   scheduleEvents,
+  jobEvents,
 } from "@/lib/mock-data";
 
 const allowMockData =
@@ -186,6 +188,24 @@ export const getScheduleEvents = cache(async (params?: {
     const detail =
       error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to load schedule events: ${detail}`);
+  }
+});
+
+export const getJobEvents = cache(async (params?: {
+  name?: string;
+  limit?: number;
+}) => {
+  try {
+    const { events } = await fetchJobEvents(params);
+    return events;
+  } catch (error) {
+    if (allowMockData) {
+      return jobEvents;
+    }
+
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load job events: ${detail}`);
   }
 });
 

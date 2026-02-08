@@ -8,13 +8,17 @@ import (
 )
 
 const (
-	jobMetaNameKey       = "job.name"
-	jobMetaRepoKey       = "job.repo"
-	jobMetaTagKey        = "job.tag"
-	jobMetaPathKey       = "job.path"
-	jobMetaDockerfileKey = "job.dockerfile"
-	jobMetaCommandKey    = "job.command"
-	jobMetaQueueKey      = "job.queue"
+	jobMetaNameKey        = "job.name"
+	jobMetaRepoKey        = "job.repo"
+	jobMetaTagKey         = "job.tag"
+	jobMetaSourceKey      = "job.source"
+	jobMetaTarballURLKey  = "job.tarball_url"
+	jobMetaTarballPathKey = "job.tarball_path"
+	jobMetaTarballSHAKey  = "job.tarball_sha256"
+	jobMetaPathKey        = "job.path"
+	jobMetaDockerfileKey  = "job.dockerfile"
+	jobMetaCommandKey     = "job.command"
+	jobMetaQueueKey       = "job.queue"
 )
 
 func jobDurableTask(job AdminJob) (DurableTask, error) {
@@ -42,9 +46,22 @@ func jobDurableTask(job AdminJob) (DurableTask, error) {
 
 func jobMetadata(job AdminJob) map[string]string {
 	meta := map[string]string{
-		jobMetaNameKey: job.Name,
-		jobMetaRepoKey: job.Repo,
-		jobMetaTagKey:  job.Tag,
+		jobMetaNameKey:   job.Name,
+		jobMetaRepoKey:   job.Repo,
+		jobMetaTagKey:    job.Tag,
+		jobMetaSourceKey: job.Source,
+	}
+
+	if job.TarballURL != "" {
+		meta[jobMetaTarballURLKey] = job.TarballURL
+	}
+
+	if job.TarballPath != "" {
+		meta[jobMetaTarballPathKey] = job.TarballPath
+	}
+
+	if job.TarballSHA != "" {
+		meta[jobMetaTarballSHAKey] = job.TarballSHA
 	}
 
 	if job.Path != "" {

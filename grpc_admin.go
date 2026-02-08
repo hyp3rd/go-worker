@@ -245,6 +245,40 @@ func (s *GRPCServer) ListJobs(ctx context.Context, req *workerpb.ListJobsRequest
 	return resp, nil
 }
 
+// ListJobEvents returns recent job execution events.
+func (s *GRPCServer) ListJobEvents(
+	ctx context.Context,
+	req *workerpb.ListJobEventsRequest,
+) (*workerpb.ListJobEventsResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_ListJobEvents_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	page, err := backend.AdminJobEvents(ctx, AdminJobEventFilter{
+		Name:  req.GetName(),
+		Limit: int(req.GetLimit()),
+	})
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	resp := &workerpb.ListJobEventsResponse{
+		Events: make([]*workerpb.JobEvent, 0, len(page.Events)),
+	}
+
+	for _, event := range page.Events {
+		resp.Events = append(resp.Events, jobEventToProto(event))
+	}
+
+	return resp, nil
+}
+
 // GetJob returns a job definition by name.
 func (s *GRPCServer) GetJob(ctx context.Context, req *workerpb.GetJobRequest) (*workerpb.GetJobResponse, error) {
 	err := s.authorize(ctx, workerpb.AdminService_GetJob_FullMethodName, req)
@@ -819,6 +853,10 @@ func jobSpecFromProto(spec *workerpb.JobSpec) AdminJobSpec {
 		Description: strings.TrimSpace(spec.GetDescription()),
 		Repo:        strings.TrimSpace(spec.GetRepo()),
 		Tag:         strings.TrimSpace(spec.GetTag()),
+		Source:      strings.TrimSpace(spec.GetSource()),
+		TarballURL:  strings.TrimSpace(spec.GetTarballUrl()),
+		TarballPath: strings.TrimSpace(spec.GetTarballPath()),
+		TarballSHA:  strings.TrimSpace(spec.GetTarballSha256()),
 		Path:        strings.TrimSpace(spec.GetPath()),
 		Dockerfile:  strings.TrimSpace(spec.GetDockerfile()),
 		Command:     append([]string{}, spec.GetCommand()...),
@@ -838,6 +876,10 @@ func jobToProto(job AdminJob) *workerpb.Job {
 			Description:    job.Description,
 			Repo:           job.Repo,
 			Tag:            job.Tag,
+			Source:         job.Source,
+			TarballUrl:     job.TarballURL,
+			TarballPath:    job.TarballPath,
+			TarballSha256:  job.TarballSHA,
 			Path:           job.Path,
 			Dockerfile:     job.Dockerfile,
 			Command:        append([]string{}, job.Command...),
@@ -848,6 +890,28 @@ func jobToProto(job AdminJob) *workerpb.Job {
 		},
 		CreatedAtMs: job.CreatedAt.UnixMilli(),
 		UpdatedAtMs: job.UpdatedAt.UnixMilli(),
+	}
+}
+
+func jobEventToProto(event AdminJobEvent) *workerpb.JobEvent {
+	return &workerpb.JobEvent{
+		TaskId:       event.TaskID,
+		Name:         event.Name,
+		Status:       event.Status,
+		Queue:        event.Queue,
+		Repo:         event.Repo,
+		Tag:          event.Tag,
+		Path:         event.Path,
+		Dockerfile:   event.Dockerfile,
+		Command:      event.Command,
+		ScheduleName: event.ScheduleName,
+		ScheduleSpec: event.ScheduleSpec,
+		StartedAtMs:  timeToMillis(event.StartedAt),
+		FinishedAtMs: timeToMillis(event.FinishedAt),
+		DurationMs:   event.DurationMs,
+		Result:       event.Result,
+		Error:        event.Error,
+		Metadata:     event.Metadata,
 	}
 }
 

@@ -46,6 +46,14 @@ var (
 	ErrAdminJobRepoRequired = ewrap.New("admin job repo is required")
 	// ErrAdminJobTagRequired indicates a job tag is required.
 	ErrAdminJobTagRequired = ewrap.New("admin job tag is required")
+	// ErrAdminJobSourceInvalid indicates the job source is invalid.
+	ErrAdminJobSourceInvalid = ewrap.New("admin job source is invalid")
+	// ErrAdminJobTarballURLRequired indicates a tarball URL is required.
+	ErrAdminJobTarballURLRequired = ewrap.New("admin job tarball url is required")
+	// ErrAdminJobTarballPathRequired indicates a tarball path is required.
+	ErrAdminJobTarballPathRequired = ewrap.New("admin job tarball path is required")
+	// ErrAdminJobTarballSHAInvalid indicates tarball SHA256 is invalid.
+	ErrAdminJobTarballSHAInvalid = ewrap.New("admin job tarball sha256 is invalid")
 	// ErrAdminJobCommandRequired indicates a job command is required.
 	ErrAdminJobCommandRequired = ewrap.New("admin job command is required")
 	// ErrAdminJobNotFound indicates the job was not found.
@@ -130,6 +138,38 @@ type AdminScheduleEvent struct {
 	Metadata   map[string]string
 }
 
+// AdminJobEvent describes a containerized job execution event.
+type AdminJobEvent struct {
+	TaskID       string
+	Name         string
+	Status       string
+	Queue        string
+	Repo         string
+	Tag          string
+	Path         string
+	Dockerfile   string
+	Command      string
+	ScheduleName string
+	ScheduleSpec string
+	StartedAt    time.Time
+	FinishedAt   time.Time
+	DurationMs   int64
+	Result       string
+	Error        string
+	Metadata     map[string]string
+}
+
+// AdminJobEventFilter filters job execution events.
+type AdminJobEventFilter struct {
+	Name  string
+	Limit int
+}
+
+// AdminJobEventPage represents job execution events.
+type AdminJobEventPage struct {
+	Events []AdminJobEvent
+}
+
 // AdminScheduleEventFilter filters schedule events.
 type AdminScheduleEventFilter struct {
 	Name  string
@@ -160,6 +200,10 @@ type AdminJobSpec struct {
 	Description string
 	Repo        string
 	Tag         string
+	Source      string
+	TarballURL  string
+	TarballPath string
+	TarballSHA  string
 	Path        string
 	Dockerfile  string
 	Command     []string
@@ -240,4 +284,5 @@ type adminJobs interface {
 	AdminJob(ctx context.Context, name string) (AdminJob, error)
 	AdminUpsertJob(ctx context.Context, spec AdminJobSpec) (AdminJob, error)
 	AdminDeleteJob(ctx context.Context, name string) (bool, error)
+	AdminJobEvents(ctx context.Context, filter AdminJobEventFilter) (AdminJobEventPage, error)
 }

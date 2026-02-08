@@ -28,6 +28,7 @@ const (
 	AdminService_ResetQueueWeight_FullMethodName      = "/worker.v1.AdminService/ResetQueueWeight"
 	AdminService_PauseQueue_FullMethodName            = "/worker.v1.AdminService/PauseQueue"
 	AdminService_ListJobs_FullMethodName              = "/worker.v1.AdminService/ListJobs"
+	AdminService_ListJobEvents_FullMethodName         = "/worker.v1.AdminService/ListJobEvents"
 	AdminService_GetJob_FullMethodName                = "/worker.v1.AdminService/GetJob"
 	AdminService_UpsertJob_FullMethodName             = "/worker.v1.AdminService/UpsertJob"
 	AdminService_DeleteJob_FullMethodName             = "/worker.v1.AdminService/DeleteJob"
@@ -60,6 +61,7 @@ type AdminServiceClient interface {
 	ResetQueueWeight(ctx context.Context, in *ResetQueueWeightRequest, opts ...grpc.CallOption) (*ResetQueueWeightResponse, error)
 	PauseQueue(ctx context.Context, in *PauseQueueRequest, opts ...grpc.CallOption) (*PauseQueueResponse, error)
 	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
+	ListJobEvents(ctx context.Context, in *ListJobEventsRequest, opts ...grpc.CallOption) (*ListJobEventsResponse, error)
 	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	UpsertJob(ctx context.Context, in *UpsertJobRequest, opts ...grpc.CallOption) (*UpsertJobResponse, error)
 	DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
@@ -162,6 +164,16 @@ func (c *adminServiceClient) ListJobs(ctx context.Context, in *ListJobsRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListJobsResponse)
 	err := c.cc.Invoke(ctx, AdminService_ListJobs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListJobEvents(ctx context.Context, in *ListJobEventsRequest, opts ...grpc.CallOption) (*ListJobEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListJobEventsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListJobEvents_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -360,6 +372,7 @@ type AdminServiceServer interface {
 	ResetQueueWeight(context.Context, *ResetQueueWeightRequest) (*ResetQueueWeightResponse, error)
 	PauseQueue(context.Context, *PauseQueueRequest) (*PauseQueueResponse, error)
 	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
+	ListJobEvents(context.Context, *ListJobEventsRequest) (*ListJobEventsResponse, error)
 	GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error)
 	UpsertJob(context.Context, *UpsertJobRequest) (*UpsertJobResponse, error)
 	DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
@@ -417,6 +430,10 @@ func (UnimplementedAdminServiceServer) PauseQueue(context.Context, *PauseQueueRe
 
 func (UnimplementedAdminServiceServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListJobs not implemented")
+}
+
+func (UnimplementedAdminServiceServer) ListJobEvents(context.Context, *ListJobEventsRequest) (*ListJobEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListJobEvents not implemented")
 }
 
 func (UnimplementedAdminServiceServer) GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error) {
@@ -650,6 +667,24 @@ func _AdminService_ListJobs_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).ListJobs(ctx, req.(*ListJobsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListJobEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJobEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListJobEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListJobEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListJobEvents(ctx, req.(*ListJobEventsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1016,6 +1051,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListJobs",
 			Handler:    _AdminService_ListJobs_Handler,
+		},
+		{
+			MethodName: "ListJobEvents",
+			Handler:    _AdminService_ListJobEvents_Handler,
 		},
 		{
 			MethodName: "GetJob",

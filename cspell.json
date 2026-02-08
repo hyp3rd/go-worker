@@ -183,6 +183,7 @@
     "tostring",
     "Tracef",
     "trimpath",
+    "Typeflag",
     "unmarshals",
     "unsubscription",
     "varnamelen",

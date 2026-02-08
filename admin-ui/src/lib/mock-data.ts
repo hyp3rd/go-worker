@@ -9,6 +9,7 @@ import type {
   QueueSummary,
   ScheduleFactory,
   ScheduleEvent,
+  JobEvent,
 } from "@/lib/types";
 
 export const overviewStats: OverviewStats = {
@@ -152,12 +153,72 @@ export const scheduleEvents: ScheduleEvent[] = [
   },
 ];
 
+export const jobEvents: JobEvent[] = [
+  {
+    taskId: "a12a4a7f-6f3e-4f0f-9d9b-8c1e9d8f10a1",
+    name: "metrics_rollup",
+    status: "completed",
+    queue: "default",
+    repo: "git@github.com:hyp3rd/worker-jobs.git",
+    tag: "v1.2.0",
+    path: "jobs/metrics",
+    dockerfile: "Dockerfile",
+    command: "./run.sh",
+    startedAtMs: Date.now() - 3 * 60 * 1000,
+    finishedAtMs: Date.now() - 2 * 60 * 1000,
+    durationMs: 38 * 1000,
+    result: "rollup completed: 24 metrics",
+    metadata: {
+      schedule: "*/5 * * * *",
+      handler: "job_runner",
+    },
+  },
+  {
+    taskId: "b22b4a7f-6f3e-4f0f-9d9b-8c1e9d8f10b2",
+    name: "dlq_sweep",
+    status: "failed",
+    queue: "default",
+    repo: "git@github.com:hyp3rd/worker-jobs.git",
+    tag: "v1.2.0",
+    path: "jobs/dlq",
+    dockerfile: "Dockerfile",
+    command: "./run.sh --notify",
+    startedAtMs: Date.now() - 18 * 60 * 1000,
+    finishedAtMs: Date.now() - 17 * 60 * 1000,
+    durationMs: 42 * 1000,
+    error: "redis timeout while reading DLQ",
+    metadata: {
+      schedule: "0 * * * *",
+      handler: "job_runner",
+    },
+  },
+  {
+    taskId: "c32c4a7f-6f3e-4f0f-9d9b-8c1e9d8f10c3",
+    name: "audit_snapshot",
+    status: "completed",
+    queue: "critical",
+    repo: "git@github.com:hyp3rd/worker-jobs.git",
+    tag: "v1.3.1",
+    path: "jobs/audit",
+    dockerfile: "Dockerfile",
+    command: "./run.sh --s3",
+    startedAtMs: Date.now() - 50 * 60 * 1000,
+    finishedAtMs: Date.now() - 49 * 60 * 1000,
+    durationMs: 58 * 1000,
+    result: "snapshot archived",
+    metadata: {
+      handler: "job_runner",
+    },
+  },
+];
+
 export const adminJobs: AdminJob[] = [
   {
     name: "metrics_rollup",
     description: "Roll up durable metrics snapshots",
     repo: "git@github.com:hyp3rd/worker-jobs.git",
     tag: "v1.2.0",
+    source: "git_tag",
     path: "jobs/metrics",
     dockerfile: "Dockerfile",
     command: ["./run.sh"],
@@ -173,6 +234,7 @@ export const adminJobs: AdminJob[] = [
     description: "Sweep DLQ and emit alerts",
     repo: "git@github.com:hyp3rd/worker-jobs.git",
     tag: "v1.2.0",
+    source: "git_tag",
     path: "jobs/dlq",
     dockerfile: "Dockerfile",
     command: ["./run.sh", "--notify"],

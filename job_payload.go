@@ -17,6 +17,10 @@ const (
 	jobPayloadDescriptionKey = "description"
 	jobPayloadRepoKey        = "repo"
 	jobPayloadTagKey         = "tag"
+	jobPayloadSourceKey      = "source"
+	jobPayloadTarballURLKey  = "tarball_url"
+	jobPayloadTarballPathKey = "tarball_path"
+	jobPayloadTarballSHAKey  = "tarball_sha256"
 	jobPayloadPathKey        = "path"
 	jobPayloadDockerfileKey  = "dockerfile"
 	jobPayloadCommandKey     = "command"
@@ -33,6 +37,10 @@ func JobPayloadFromSpec(spec AdminJobSpec) (*structpb.Struct, error) {
 		jobPayloadDescriptionKey: strings.TrimSpace(spec.Description),
 		jobPayloadRepoKey:        strings.TrimSpace(spec.Repo),
 		jobPayloadTagKey:         strings.TrimSpace(spec.Tag),
+		jobPayloadSourceKey:      strings.TrimSpace(spec.Source),
+		jobPayloadTarballURLKey:  strings.TrimSpace(spec.TarballURL),
+		jobPayloadTarballPathKey: strings.TrimSpace(spec.TarballPath),
+		jobPayloadTarballSHAKey:  strings.TrimSpace(spec.TarballSHA),
 		jobPayloadPathKey:        strings.TrimSpace(spec.Path),
 		jobPayloadDockerfileKey:  strings.TrimSpace(spec.Dockerfile),
 		jobPayloadQueueKey:       strings.TrimSpace(spec.Queue),
@@ -63,6 +71,10 @@ func JobSpecFromPayload(payload *structpb.Struct) (AdminJobSpec, error) {
 		Description: getStringValue(values[jobPayloadDescriptionKey]),
 		Repo:        getStringValue(values[jobPayloadRepoKey]),
 		Tag:         getStringValue(values[jobPayloadTagKey]),
+		Source:      getStringValue(values[jobPayloadSourceKey]),
+		TarballURL:  getStringValue(values[jobPayloadTarballURLKey]),
+		TarballPath: getStringValue(values[jobPayloadTarballPathKey]),
+		TarballSHA:  getStringValue(values[jobPayloadTarballSHAKey]),
 		Path:        getStringValue(values[jobPayloadPathKey]),
 		Dockerfile:  getStringValue(values[jobPayloadDockerfileKey]),
 		Queue:       getStringValue(values[jobPayloadQueueKey]),

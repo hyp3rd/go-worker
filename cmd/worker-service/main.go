@@ -32,6 +32,8 @@ const (
 	parseFloatBitSize     = 64
 	workerShutdownTimeout = 5 * time.Second
 	defaultJobOutputBytes = 64 * 1024
+	defaultJobTarballMax  = 64 * 1024 * 1024
+	defaultJobTarballWait = 30 * time.Second
 )
 
 func defaultDurableCronHandlers() []string {
@@ -72,12 +74,16 @@ type config struct {
 	durableCronSpecs    map[string]string
 	cronSpecs           map[string]string
 
-	jobRepoAllowlist []string
-	jobDockerBin     string
-	jobGitBin        string
-	jobNetwork       string
-	jobWorkDir       string
-	jobOutputBytes   int
+	jobRepoAllowlist    []string
+	jobDockerBin        string
+	jobGitBin           string
+	jobNetwork          string
+	jobWorkDir          string
+	jobOutputBytes      int
+	jobTarballAllowlist []string
+	jobTarballDir       string
+	jobTarballMaxBytes  int64
+	jobTarballTimeout   time.Duration
 }
 
 func main() {
@@ -177,24 +183,28 @@ func newDurableBackend(cfg config) (rueidis.Client, *worker.RedisDurableBackend,
 
 func loadConfig() config {
 	cfg := config{
-		redisAddr:        getenv("WORKER_REDIS_ADDR", defaultRedisAddr),
-		redisPassword:    os.Getenv("WORKER_REDIS_PASSWORD"),
-		redisPrefix:      getenv("WORKER_REDIS_PREFIX", defaultRedisPrefix),
-		redisTLS:         parseBool(os.Getenv("WORKER_REDIS_TLS")),
-		redisTLSInsec:    parseBool(os.Getenv("WORKER_REDIS_TLS_INSECURE")),
-		grpcAddr:         getenv("WORKER_GRPC_ADDR", defaultGRPCAddr),
-		durableLease:     defaultDuration(os.Getenv("WORKER_DURABLE_LEASE"), defaultLease),
-		globalRate:       parseFloat(os.Getenv("WORKER_GLOBAL_RATE")),
-		globalBurst:      parseInt(os.Getenv("WORKER_GLOBAL_BURST")),
-		leaderLease:      defaultDuration(os.Getenv("WORKER_LEADER_LEASE"), 0),
-		cronHandlers:     parseList(os.Getenv("WORKER_CRON_HANDLERS")),
-		cronSpec:         getenv("WORKER_CRON_DEFAULT_SPEC", defaultCronSpec),
-		jobRepoAllowlist: parseList(os.Getenv("WORKER_JOB_REPO_ALLOWLIST")),
-		jobDockerBin:     getenv("WORKER_JOB_DOCKER_BIN", "docker"),
-		jobGitBin:        getenv("WORKER_JOB_GIT_BIN", "git"),
-		jobNetwork:       strings.TrimSpace(os.Getenv("WORKER_JOB_NETWORK")),
-		jobWorkDir:       strings.TrimSpace(os.Getenv("WORKER_JOB_WORKDIR")),
-		jobOutputBytes:   parseIntWithDefault(os.Getenv("WORKER_JOB_OUTPUT_BYTES"), defaultJobOutputBytes),
+		redisAddr:           getenv("WORKER_REDIS_ADDR", defaultRedisAddr),
+		redisPassword:       os.Getenv("WORKER_REDIS_PASSWORD"),
+		redisPrefix:         getenv("WORKER_REDIS_PREFIX", defaultRedisPrefix),
+		redisTLS:            parseBool(os.Getenv("WORKER_REDIS_TLS")),
+		redisTLSInsec:       parseBool(os.Getenv("WORKER_REDIS_TLS_INSECURE")),
+		grpcAddr:            getenv("WORKER_GRPC_ADDR", defaultGRPCAddr),
+		durableLease:        defaultDuration(os.Getenv("WORKER_DURABLE_LEASE"), defaultLease),
+		globalRate:          parseFloat(os.Getenv("WORKER_GLOBAL_RATE")),
+		globalBurst:         parseInt(os.Getenv("WORKER_GLOBAL_BURST")),
+		leaderLease:         defaultDuration(os.Getenv("WORKER_LEADER_LEASE"), 0),
+		cronHandlers:        parseList(os.Getenv("WORKER_CRON_HANDLERS")),
+		cronSpec:            getenv("WORKER_CRON_DEFAULT_SPEC", defaultCronSpec),
+		jobRepoAllowlist:    parseList(os.Getenv("WORKER_JOB_REPO_ALLOWLIST")),
+		jobDockerBin:        getenv("WORKER_JOB_DOCKER_BIN", "docker"),
+		jobGitBin:           getenv("WORKER_JOB_GIT_BIN", "git"),
+		jobNetwork:          strings.TrimSpace(os.Getenv("WORKER_JOB_NETWORK")),
+		jobWorkDir:          strings.TrimSpace(os.Getenv("WORKER_JOB_WORKDIR")),
+		jobOutputBytes:      parseIntWithDefault(os.Getenv("WORKER_JOB_OUTPUT_BYTES"), defaultJobOutputBytes),
+		jobTarballAllowlist: parseList(os.Getenv("WORKER_JOB_TARBALL_ALLOWLIST")),
+		jobTarballDir:       strings.TrimSpace(os.Getenv("WORKER_JOB_TARBALL_DIR")),
+		jobTarballMaxBytes:  int64(parseIntWithDefault(os.Getenv("WORKER_JOB_TARBALL_MAX_BYTES"), defaultJobTarballMax)),
+		jobTarballTimeout:   defaultDuration(os.Getenv("WORKER_JOB_TARBALL_TIMEOUT"), defaultJobTarballWait),
 	}
 
 	cfg.durableCronHandlers = append([]string{}, defaultDurableCronHandlers()...)

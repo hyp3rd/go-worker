@@ -26,6 +26,13 @@
 - Retries: exponential backoff with capped delays.
 - Durability: optional Redis-backed durable task queue (at-least-once, lease-based).
 
+## Admin UI
+
+The admin UI is a Next.js app that connects to the worker admin gateway over
+HTTP/JSON with mTLS. For local setup and environment variables, see:
+
+- `docs/admin-ui.md`
+
 ## Architecture
 
 ```mermaid
