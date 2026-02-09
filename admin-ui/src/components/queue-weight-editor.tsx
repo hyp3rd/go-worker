@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 type QueueWeightEditorProps = {
   name: string;
@@ -13,6 +14,7 @@ export function QueueWeightEditor({ name, weight }: QueueWeightEditorProps) {
   const [value, setValue] = useState(String(weight));
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const { confirm, dialogProps } = useConfirmDialog();
 
   const submit = async () => {
     const parsed = Number(value);
@@ -42,7 +44,12 @@ export function QueueWeightEditor({ name, weight }: QueueWeightEditorProps) {
   };
 
   const reset = async () => {
-    const ok = window.confirm("Reset queue weight to default?");
+    const ok = await confirm({
+      title: "Reset queue weight to default?",
+      message: "This resets the queue weight to the default value.",
+      confirmLabel: "Reset weight",
+      tone: "danger",
+    });
     if (!ok) {
       return;
     }
@@ -96,6 +103,7 @@ export function QueueWeightEditor({ name, weight }: QueueWeightEditorProps) {
         </button>
       </div>
       {message ? <p className="mt-2 text-xs text-muted">{message}</p> : null}
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -203,7 +204,7 @@ func (tm *TaskManager) AdminScheduleEvents(
 	tm.cronEventsMu.RUnlock()
 
 	name := strings.TrimSpace(filter.Name)
-	limit := normalizeAdminEventLimit(filter.Limit, defaultAdminScheduleEventLimit, tm.cronEventLimit)
+	limit := normalizeAdminEventLimit(filter.Limit, tm.cronEventLimit)
 	filtered := filterAdminEvents(events, name, limit, func(event AdminScheduleEvent) string {
 		return event.Name
 	})
@@ -224,13 +225,25 @@ func (tm *TaskManager) AdminJobEvents(
 		return AdminJobEventPage{}, ErrInvalidTaskContext
 	}
 
+	backend, err := tm.adminBackend()
+	if err == nil && backend != nil {
+		page, fetchErr := backend.AdminJobEvents(ctx, filter)
+		if fetchErr == nil {
+			return page, nil
+		}
+
+		if !errors.Is(fetchErr, ErrAdminUnsupported) {
+			return AdminJobEventPage{}, fetchErr
+		}
+	}
+
 	tm.jobEventsMu.RLock()
 	events := make([]AdminJobEvent, len(tm.jobEvents))
 	copy(events, tm.jobEvents)
 	tm.jobEventsMu.RUnlock()
 
 	name := strings.TrimSpace(filter.Name)
-	limit := normalizeAdminEventLimit(filter.Limit, defaultAdminJobEventLimit, tm.jobEventLimit)
+	limit := normalizeAdminEventLimit(filter.Limit, tm.jobEventLimit)
 	filtered := filterAdminEvents(events, name, limit, func(event AdminJobEvent) string {
 		return event.Name
 	})
@@ -238,9 +251,9 @@ func (tm *TaskManager) AdminJobEvents(
 	return AdminJobEventPage{Events: filtered}, nil
 }
 
-func normalizeAdminEventLimit(limit, defaultLimit, maxLimit int) int {
+func normalizeAdminEventLimit(limit, maxLimit int) int {
 	if limit <= 0 {
-		limit = defaultLimit
+		limit = defaultAdminJobEventLimit
 	}
 
 	if maxLimit > 0 && limit > maxLimit {

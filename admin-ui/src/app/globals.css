@@ -32,6 +32,16 @@ body {
   font-family: var(--font-plex-sans), system-ui, sans-serif;
 }
 
+button,
+[role="button"],
+a {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 ::selection {
   background: #ffd6cc;
   color: #1f1b18;

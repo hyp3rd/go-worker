@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 export function QueueActions({
   name,
@@ -14,6 +15,7 @@ export function QueueActions({
   const [isPaused, setIsPaused] = useState(paused);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const { confirm, dialogProps } = useConfirmDialog();
 
   useEffect(() => {
     setIsPaused(paused);
@@ -21,11 +23,13 @@ export function QueueActions({
 
   const togglePause = async () => {
     const next = !isPaused;
-    const ok = window.confirm(
-      next
-        ? `Pause queue "${name}"? Pending tasks will remain queued.`
-        : `Resume queue "${name}"? Tasks will be eligible for dequeue.`
-    );
+    const ok = await confirm({
+      title: next ? `Pause queue "${name}"?` : `Resume queue "${name}"?`,
+      message: next
+        ? "Pending tasks will remain queued until resumed."
+        : "Tasks will be eligible for dequeue immediately.",
+      confirmLabel: next ? "Pause queue" : "Resume queue",
+    });
     if (!ok) {
       return;
     }
@@ -90,6 +94,7 @@ export function QueueActions({
         </button>
       </div>
       {message ? <p className="mt-2 text-xs text-muted">{message}</p> : null}
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
 import { Table, TableCell, TableRow } from "@/components/table";
 import { RelativeTime } from "@/components/relative-time";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 export function DlqTable({
   entries,
@@ -39,6 +40,7 @@ export function DlqTable({
   const [detail, setDetail] = useState<DlqEntryDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const { confirm, dialogProps } = useConfirmDialog();
 
   useEffect(() => {
     setQueueValue(queueFilter);
@@ -139,9 +141,11 @@ export function DlqTable({
       return;
     }
 
-    const ok = window.confirm(
-      `Replay ${selected.size} selected DLQ item(s)? Replays are at-least-once.`
-    );
+    const ok = await confirm({
+      title: `Replay ${selected.size} DLQ item(s)?`,
+      message: "Replays are at-least-once. Ensure handlers are idempotent.",
+      confirmLabel: "Replay selected",
+    });
     if (!ok) {
       return;
     }
@@ -198,9 +202,11 @@ export function DlqTable({
   };
 
   const replayOne = async (id: string) => {
-    const ok = window.confirm(
-      "Replay this DLQ item? Replays are at-least-once."
-    );
+    const ok = await confirm({
+      title: "Replay this DLQ item?",
+      message: "Replays are at-least-once. Ensure handlers are idempotent.",
+      confirmLabel: "Replay item",
+    });
     if (!ok) {
       return;
     }
@@ -546,6 +552,7 @@ export function DlqTable({
         onPageSizeChange={handlePageSize}
         pageSizeOptions={[5, 10, 25, 50]}
       />
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

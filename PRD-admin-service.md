@@ -15,7 +15,7 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
 
 - Public multi-tenant auth/authorization (beyond mTLS).
 - Full RBAC and audit logging (future work).
-- UI real-time streaming beyond admin SSE snapshot (future work).
+- WebSocket/bi-directional streaming beyond SSE (future work).
 
 ## Functional Requirements
 
@@ -36,9 +36,12 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
          - Pause/resume all schedules at once.
 1. **Jobs (containerized runner)**
          - Persist job definitions (repo + tag + optional path/dockerfile).
+         - Support sources: Git tag, HTTPS tarball URL, or local tarball path.
+         - Validate tarball SHA256 when provided and enforce allowlists.
          - Run jobs on demand (enqueue durable task).
          - Register job factories to allow scheduling via existing cron APIs.
          - Enforce tag-only Git fetch (no branches).
+         - Truncate output to a configured max bytes for safety.
 1. **Health**
          - Report service health and build information (version, commit, Go version).
 1. **DLQ**
@@ -50,6 +53,7 @@ The admin UI needs a backend-agnostic control plane. Direct Redis access is a de
          - Resume durable dequeue.
 1. **Events**
          - Stream overview + schedule + job events to power the UI event log.
+         - Persist job events across restarts when a store is configured.
 1. **Backend abstraction**
          - Admin API should not depend on Redis directly; use backend interface.
 
@@ -102,6 +106,7 @@ Service: `worker.v1.AdminService`
 - `POST /admin/v1/queues/{name}/pause` (body: `{ "paused": true }`)
 - `GET /admin/v1/schedules/factories`
 - `GET /admin/v1/schedules`
+- `GET /admin/v1/schedules/events?name=schedule_name&limit=25`
 - `POST /admin/v1/schedules` (body: `{ "name": "...", "spec": "...", "durable": false }`)
 - `DELETE /admin/v1/schedules/{name}`
 - `POST /admin/v1/schedules/{name}/pause` (body: `{ "paused": true }`)
@@ -109,7 +114,7 @@ Service: `worker.v1.AdminService`
 - `POST /admin/v1/schedules/pause` (body: `{ "paused": true }`)
 - `GET /admin/v1/jobs`
 - `GET /admin/v1/jobs/{name}`
-- `POST /admin/v1/jobs` (body: `{ "name": "...", "repo": "...", "tag": "v1.2.3", "path": "subdir", "dockerfile": "Dockerfile", "command": ["..."], "env": ["ENV_KEY"], "queue": "default", "retries": 2, "timeoutSeconds": 600 }`)
+- `POST /admin/v1/jobs` (body: `{ "name": "...", "description": "...", "source": "git_tag|tarball_url|tarball_path", "repo": "...", "tag": "v1.2.3", "tarballUrl": "...", "tarballPath": "...", "tarballSha256": "...", "path": "subdir", "dockerfile": "Dockerfile", "command": ["..."], "env": ["KEY=VALUE"], "queue": "default", "retries": 2, "timeoutSeconds": 600 }`)
 - `DELETE /admin/v1/jobs/{name}`
 - `POST /admin/v1/jobs/{name}/run`
 - `GET /admin/v1/jobs/events?name=job_name&limit=25`
@@ -153,13 +158,20 @@ Worker service job runner (containerized):
 - `WORKER_JOB_NETWORK` (optional docker network)
 - `WORKER_JOB_WORKDIR` (optional temp workspace root)
 - `WORKER_JOB_OUTPUT_BYTES` (max combined stdout+stderr)
+- `WORKER_JOB_TARBALL_ALLOWLIST` (comma-separated hostnames for HTTPS tarballs)
+- `WORKER_JOB_TARBALL_DIR` (root for local tarball paths)
+- `WORKER_JOB_TARBALL_MAX_BYTES` (default 64MiB)
+- `WORKER_JOB_TARBALL_TIMEOUT` (default 30s)
+- `WORKER_JOB_EVENT_DIR` (file-backed job event store root; enables persistence)
+- `WORKER_JOB_EVENT_MAX_ENTRIES` (per key; default 10000)
+- `WORKER_JOB_EVENT_CACHE_TTL` (default 10s)
 
 ## Observability
 
 - Log errors and action outcomes at INFO/WARN levels.
 - Add counters for admin actions (pause/resume/replay).
 
-## Implementation Status (February 5, 2026)
+## Implementation Status (February 9, 2026)
 
 - **Overview/Queues/Queue detail**: Implemented (gRPC + gateway + UI).
 - **Queue actions**: Implemented (set/reset weight + pause/resume via gRPC + gateway + UI).
@@ -173,6 +185,8 @@ Worker service job runner (containerized):
 - **Schedule management endpoints**: Implemented (create/delete/pause/run + pause-all via gRPC + gateway + UI).
 - **Events stream**: Implemented (gateway SSE + UI schedule + job event logs via `/api/events`).
 - **Jobs (containerized runner)**: Implemented (API + worker-service + UI + event feed).
+- **Job sources**: Implemented (Git tag, HTTPS tarball, local tarball path with allowlist + SHA256 validation).
+- **Job event persistence**: Implemented (file-backed store via `WORKER_JOB_EVENT_DIR`).
 
 ## Milestones
 

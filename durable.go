@@ -23,7 +23,14 @@ func (tm *TaskManager) RegisterDurableTask(ctx context.Context, task DurableTask
 		return err
 	}
 
-	return tm.durableBackend.Enqueue(ctx, prepared)
+	err = tm.durableBackend.Enqueue(ctx, prepared)
+	if err != nil {
+		return err
+	}
+
+	tm.recordJobQueued(prepared)
+
+	return nil
 }
 
 // RegisterDurableTaskAt registers a durable task to execute at or after the provided time.

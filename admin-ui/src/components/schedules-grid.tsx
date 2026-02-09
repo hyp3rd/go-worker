@@ -7,6 +7,7 @@ import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
 import { RelativeTime } from "@/components/relative-time";
 import { StatusPill } from "@/components/status-pill";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 export function SchedulesGrid({
   schedules,
@@ -32,6 +33,7 @@ export function SchedulesGrid({
     text: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const { confirm, dialogProps } = useConfirmDialog();
   const hasSchedules = schedules.length > 0;
   const allPaused =
     hasSchedules && schedules.every((schedule) => schedule.paused);
@@ -129,7 +131,12 @@ export function SchedulesGrid({
   };
 
   const deleteSchedule = async (job: JobSchedule) => {
-    const ok = window.confirm(`Delete schedule "${job.name}"?`);
+    const ok = await confirm({
+      title: `Delete schedule "${job.name}"?`,
+      message: "This removes the schedule and stops future runs.",
+      confirmLabel: "Delete schedule",
+      tone: "danger",
+    });
     if (!ok) {
       return;
     }
@@ -214,7 +221,11 @@ export function SchedulesGrid({
   };
 
   const runSchedule = async (job: JobSchedule) => {
-    const ok = window.confirm(`Run schedule "${job.name}" now?`);
+    const ok = await confirm({
+      title: `Run schedule "${job.name}" now?`,
+      message: "A durable task will be enqueued immediately.",
+      confirmLabel: "Run now",
+    });
     if (!ok) {
       return;
     }
@@ -253,11 +264,13 @@ export function SchedulesGrid({
     }
 
     const targetPaused = !allPaused;
-    const ok = window.confirm(
-      targetPaused
-        ? "Pause all schedules? Scheduled runs will be skipped."
-        : "Resume all schedules?"
-    );
+    const ok = await confirm({
+      title: targetPaused ? "Pause all schedules?" : "Resume all schedules?",
+      message: targetPaused
+        ? "Scheduled runs will be skipped until resumed."
+        : "Schedules will resume on their next tick.",
+      confirmLabel: targetPaused ? "Pause all" : "Resume all",
+    });
     if (!ok) {
       return;
     }
@@ -519,6 +532,7 @@ export function SchedulesGrid({
         }}
         pageSizeOptions={[4, 6, 8, 12]}
       />
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

@@ -32,6 +32,17 @@ The admin UI is a Next.js app that connects to the worker admin gateway over
 HTTP/JSON with mTLS. For local setup and environment variables, see:
 
 - `docs/admin-ui.md`
+- `PRD-admin-service.md` (API contract + gateway design)
+
+Local stack:
+
+```bash
+./scripts/gen-admin-certs.sh
+docker compose -f compose.admin.yaml up --build
+```
+
+Job event history can be persisted across restarts by configuring the worker
+service file-backed store (`WORKER_JOB_EVENT_DIR`); see the admin UI docs.
 
 ## Architecture
 

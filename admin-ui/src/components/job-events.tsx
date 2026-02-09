@@ -67,10 +67,16 @@ const optimisticTTL = 10 * 60 * 1000;
 const mergeEventList = (primary: JobEvent[], secondary: JobEvent[]) => {
   const byId = new Map<string, JobEvent>();
   for (const event of secondary) {
-    byId.set(event.taskId, event);
+    const existing = byId.get(event.taskId);
+    if (!existing || eventTimestamp(event) >= eventTimestamp(existing)) {
+      byId.set(event.taskId, event);
+    }
   }
   for (const event of primary) {
-    byId.set(event.taskId, event);
+    const existing = byId.get(event.taskId);
+    if (!existing || eventTimestamp(event) >= eventTimestamp(existing)) {
+      byId.set(event.taskId, event);
+    }
   }
 
   const latestByName = new Map<string, JobEvent>();
@@ -233,6 +239,9 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
             status === "invalid"
           );
         }
+        if (statusFilter === "queued") {
+          return status === "queued";
+        }
         return true;
       });
     }
@@ -272,6 +281,7 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
       completed: 0,
       failed: 0,
       running: 0,
+      queued: 0,
       total: filteredItems.length,
     };
     for (const event of filteredItems) {
@@ -282,6 +292,8 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
         counts.failed += 1;
       } else if (status === "running") {
         counts.running += 1;
+      } else if (status === "queued") {
+        counts.queued += 1;
       }
     }
     return counts;
@@ -323,6 +335,7 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
           <span className="text-emerald-700">ok {summary.completed}</span>
           <span className="text-rose-600">failed {summary.failed}</span>
           <span className="text-slate-600">running {summary.running}</span>
+          <span className="text-slate-500">queued {summary.queued}</span>
         </div>
       </div>
 
@@ -338,6 +351,7 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
             <option value="success">success</option>
             <option value="running">running</option>
             <option value="failed">failed</option>
+            <option value="queued">queued</option>
           </select>
         </label>
         <label className="flex flex-col gap-2">

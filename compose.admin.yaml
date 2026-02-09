@@ -59,6 +59,9 @@ services:
       WORKER_DURABLE_CRON_HANDLERS: cron_handler
       WORKER_JOB_TARBALL_DIR: /workspace
       WORKER_JOB_WORKDIR: /workspace/.job-work
+      WORKER_JOB_EVENT_DIR: /var/lib/go-worker/job-events
+      WORKER_JOB_EVENT_MAX_ENTRIES: "10000"
+      WORKER_JOB_EVENT_CACHE_TTL: 5s
       DOCKER_BUILDKIT: "1"
     ports:
       - "50052:50052"
@@ -68,6 +71,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/workspace:ro
       - worker-job-work:/workspace/.job-work
+      - worker-job-events:/var/lib/go-worker/job-events
     networks:
       - redis-worker-net
 
@@ -93,6 +97,7 @@ volumes:
   redis-worker-stack_data:
     driver: local
   worker-job-work:
+  worker-job-events:
     driver: local
 
 networks:

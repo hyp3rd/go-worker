@@ -40,11 +40,60 @@ const envRows = [
   },
 ];
 
+const workerEnvRows = [
+  {
+    key: "WORKER_JOB_REPO_ALLOWLIST",
+    desc: "Allowed Git repos for job runner (comma-separated).",
+    example: "github.com/acme/ops-jobs",
+  },
+  {
+    key: "WORKER_JOB_TARBALL_ALLOWLIST",
+    desc: "Allowed HTTPS tarball hosts (comma-separated).",
+    example: "artifacts.example.com",
+  },
+  {
+    key: "WORKER_JOB_TARBALL_DIR",
+    desc: "Root directory for local tarball paths.",
+    example: "/var/lib/go-worker/tarballs",
+  },
+  {
+    key: "WORKER_JOB_TARBALL_MAX_BYTES",
+    desc: "Maximum tarball size (bytes).",
+    example: "67108864",
+  },
+  {
+    key: "WORKER_JOB_TARBALL_TIMEOUT",
+    desc: "Timeout for downloading tarballs.",
+    example: "30s",
+  },
+  {
+    key: "WORKER_JOB_OUTPUT_BYTES",
+    desc: "Max combined stdout+stderr for job runs.",
+    example: "65536",
+  },
+  {
+    key: "WORKER_JOB_EVENT_DIR",
+    desc: "Persist job events to a file-backed store.",
+    example: "/var/lib/go-worker/job-events",
+  },
+  {
+    key: "WORKER_JOB_EVENT_MAX_ENTRIES",
+    desc: "Retention per key for job events.",
+    example: "10000",
+  },
+  {
+    key: "WORKER_JOB_EVENT_CACHE_TTL",
+    desc: "Cache TTL for event reads.",
+    example: "5s",
+  },
+];
+
 const actions = [
   "Queue weight and pause/resume",
   "DLQ replay + per-item detail",
   "Schedule create/pause/run",
-  "Job runner create/run + logs",
+  "Schedule + job event logs",
+  "Job runner create/run + output view",
   "Gateway health + coordination status",
 ];
 
@@ -136,6 +185,37 @@ docker compose -f compose.admin.yaml up --build`}
             </tbody>
           </table>
         </div>
+        <div className="mt-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted">
+            Worker service (jobs + event retention)
+          </p>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-soft">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--card)] text-xs uppercase tracking-[0.2em] text-muted">
+                <tr>
+                  <th className="px-4 py-3">Variable</th>
+                  <th className="px-4 py-3">Description</th>
+                  <th className="px-4 py-3">Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                {workerEnvRows.map((row) => (
+                  <tr key={row.key} className="border-t border-soft bg-white/90">
+                    <td className="px-4 py-3 font-mono text-xs text-slate-700">
+                      {row.key}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {row.desc}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500">
+                      {row.example}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section className="rounded-3xl border border-soft bg-white/90 p-6 shadow-soft">
@@ -216,6 +296,9 @@ docker compose -f compose.admin.yaml up --build`}
             and local tarballs are resolved under WORKER_JOB_TARBALL_DIR.
           </li>
           <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
+            Provide tarball SHA256 to validate archive integrity before running.
+          </li>
+          <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
             Use the Crash‑test preset in the Jobs form to populate a local
             tarball job that fails by default for validation. Build the tarball
             with __examples/job_runner_dummy/create-tarball.sh so Dockerfile is
@@ -228,6 +311,14 @@ docker compose -f compose.admin.yaml up --build`}
           </li>
           <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
             Output is truncated to the configured max bytes for safety.
+          </li>
+          <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
+            Job run output is stored with the run event; use the output view for
+            the latest run details.
+          </li>
+          <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
+            Persist job events by setting WORKER_JOB_EVENT_DIR on the worker
+            service; otherwise events reset on restart.
           </li>
         </ul>
       </section>
@@ -271,6 +362,14 @@ docker compose -f compose.admin.yaml up --build`}
           <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
             <span className="font-semibold">Events not updating:</span> SSE
             might be blocked by a proxy. The UI falls back to 15s polling.
+          </li>
+          <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
+            <span className="font-semibold">Events missing after restart:</span>{" "}
+            set WORKER_JOB_EVENT_DIR so job events persist to disk.
+          </li>
+          <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
+            <span className="font-semibold">Tarball jobs failing:</span> verify
+            WORKER_JOB_TARBALL_ALLOWLIST, WORKER_JOB_TARBALL_DIR, and SHA256.
           </li>
         </ul>
       </section>

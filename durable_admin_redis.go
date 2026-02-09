@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"path/filepath"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/hyp3rd/ewrap"
 	sectconv "github.com/hyp3rd/sectools/pkg/converters"
 	"github.com/redis/rueidis"
@@ -32,6 +32,7 @@ const (
 	adminDLQReplayByIDArgsPrefix = 3
 	parseIntBitSize              = 64
 	adminJobsKeyName             = "admin:jobs"
+	adminJobEventsKeyName        = "admin:job_events"
 	adminJobDefaultDockerfile    = "Dockerfile"
 )
 
@@ -1203,13 +1204,109 @@ func (b *RedisDurableBackend) AdminDeleteJob(ctx context.Context, name string) (
 	return count > 0, nil
 }
 
-// AdminJobEvents returns job execution events; Redis backend does not persist them.
-func (*RedisDurableBackend) AdminJobEvents(ctx context.Context, _ AdminJobEventFilter) (AdminJobEventPage, error) {
+// AdminRecordJobEvent persists a job execution event.
+func (b *RedisDurableBackend) AdminRecordJobEvent(ctx context.Context, event AdminJobEvent, limit int) error {
+	if ctx == nil {
+		return ErrInvalidTaskContext
+	}
+
+	raw, err := json.Marshal(event)
+	if err != nil {
+		return ewrap.Wrap(err, "encode admin job event")
+	}
+
+	if limit <= 0 {
+		limit = defaultAdminJobEventLimit
+	}
+
+	baseKey := b.jobEventsKey()
+
+	err = b.pushJobEvent(ctx, baseKey, raw, limit)
+	if err != nil {
+		return err
+	}
+
+	name := strings.TrimSpace(event.Name)
+	if name == "" {
+		if b.jobEventStore != nil {
+			return b.jobEventStore.Record(ctx, event)
+		}
+
+		return nil
+	}
+
+	err = b.pushJobEvent(ctx, b.jobEventsKeyForName(name), raw, limit)
+	if err != nil {
+		return err
+	}
+
+	if b.jobEventStore != nil {
+		return b.jobEventStore.Record(ctx, event)
+	}
+
+	return nil
+}
+
+// AdminJobEvents returns job execution events from Redis.
+func (b *RedisDurableBackend) AdminJobEvents(ctx context.Context, filter AdminJobEventFilter) (AdminJobEventPage, error) {
 	if ctx == nil {
 		return AdminJobEventPage{}, ErrInvalidTaskContext
 	}
 
-	return AdminJobEventPage{}, ErrAdminUnsupported
+	if b.jobEventStore != nil {
+		return b.jobEventStore.List(ctx, filter)
+	}
+
+	limit := normalizeAdminEventLimit(filter.Limit, 0)
+	if limit <= 0 {
+		return AdminJobEventPage{Events: []AdminJobEvent{}}, nil
+	}
+
+	name := strings.TrimSpace(filter.Name)
+
+	key := b.jobEventsKey()
+	if name != "" {
+		key = b.jobEventsKeyForName(name)
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Lrange().Key(key).Start(0).Stop(int64(limit-1)).Build())
+
+	values, err := resp.AsStrSlice()
+	if err != nil {
+		return AdminJobEventPage{}, ewrap.Wrap(err, "read admin job events")
+	}
+
+	events := make([]AdminJobEvent, 0, len(values))
+	for _, raw := range values {
+		var event AdminJobEvent
+
+		err := json.Unmarshal([]byte(raw), &event)
+		if err != nil {
+			return AdminJobEventPage{}, ewrap.Wrap(err, "decode admin job event")
+		}
+
+		events = append(events, event)
+	}
+
+	return AdminJobEventPage{Events: events}, nil
+}
+
+func (b *RedisDurableBackend) pushJobEvent(ctx context.Context, key string, raw []byte, limit int) error {
+	resp := b.client.Do(ctx, b.client.B().Lpush().Key(key).Element(string(raw)).Build())
+	if resp.Error() != nil {
+		return ewrap.Wrap(resp.Error(), "write admin job event")
+	}
+
+	if limit <= 0 {
+		return nil
+	}
+
+	trimResp := b.client.Do(ctx, b.client.B().Ltrim().Key(key).Start(0).Stop(int64(limit-1)).Build())
+	if trimResp.Error() != nil {
+		return ewrap.Wrap(trimResp.Error(), "trim admin job events")
+	}
+
+	return nil
 }
 
 func (b *RedisDurableBackend) normalizeJobSpec(spec AdminJobSpec) (AdminJobSpec, error) {
@@ -1406,6 +1503,14 @@ func normalizeJobQueue(queue, fallback string) string {
 
 func (b *RedisDurableBackend) jobsKey() string {
 	return b.keyPrefix() + redisKVSeparator + adminJobsKeyName
+}
+
+func (b *RedisDurableBackend) jobEventsKey() string {
+	return b.keyPrefix() + redisKVSeparator + adminJobEventsKeyName
+}
+
+func (b *RedisDurableBackend) jobEventsKeyForName(name string) string {
+	return b.jobEventsKey() + redisKVSeparator + name
 }
 
 func parseAdminJobRecord(raw string) (AdminJob, error) {
