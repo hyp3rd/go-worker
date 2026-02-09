@@ -28,6 +28,7 @@ UI env vars:
 - `WORKER_ADMIN_API_URL` (e.g. `https://127.0.0.1:8081`)
 - `WORKER_ADMIN_MTLS_CERT`, `WORKER_ADMIN_MTLS_KEY`, `WORKER_ADMIN_MTLS_CA`
 - `WORKER_ADMIN_PASSWORD` (required)
+- `WORKER_ADMIN_JOB_TARBALL_DIR` (required for local tarball downloads)
 - `WORKER_ADMIN_ALLOW_MOCK=false`
 - `NEXT_PUBLIC_WORKER_ADMIN_ORIGIN` (optional override for SSR fetch)
 

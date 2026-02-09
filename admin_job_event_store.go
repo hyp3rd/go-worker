@@ -36,6 +36,7 @@ type FileJobEventStore struct {
 	maxEntries int
 
 	mu    sync.Mutex
+	fsMu  sync.RWMutex
 	cache map[string]jobEventCache
 }
 
@@ -168,6 +169,9 @@ func (s *FileJobEventStore) List(ctx context.Context, filter AdminJobEventFilter
 }
 
 func (s *FileJobEventStore) writeEvent(key, taskID string, payload []byte) error {
+	s.fsMu.Lock()
+	defer s.fsMu.Unlock()
+
 	dir := key
 
 	err := s.ioClient.MkdirAll(dir)
@@ -194,6 +198,9 @@ func (s *FileJobEventStore) writeEvent(key, taskID string, payload []byte) error
 }
 
 func (s *FileJobEventStore) readEvents(key string, limit int) ([]AdminJobEvent, error) {
+	s.fsMu.RLock()
+	defer s.fsMu.RUnlock()
+
 	dir := key
 
 	entries, err := s.ioClient.ReadDir(dir)

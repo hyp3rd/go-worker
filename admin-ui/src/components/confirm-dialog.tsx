@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 type ConfirmTone = "default" | "danger";
 
@@ -85,24 +85,112 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const titleID = useId();
+  const descriptionID = useId();
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+    cancelButtonRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const root = dialogRef.current;
+      if (!root) {
+        return;
+      }
+
+      const focusableElements = root.querySelectorAll<HTMLElement>(
+        'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
+      );
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        root.focus();
+
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey && activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+
+        return;
+      }
+
+      if (!event.shiftKey && activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      restoreFocusRef.current?.focus();
+    };
+  }, [onCancel, open]);
+
   if (!open) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-lg rounded-3xl border border-soft bg-white p-6 shadow-soft">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role={tone === "danger" ? "alertdialog" : "dialog"}
+        aria-modal="true"
+        aria-labelledby={titleID}
+        aria-describedby={descriptionID}
+        tabIndex={-1}
+        className="w-full max-w-lg rounded-3xl border border-soft bg-white p-6 shadow-soft"
+      >
         <p className="text-xs uppercase tracking-[0.2em] text-muted">Confirm</p>
-        <h2 className="mt-2 text-lg font-semibold text-slate-900">{title}</h2>
-        <p className="mt-2 text-sm text-slate-600">{message}</p>
+        <h2 id={titleID} className="mt-2 text-lg font-semibold text-slate-900">
+          {title}
+        </h2>
+        <p id={descriptionID} className="mt-2 text-sm text-slate-600">
+          {message}
+        </p>
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           <button
+            ref={cancelButtonRef}
+            type="button"
             onClick={onCancel}
             className="rounded-full border border-soft px-4 py-2 text-xs font-semibold text-muted"
           >
             {cancelLabel}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             className={`rounded-full px-4 py-2 text-xs font-semibold text-white ${
               tone === "danger"

@@ -20,16 +20,14 @@ const formatRefreshAge = (lastRefresh: number | null) => {
 
 export function RefreshControls() {
   const router = useRouter();
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.localStorage.getItem(autoRefreshKey) === "true";
+  });
   const [lastRefresh, setLastRefresh] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem(autoRefreshKey);
-    if (stored === "true") {
-      setAutoRefresh(true);
-    }
-  }, []);
 
   useEffect(() => {
     if (!autoRefresh) {

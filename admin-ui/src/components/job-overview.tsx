@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { JobEvent } from "@/lib/types";
 
 const windows = [
@@ -19,11 +19,22 @@ const eventTimestamp = (event: JobEvent) =>
 
 export function JobOverview({ events }: { events: JobEvent[] }) {
   const [windowValue, setWindowValue] = useState("week");
+  const [nowMs, setNowMs] = useState(0);
+
+  useEffect(() => {
+    const bootstrapId = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const tickId = window.setInterval(() => setNowMs(Date.now()), 60_000);
+
+    return () => {
+      clearTimeout(bootstrapId);
+      clearInterval(tickId);
+    };
+  }, []);
 
   const summary = useMemo(() => {
     const selected =
       windows.find((entry) => entry.value === windowValue) ?? windows[1];
-    const cutoff = Date.now() - selected.ms;
+    const cutoff = (nowMs > 0 ? nowMs : 0) - selected.ms;
 
     let running = 0;
     let success = 0;
@@ -52,7 +63,7 @@ export function JobOverview({ events }: { events: JobEvent[] }) {
     }
 
     return { running, success, failed, queued };
-  }, [events, windowValue]);
+  }, [events, nowMs, windowValue]);
 
   return (
     <div className="rounded-3xl border border-soft bg-white/90 p-6 shadow-soft">

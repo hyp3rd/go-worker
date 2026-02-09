@@ -25,11 +25,15 @@ export function SessionExpiry({ initialExpiresAt }: SessionExpiryProps) {
   const [expiresAt, setExpiresAt] = useState<number | null>(
     initialExpiresAt ?? null
   );
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
+    const bootstrapId = window.setTimeout(() => setNow(Date.now()), 0);
     const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
+    return () => {
+      clearTimeout(bootstrapId);
+      clearInterval(tick);
+    };
   }, []);
 
   useEffect(() => {

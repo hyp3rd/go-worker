@@ -107,6 +107,7 @@ const mergeEventList = (primary: JobEvent[], secondary: JobEvent[]) => {
 
 export function JobEvents({ events }: { events: JobEvent[] }) {
   const [items, setItems] = useState<JobEvent[]>(events);
+  const [nowMs, setNowMs] = useState(0);
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [queueFilter, setQueueFilter] = useState("all");
@@ -124,6 +125,16 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
   useEffect(() => {
     setItems(events);
   }, [events]);
+
+  useEffect(() => {
+    const bootstrapId = window.setTimeout(() => setNowMs(Date.now()), 0);
+    const tickId = window.setInterval(() => setNowMs(Date.now()), refreshIntervalMs);
+
+    return () => {
+      clearTimeout(bootstrapId);
+      clearInterval(tickId);
+    };
+  }, []);
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -254,7 +265,7 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
       list = list.filter((event) => queueKey(event) === queueFilter);
     }
 
-    const now = Date.now();
+    const now = nowMs > 0 ? nowMs : 0;
     let windowMs = 0;
     if (rangeFilter === "24h") {
       windowMs = 24 * 60 * 60 * 1000;
@@ -269,7 +280,7 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
     }
 
     return list;
-  }, [filterName, items, queueFilter, rangeFilter, sourceFilter, statusFilter]);
+  }, [filterName, items, nowMs, queueFilter, rangeFilter, sourceFilter, statusFilter]);
 
   const visibleItems = useMemo(() => {
     const start = (page - 1) * pageSize;
