@@ -3993,7 +3993,6 @@ var (
 		nil,                                   // 68: worker.v1.DLQEntryDetail.MetadataEntry
 	}
 )
-
 var file_worker_v1_admin_proto_depIdxs = []int32{
 	1,  // 0: worker.v1.GetOverviewResponse.stats:type_name -> worker.v1.OverviewStats
 	2,  // 1: worker.v1.GetOverviewResponse.coordination:type_name -> worker.v1.CoordinationStatus

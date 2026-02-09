@@ -134,6 +134,7 @@
     "newkey",
     "newuser",
     "nolint",
+    "nolintlint",
     "nonamedreturns",
     "nonroot",
     "nosec",
