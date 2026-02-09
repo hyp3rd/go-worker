@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RelativeTime } from "@/components/relative-time";
 import { formatDuration } from "@/lib/format";
@@ -23,6 +24,63 @@ const statusStyles: Record<string, string> = {
 const normalizeStatus = (status: string) => {
   const key = status.toLowerCase();
   return statusStyles[key] ? key : "unknown";
+};
+
+const sourceSummary = (event: JobEvent) => {
+  const meta = event.metadata ?? {};
+  const source = (meta["job.source"] ?? "").toLowerCase();
+  if (source === "tarball_url") {
+    return meta["job.tarball_url"] || "tarball url";
+  }
+  if (source === "tarball_path") {
+    return meta["job.tarball_path"] || "tarball path";
+  }
+
+  if (event.repo || event.tag) {
+    return `${event.repo}@${event.tag}`;
+  }
+
+  return "n/a";
+};
+
+const eventTimestamp = (event: JobEvent) =>
+  event.finishedAtMs ?? event.startedAtMs ?? 0;
+
+const optimisticTTL = 10 * 60 * 1000;
+
+const mergeEventList = (primary: JobEvent[], secondary: JobEvent[]) => {
+  const byId = new Map<string, JobEvent>();
+  for (const event of secondary) {
+    byId.set(event.taskId, event);
+  }
+  for (const event of primary) {
+    byId.set(event.taskId, event);
+  }
+
+  const latestByName = new Map<string, JobEvent>();
+  for (const event of primary) {
+    const stamp = eventTimestamp(event);
+    const current = latestByName.get(event.name);
+    if (!current || stamp > eventTimestamp(current)) {
+      latestByName.set(event.name, event);
+    }
+  }
+
+  const now = Date.now();
+  const merged: JobEvent[] = [];
+  for (const event of byId.values()) {
+    const isOptimistic = event.taskId.startsWith("pending-");
+    if (isOptimistic && now - eventTimestamp(event) > optimisticTTL) {
+      continue;
+    }
+    const latest = latestByName.get(event.name);
+    if (isOptimistic && latest && eventTimestamp(latest) >= eventTimestamp(event)) {
+      continue;
+    }
+    merged.push(event);
+  }
+
+  return merged;
 };
 
 export function JobEvents({ events }: { events: JobEvent[] }) {
@@ -54,7 +112,7 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
         }
         const payload = (await res.json()) as { events?: JobEvent[] };
         if (payload?.events) {
-          setItems(payload.events);
+          setItems((prev) => mergeEventList(payload.events ?? [], prev));
         }
       } catch {
         // ignore polling failures
@@ -76,7 +134,7 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
             events?: JobEvent[];
           };
           if (payload?.events) {
-            setItems(payload.events);
+            setItems((prev) => mergeEventList(payload.events ?? [], prev));
           }
         } catch {
           // ignore parsing errors
@@ -103,6 +161,21 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
       if (timer) {
         clearInterval(timer);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<JobEvent>).detail;
+      if (!detail) {
+        return;
+      }
+      setItems((prev) => mergeEventList(prev, [detail]));
+    };
+
+    window.addEventListener("job-run-start", handler as EventListener);
+    return () => {
+      window.removeEventListener("job-run-start", handler as EventListener);
     };
   }, []);
 
@@ -214,19 +287,25 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
                       {statusKey}
                     </span>
                   </div>
-                  <span className="text-[11px] uppercase tracking-[0.2em] text-muted">
-                    {displayTime ? (
-                      <RelativeTime valueMs={displayTime} mode="past" />
-                    ) : (
-                      "n/a"
-                    )}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted">
+                    <span>
+                      {displayTime ? (
+                        <RelativeTime valueMs={displayTime} mode="past" />
+                      ) : (
+                        "n/a"
+                      )}
+                    </span>
+                    <Link
+                      href={`/jobs/runs/${encodeURIComponent(event.taskId)}`}
+                      className="rounded-full border border-soft px-2 py-1 text-[10px] font-semibold text-muted"
+                    >
+                      View output
+                    </Link>
+                  </div>
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted">
-                  <span>
-                    {event.repo}@{event.tag}
-                  </span>
+                  <span>{sourceSummary(event)}</span>
                   <span>{event.path || "repo root"}</span>
                   <span>queue {event.queue || "default"}</span>
                   <span>

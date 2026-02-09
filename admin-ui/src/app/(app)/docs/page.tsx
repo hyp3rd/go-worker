@@ -216,8 +216,15 @@ docker compose -f compose.admin.yaml up --build`}
             and local tarballs are resolved under WORKER_JOB_TARBALL_DIR.
           </li>
           <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
+            Use the Crash‑test preset in the Jobs form to populate a local
+            tarball job that fails by default for validation. Build the tarball
+            with __examples/job_runner_dummy/create-tarball.sh so Dockerfile is
+            at the tarball root.
+          </li>
+          <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
             Command overrides the image entrypoint; env keys are read from the
-            worker service environment.
+            worker service environment. Use KEY=VALUE to pass explicit overrides
+            per job.
           </li>
           <li className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3">
             Output is truncated to the configured max bytes for safety.

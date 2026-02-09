@@ -25,6 +25,7 @@ services:
     build:
       context: .
     environment:
+      NODE_ENV: development
       WORKER_ADMIN_GRPC_TARGET: worker-service:50052
       WORKER_REDIS_ADDR: worker-redis:6379
       WORKER_REDIS_PASSWORD: supersecret
@@ -48,6 +49,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+      target: runtime-docker
     environment:
       WORKER_REDIS_ADDR: worker-redis:6379
       WORKER_REDIS_PASSWORD: supersecret
@@ -55,10 +57,17 @@ services:
       WORKER_GRPC_ADDR: 0.0.0.0:50052
       WORKER_CRON_DEFAULT_SPEC: "@every 1m"
       WORKER_DURABLE_CRON_HANDLERS: cron_handler
+      WORKER_JOB_TARBALL_DIR: /workspace
+      WORKER_JOB_WORKDIR: /workspace/.job-work
+      DOCKER_BUILDKIT: "1"
     ports:
       - "50052:50052"
     depends_on:
       - worker-redis
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/workspace:ro
+      - worker-job-work:/workspace/.job-work
     networks:
       - redis-worker-net
 
@@ -82,6 +91,8 @@ services:
 
 volumes:
   redis-worker-stack_data:
+    driver: local
+  worker-job-work:
     driver: local
 
 networks:

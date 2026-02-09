@@ -44,7 +44,11 @@ These are read by the UI container:
 - Jobs can pull from a Git tag, an HTTPS tarball URL, or a local tarball path.
 - Tarball URLs must be allowlisted with `WORKER_JOB_TARBALL_ALLOWLIST`.
 - Tarball paths are resolved relative to `WORKER_JOB_TARBALL_DIR`.
+- Use the Crash-test preset in the Jobs form to populate a local tarball job
+  that fails by default for validation. Build the tarball with
+  `__examples/job_runner_dummy/create-tarball.sh` so Dockerfile is at the root.
 - Command overrides the image entrypoint; env keys come from the worker service.
+  Use `KEY=VALUE` to pass explicit overrides per job.
 - Output is truncated to the configured max bytes for safety.
 
 ## DLQ
