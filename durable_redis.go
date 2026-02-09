@@ -53,21 +53,22 @@ const (
 
 // RedisDurableBackend implements a durable task backend using Redis.
 type RedisDurableBackend struct {
-	client       rueidis.Client
-	prefix       string
-	batchSize    int
-	queueMu      sync.RWMutex
-	defaultQueue string
-	queueWeights map[string]int
-	queueCursor  atomic.Uint32
-	enqueue      *rueidis.Lua
-	dequeue      *rueidis.Lua
-	ack          *rueidis.Lua
-	nack         *rueidis.Lua
-	fail         *rueidis.Lua
-	extend       *rueidis.Lua
-	rateLimit    *redisRateLimit
-	leader       *redisLeader
+	client        rueidis.Client
+	prefix        string
+	batchSize     int
+	queueMu       sync.RWMutex
+	defaultQueue  string
+	queueWeights  map[string]int
+	queueCursor   atomic.Uint32
+	jobEventStore AdminJobEventStore
+	enqueue       *rueidis.Lua
+	dequeue       *rueidis.Lua
+	ack           *rueidis.Lua
+	nack          *rueidis.Lua
+	fail          *rueidis.Lua
+	extend        *rueidis.Lua
+	rateLimit     *redisRateLimit
+	leader        *redisLeader
 }
 
 type redisRateLimit struct {
@@ -117,6 +118,13 @@ func WithRedisDurableDefaultQueue(name string) RedisDurableOption {
 func WithRedisDurableQueueWeights(weights map[string]int) RedisDurableOption {
 	return func(b *RedisDurableBackend) {
 		b.queueWeights = copyQueueWeights(weights)
+	}
+}
+
+// WithRedisAdminJobEventStore configures a job event store for admin events.
+func WithRedisAdminJobEventStore(store AdminJobEventStore) RedisDurableOption {
+	return func(b *RedisDurableBackend) {
+		b.jobEventStore = store
 	}
 }
 

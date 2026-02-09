@@ -34,6 +34,8 @@ const (
 	defaultJobOutputBytes = 64 * 1024
 	defaultJobTarballMax  = 64 * 1024 * 1024
 	defaultJobTarballWait = 30 * time.Second
+	defaultJobEventCache  = 10 * time.Second
+	defaultJobEventMax    = 10000
 )
 
 func defaultDurableCronHandlers() []string {
@@ -84,6 +86,9 @@ type config struct {
 	jobTarballDir       string
 	jobTarballMaxBytes  int64
 	jobTarballTimeout   time.Duration
+	jobEventDir         string
+	jobEventCacheTTL    time.Duration
+	jobEventMaxEntries  int
 }
 
 func main() {
@@ -171,6 +176,19 @@ func newDurableBackend(cfg config) (rueidis.Client, *worker.RedisDurableBackend,
 		backendOptions = append(backendOptions, worker.WithRedisDurableGlobalRateLimit(cfg.globalRate, cfg.globalBurst))
 	}
 
+	if cfg.jobEventDir != "" {
+		store, err := worker.NewFileJobEventStore(
+			cfg.jobEventDir,
+			worker.WithJobEventStoreCacheTTL(cfg.jobEventCacheTTL),
+			worker.WithJobEventStoreMaxEntries(cfg.jobEventMaxEntries),
+		)
+		if err != nil {
+			log.Printf("job event store: %v (events will not persist)", err)
+		} else {
+			backendOptions = append(backendOptions, worker.WithRedisAdminJobEventStore(store))
+		}
+	}
+
 	backend, err := worker.NewRedisDurableBackend(client, backendOptions...)
 	if err != nil {
 		client.Close()
@@ -205,6 +223,9 @@ func loadConfig() config {
 		jobTarballDir:       strings.TrimSpace(os.Getenv("WORKER_JOB_TARBALL_DIR")),
 		jobTarballMaxBytes:  int64(parseIntWithDefault(os.Getenv("WORKER_JOB_TARBALL_MAX_BYTES"), defaultJobTarballMax)),
 		jobTarballTimeout:   defaultDuration(os.Getenv("WORKER_JOB_TARBALL_TIMEOUT"), defaultJobTarballWait),
+		jobEventDir:         strings.TrimSpace(os.Getenv("WORKER_JOB_EVENT_DIR")),
+		jobEventCacheTTL:    defaultDuration(os.Getenv("WORKER_JOB_EVENT_CACHE_TTL"), defaultJobEventCache),
+		jobEventMaxEntries:  parseIntWithDefault(os.Getenv("WORKER_JOB_EVENT_MAX_ENTRIES"), defaultJobEventMax),
 	}
 
 	cfg.durableCronHandlers = append([]string{}, defaultDurableCronHandlers()...)

@@ -4,8 +4,10 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { JobSchedule, ScheduleFactory } from "@/lib/types";
 import { FilterBar } from "@/components/filters";
+import { Pagination } from "@/components/pagination";
 import { RelativeTime } from "@/components/relative-time";
 import { StatusPill } from "@/components/status-pill";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 export function SchedulesGrid({
   schedules,
@@ -17,6 +19,8 @@ export function SchedulesGrid({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createSpec, setCreateSpec] = useState("");
@@ -29,6 +33,7 @@ export function SchedulesGrid({
     text: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const { confirm, dialogProps } = useConfirmDialog();
   const hasSchedules = schedules.length > 0;
   const allPaused =
     hasSchedules && schedules.every((schedule) => schedule.paused);
@@ -48,6 +53,11 @@ export function SchedulesGrid({
       return matchesName && matchesStatus;
     });
   }, [query, schedules, status]);
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   const createSchedule = async () => {
     if (!createName.trim() || !createSpec.trim()) {
@@ -121,7 +131,12 @@ export function SchedulesGrid({
   };
 
   const deleteSchedule = async (job: JobSchedule) => {
-    const ok = window.confirm(`Delete schedule "${job.name}"?`);
+    const ok = await confirm({
+      title: `Delete schedule "${job.name}"?`,
+      message: "This removes the schedule and stops future runs.",
+      confirmLabel: "Delete schedule",
+      tone: "danger",
+    });
     if (!ok) {
       return;
     }
@@ -206,7 +221,11 @@ export function SchedulesGrid({
   };
 
   const runSchedule = async (job: JobSchedule) => {
-    const ok = window.confirm(`Run schedule "${job.name}" now?`);
+    const ok = await confirm({
+      title: `Run schedule "${job.name}" now?`,
+      message: "A durable task will be enqueued immediately.",
+      confirmLabel: "Run now",
+    });
     if (!ok) {
       return;
     }
@@ -245,11 +264,13 @@ export function SchedulesGrid({
     }
 
     const targetPaused = !allPaused;
-    const ok = window.confirm(
-      targetPaused
-        ? "Pause all schedules? Scheduled runs will be skipped."
-        : "Resume all schedules?"
-    );
+    const ok = await confirm({
+      title: targetPaused ? "Pause all schedules?" : "Resume all schedules?",
+      message: targetPaused
+        ? "Scheduled runs will be skipped until resumed."
+        : "Schedules will resume on their next tick.",
+      confirmLabel: targetPaused ? "Pause all" : "Resume all",
+    });
     if (!ok) {
       return;
     }
@@ -304,8 +325,14 @@ export function SchedulesGrid({
       <FilterBar
         placeholder="Search schedule"
         statusOptions={["all", "healthy", "lagging", "paused"]}
-        onQuery={setQuery}
-        onStatus={setStatus}
+        onQuery={(value) => {
+          setQuery(value);
+          setPage(1);
+        }}
+        onStatus={(value) => {
+          setStatus(value);
+          setPage(1);
+        }}
         rightSlot={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -403,7 +430,7 @@ export function SchedulesGrid({
         </div>
       ) : null}
       <div className="grid gap-4 md:grid-cols-2">
-        {filtered.map((job) => (
+        {paged.map((job) => (
           <div
             key={job.name}
             className="rounded-2xl border border-soft bg-[var(--card)] p-4"
@@ -493,6 +520,19 @@ export function SchedulesGrid({
           </div>
         ))}
       </div>
+      <Pagination
+        page={page}
+        total={filtered.length}
+        pageSize={pageSize}
+        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setPage((prev) => Math.max(1, prev - 1))}
+        onPageSizeChange={(value) => {
+          setPageSize(value);
+          setPage(1);
+        }}
+        pageSizeOptions={[4, 6, 8, 12]}
+      />
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

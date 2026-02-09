@@ -1,19 +1,47 @@
 # Go Worker Admin UI
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Next.js app for operating `go-worker` via the Admin Gateway (HTTP/JSON over mTLS).
+
+## Quick start
+
+```bash
+npm install
+npm run dev
+```
+
+Open [<http://localhost:3000>](http://localhost:3000).
+
+To run the full stack (worker + gateway + UI) with mTLS:
+
+```bash
+./scripts/gen-admin-certs.sh
+docker compose -f compose.admin.yaml up --build
+```
 
 ## Configuration
 
-Create `admin-ui/.env.local` (or copy `admin-ui/.env.example`) to track the UI config in one place. Next.js loads `.env.local` automatically.
+Create `admin-ui/.env.local` (or copy `admin-ui/.env.example`). Next.js loads
+`.env.local` automatically.
 
-The admin UI now talks to the worker admin gateway (HTTP/JSON over mTLS). Configure the gateway and UI hints via env vars:
+UI env vars:
 
 - `WORKER_ADMIN_API_URL` (e.g. `https://127.0.0.1:8081`)
-- `WORKER_ADMIN_MTLS_CERT`, `WORKER_ADMIN_MTLS_KEY`, `WORKER_ADMIN_MTLS_CA` (client certs for mTLS)
-- `WORKER_ADMIN_SCHEDULES_JSON` (JSON array of schedule objects)
-- `WORKER_ADMIN_ALLOW_MOCK=false` (disable mock fallback in non-production)
-- `NEXT_PUBLIC_WORKER_ADMIN_ORIGIN` (optional override for API fetch origin)
-- `WORKER_ADMIN_PASSWORD` (required to sign into the UI)
+- `WORKER_ADMIN_MTLS_CERT`, `WORKER_ADMIN_MTLS_KEY`, `WORKER_ADMIN_MTLS_CA`
+- `WORKER_ADMIN_PASSWORD` (required)
+- `WORKER_ADMIN_ALLOW_MOCK=false`
+- `NEXT_PUBLIC_WORKER_ADMIN_ORIGIN` (optional override for SSR fetch)
+
+Worker-service job runner (for Jobs + events):
+
+- `WORKER_JOB_REPO_ALLOWLIST` (comma-separated; `*` to allow all)
+- `WORKER_JOB_TARBALL_ALLOWLIST` (comma-separated hostnames for HTTPS tarballs)
+- `WORKER_JOB_TARBALL_DIR` (root for local tarballs, default `/tmp`)
+- `WORKER_JOB_TARBALL_MAX_BYTES` (default 64MiB)
+- `WORKER_JOB_TARBALL_TIMEOUT` (default 30s)
+- `WORKER_JOB_OUTPUT_BYTES` (max combined stdout+stderr)
+- `WORKER_JOB_EVENT_DIR` (required to persist job events)
+- `WORKER_JOB_EVENT_MAX_ENTRIES` (per key; default 10000)
+- `WORKER_JOB_EVENT_CACHE_TTL` (default 10s)
 
 ## Crash-test preset
 
@@ -24,37 +52,6 @@ local tarball job. Build the tarball with
 set `DUMMY_SHOULD_FAIL=0` in the worker-service environment or provide
 `DUMMY_SHOULD_FAIL=0` directly in the job env list.
 
-## Getting Started
+## More docs
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See `docs/admin-ui.md` for full usage and troubleshooting.

@@ -9,13 +9,14 @@ import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
 import { Table, TableCell, TableRow } from "@/components/table";
 
-const PAGE_SIZE = 5;
+const defaultPageSize = 5;
 
 export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultPageSize);
   const [createOpen, setCreateOpen] = useState(
     () => searchParams.get("create") === "1"
   );
@@ -34,12 +35,17 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
   }, [queues, query]);
 
   const paged = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   const handleQuery = (value: string) => {
     setQuery(value);
+    setPage(1);
+  };
+
+  const handlePageSize = (value: number) => {
+    setPageSize(value);
     setPage(1);
   };
 
@@ -181,9 +187,11 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
       <Pagination
         page={page}
         total={filtered.length}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
         onNext={() => setPage((prev) => prev + 1)}
         onPrev={() => setPage((prev) => Math.max(1, prev - 1))}
+        onPageSizeChange={handlePageSize}
+        pageSizeOptions={[5, 10, 25]}
       />
     </div>
   );

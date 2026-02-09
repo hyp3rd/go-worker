@@ -140,23 +140,23 @@ type AdminScheduleEvent struct {
 
 // AdminJobEvent describes a containerized job execution event.
 type AdminJobEvent struct {
-	TaskID       string
-	Name         string
-	Status       string
-	Queue        string
-	Repo         string
-	Tag          string
-	Path         string
-	Dockerfile   string
-	Command      string
-	ScheduleName string
-	ScheduleSpec string
-	StartedAt    time.Time
-	FinishedAt   time.Time
-	DurationMs   int64
-	Result       string
-	Error        string
-	Metadata     map[string]string
+	TaskID       string            `json:"task_id"`
+	Name         string            `json:"name"`
+	Status       string            `json:"status"`
+	Queue        string            `json:"queue"`
+	Repo         string            `json:"repo"`
+	Tag          string            `json:"tag"`
+	Path         string            `json:"path"`
+	Dockerfile   string            `json:"dockerfile"`
+	Command      string            `json:"command"`
+	ScheduleName string            `json:"schedule_name"`
+	ScheduleSpec string            `json:"schedule_spec"`
+	StartedAt    time.Time         `json:"started_at"`
+	FinishedAt   time.Time         `json:"finished_at"`
+	DurationMs   int64             `json:"duration_ms"`
+	Result       string            `json:"result"`
+	Error        string            `json:"error"`
+	Metadata     map[string]string `json:"metadata"`
 }
 
 // AdminJobEventFilter filters job execution events.

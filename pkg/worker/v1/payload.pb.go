@@ -113,7 +113,6 @@ var (
 		(*SendEmailPayload)(nil), // 0: worker.v1.SendEmailPayload
 	}
 )
-
 var file_worker_v1_payload_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type

@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { readAuditEvents, recordAuditEvent, type AuditEvent } from "@/lib/audit";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 type RunbookActionsProps = {
   paused: boolean;
@@ -24,6 +25,7 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
   const [pending, startTransition] = useTransition();
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [replayLimit, setReplayLimit] = useState(replayDefault);
+  const { confirm, dialogProps } = useConfirmDialog();
 
   useEffect(() => {
     setAuditEvents(readAuditEvents());
@@ -34,25 +36,32 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
 
     try {
       if (action === "pause") {
-        const ok = window.confirm(
-          "Pause durable dequeue? Active workers will stop pulling new durable tasks."
-        );
+        const ok = await confirm({
+          title: "Pause durable dequeue?",
+          message:
+            "Active workers will stop pulling new durable tasks until resumed.",
+          confirmLabel: "Pause dequeue",
+        });
         if (!ok) {
           return;
         }
       }
       if (action === "resume") {
-        const ok = window.confirm(
-          "Resume durable dequeue? Workers will start processing durable tasks again."
-        );
+        const ok = await confirm({
+          title: "Resume durable dequeue?",
+          message: "Workers will start processing durable tasks again.",
+          confirmLabel: "Resume dequeue",
+        });
         if (!ok) {
           return;
         }
       }
       if (action === "replay") {
-        const ok = window.confirm(
-          `Replay up to ${replayLimit} DLQ item(s)? Replays are at-least-once.`
-        );
+        const ok = await confirm({
+          title: "Replay DLQ items?",
+          message: `Replay up to ${replayLimit} DLQ item(s). Replays are at-least-once.`,
+          confirmLabel: "Replay DLQ",
+        });
         if (!ok) {
           return;
         }
@@ -173,6 +182,7 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
           )}
         </div>
       </div>
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

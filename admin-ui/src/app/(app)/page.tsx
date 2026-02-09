@@ -3,10 +3,12 @@ import { StatCard } from "@/components/stat-card";
 import { StatusPill } from "@/components/status-pill";
 import { RunbookActions } from "@/components/runbook-actions";
 import { RefreshControls } from "@/components/refresh-controls";
+import { JobOverview } from "@/components/job-overview";
 import Link from "next/link";
 import {
   getAdminActionCounters,
   getCoordinationStatus,
+  getJobEvents,
   getJobSchedules,
   getOverviewStats,
   getQueueSummaries,
@@ -16,12 +18,13 @@ import { formatLatency, formatNumber } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [stats, queues, jobs, coordination, actions] = await Promise.all([
+  const [stats, queues, jobs, coordination, actions, jobEvents] = await Promise.all([
     getOverviewStats(),
     getQueueSummaries(),
     getJobSchedules(),
     getCoordinationStatus(),
     getAdminActionCounters(),
+    getJobEvents({ limit: 200 }),
   ]);
 
   return (
@@ -131,6 +134,8 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      <JobOverview events={jobEvents} />
 
       <section className="rounded-3xl border border-soft bg-white/95 p-6 shadow-soft">
           <SectionHeader

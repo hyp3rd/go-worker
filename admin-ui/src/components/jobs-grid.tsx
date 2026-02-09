@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { AdminJob, JobEvent } from "@/lib/types";
 import { FilterBar } from "@/components/filters";
+import { Pagination } from "@/components/pagination";
 import { Table, TableCell, TableRow } from "@/components/table";
 import { RelativeTime } from "@/components/relative-time";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 const parseList = (value: string) =>
   value
@@ -133,15 +135,47 @@ const normalizeEventStatus = (status?: string) => {
 const eventTimestamp = (event?: JobEvent) =>
   event?.finishedAtMs ?? event?.startedAtMs ?? 0;
 
+const statusCounts = (events: JobEvent[]) => {
+  const counts = {
+    running: 0,
+    queued: 0,
+    failed: 0,
+    completed: 0,
+  };
+
+  for (const event of events) {
+    const status = normalizeEventStatus(event.status);
+    if (status === "running") {
+      counts.running += 1;
+    } else if (status === "queued") {
+      counts.queued += 1;
+    } else if (status === "failed" || status === "deadline" || status === "invalid" || status === "cancelled") {
+      counts.failed += 1;
+    } else if (status === "completed") {
+      counts.completed += 1;
+    }
+  }
+
+  return counts;
+};
+
 const optimisticTTL = 10 * 60 * 1000;
+const refreshIntervalMs = 15000;
+const eventsFetchLimit = 200;
 
 const mergeEvents = (primary: JobEvent[], secondary: JobEvent[]) => {
   const byId = new Map<string, JobEvent>();
   for (const event of secondary) {
-    byId.set(event.taskId, event);
+    const existing = byId.get(event.taskId);
+    if (!existing || eventTimestamp(event) >= eventTimestamp(existing)) {
+      byId.set(event.taskId, event);
+    }
   }
   for (const event of primary) {
-    byId.set(event.taskId, event);
+    const existing = byId.get(event.taskId);
+    if (!existing || eventTimestamp(event) >= eventTimestamp(existing)) {
+      byId.set(event.taskId, event);
+    }
   }
 
   const latestByName = new Map<string, JobEvent>();
@@ -203,6 +237,7 @@ export function JobsGrid({
   events?: JobEvent[];
 }) {
   const router = useRouter();
+  const [liveEvents, setLiveEvents] = useState<JobEvent[]>(events);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState<{
@@ -211,6 +246,9 @@ export function JobsGrid({
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const [optimisticEvents, setOptimisticEvents] = useState<JobEvent[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const { confirm, dialogProps } = useConfirmDialog();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editingName, setEditingName] = useState<string | null>(null);
@@ -232,8 +270,58 @@ export function JobsGrid({
     timeoutSeconds: "",
   });
 
+  useEffect(() => {
+    setLiveEvents(events);
+  }, [events]);
+
+  useEffect(() => {
+    let source: EventSource | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/jobs/events?limit=${eventsFetchLimit}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          return;
+        }
+        const payload = (await res.json()) as { events?: JobEvent[] };
+        if (payload?.events) {
+          setLiveEvents((prev) => mergeEvents(payload.events ?? [], prev));
+        }
+      } catch {
+        // ignore polling errors
+      }
+    };
+
+    poll();
+    interval = setInterval(poll, refreshIntervalMs);
+
+    source = new EventSource("/api/events");
+    source.addEventListener("job_events", (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { events?: JobEvent[] };
+        if (payload?.events) {
+          setLiveEvents((prev) => mergeEvents(payload.events ?? [], prev));
+        }
+      } catch {
+        // ignore malformed SSE payloads
+      }
+    });
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+      if (source) {
+        source.close();
+      }
+    };
+  }, []);
+
   const lastEvents = useMemo(() => {
-    const allEvents = mergeEvents(events, optimisticEvents);
+    const allEvents = mergeEvents(liveEvents, optimisticEvents);
     const map = new Map<string, JobEvent>();
     for (const event of allEvents) {
       const name = event.name?.trim();
@@ -247,7 +335,7 @@ export function JobsGrid({
       }
     }
     return map;
-  }, [events, optimisticEvents]);
+  }, [liveEvents, optimisticEvents]);
 
   const source = normalizeSource(form.source);
 
@@ -258,7 +346,7 @@ export function JobsGrid({
   };
 
   const eventBuckets = useMemo(() => {
-    const allEvents = mergeEvents(events, optimisticEvents);
+    const allEvents = mergeEvents(liveEvents, optimisticEvents);
     const map = new Map<string, JobEvent[]>();
     for (const event of allEvents) {
       const name = event.name?.trim();
@@ -273,7 +361,7 @@ export function JobsGrid({
       list.sort((a, b) => eventTimestamp(b) - eventTimestamp(a));
     }
     return map;
-  }, [events, optimisticEvents]);
+  }, [liveEvents, optimisticEvents]);
 
   const healthFor = (jobName: string) => {
     const list = eventBuckets.get(jobName) ?? [];
@@ -372,6 +460,11 @@ export function JobsGrid({
     });
   }, [jobs, lastEvents, query, statusFilter]);
 
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
 
   const resetForm = (job?: AdminJob) => {
     setEditingName(job?.name ?? null);
@@ -402,6 +495,21 @@ export function JobsGrid({
     }
     resetForm();
     setCreateOpen(true);
+  };
+
+  const handleQuery = (value: string) => {
+    setQuery(value);
+    setPage(1);
+  };
+
+  const handleStatus = (value: string) => {
+    setStatusFilter(value);
+    setPage(1);
+  };
+
+  const handlePageSize = (value: number) => {
+    setPageSize(value);
+    setPage(1);
   };
 
   const startEdit = (job: AdminJob) => {
@@ -532,7 +640,12 @@ export function JobsGrid({
   };
 
   const deleteJob = async (job: AdminJob) => {
-    const ok = window.confirm(`Delete job "${job.name}"?`);
+    const ok = await confirm({
+      title: `Delete job "${job.name}"?`,
+      message: "This removes the job definition and its schedule factory.",
+      confirmLabel: "Delete job",
+      tone: "danger",
+    });
     if (!ok) {
       return;
     }
@@ -557,7 +670,11 @@ export function JobsGrid({
   };
 
   const runJob = async (job: AdminJob) => {
-    const ok = window.confirm(`Run job "${job.name}" now?`);
+    const ok = await confirm({
+      title: `Run job "${job.name}" now?`,
+      message: "A new durable task will be enqueued immediately.",
+      confirmLabel: "Run now",
+    });
     if (!ok) {
       return;
     }
@@ -567,7 +684,7 @@ export function JobsGrid({
       const optimistic: JobEvent = {
         taskId: `pending-${job.name}-${Date.now()}`,
         name: job.name,
-        status: "running",
+        status: "queued",
         queue: job.queue || "default",
         repo: job.repo ?? "",
         tag: job.tag ?? "",
@@ -654,8 +771,8 @@ export function JobsGrid({
       <FilterBar
         placeholder="Search job name"
         statusOptions={statusOptions}
-        onQuery={setQuery}
-        onStatus={setStatusFilter}
+        onQuery={handleQuery}
+        onStatus={handleStatus}
         rightSlot={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -996,7 +1113,7 @@ export function JobsGrid({
             <TableCell align="left">{"\u00a0"}</TableCell>
           </TableRow>
         ) : (
-          filtered.map((job) => {
+          paged.map((job) => {
             const lastEvent = lastEvents.get(job.name);
             const statusKey = normalizeEventStatus(lastEvent?.status);
             const displayTime = eventTimestamp(lastEvent);
@@ -1004,6 +1121,13 @@ export function JobsGrid({
             const preview = lastEvent?.error ?? lastEvent?.result ?? "";
             const previewLabel = lastEvent?.error ? "last error" : "last output";
             const sourceSummary = jobSourceSummary(job);
+            const bucket = eventBuckets.get(job.name) ?? [];
+            const counts = statusCounts(bucket);
+            const activityParts = [
+              counts.running ? `running ${counts.running}` : "",
+              counts.queued ? `queued ${counts.queued}` : "",
+              counts.failed ? `failed ${counts.failed}` : "",
+            ].filter(Boolean);
 
             return (
             <TableRow key={job.name}>
@@ -1054,6 +1178,11 @@ export function JobsGrid({
                       }`}
                     >
                       {statusLabels[statusKey] ?? statusKey}
+                    </span>
+                    <span className="text-[11px] text-muted">
+                      {activityParts.length > 0
+                        ? activityParts.join(" · ")
+                        : "no active runs"}
                     </span>
                     {displayTime ? (
                       <RelativeTime valueMs={displayTime} mode="past" />
@@ -1119,6 +1248,16 @@ export function JobsGrid({
           })
         )}
       </Table>
+      <Pagination
+        page={page}
+        total={filtered.length}
+        pageSize={pageSize}
+        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setPage((prev) => Math.max(1, prev - 1))}
+        onPageSizeChange={handlePageSize}
+        pageSizeOptions={[5, 10, 25, 50]}
+      />
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

@@ -1,16 +1,23 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"maps"
+	"os"
 	"strings"
 	"time"
 )
 
 const (
-	defaultAdminJobEventLimit = 200
-	jobEventResultMaxLen      = 240
+	defaultAdminJobEventLimit   = 200
+	jobEventResultMaxLen        = 240
+	adminJobEventPersistTimeout = 2 * time.Second
 )
+
+type adminJobEventRecorder interface {
+	AdminRecordJobEvent(ctx context.Context, event AdminJobEvent, limit int) error
+}
 
 func (tm *TaskManager) recordJobCompletion(task *Task, status TaskStatus, result any, err error) {
 	if tm == nil || task == nil {
@@ -60,15 +67,140 @@ func (tm *TaskManager) recordJobCompletion(task *Task, status TaskStatus, result
 	}
 
 	tm.jobEventsMu.Lock()
-	defer tm.jobEventsMu.Unlock()
 
 	tm.jobEvents = append(tm.jobEvents, event)
-	if tm.jobEventLimit <= 0 {
+	if tm.jobEventLimit > 0 && len(tm.jobEvents) > tm.jobEventLimit {
+		tm.jobEvents = tm.jobEvents[len(tm.jobEvents)-tm.jobEventLimit:]
+	}
+
+	tm.jobEventsMu.Unlock()
+
+	tm.persistJobEvent(task.Ctx, event)
+}
+
+func (tm *TaskManager) recordJobStart(task *Task) {
+	if tm == nil || task == nil {
 		return
 	}
 
-	if len(tm.jobEvents) > tm.jobEventLimit {
+	meta := jobMetadataFromTask(task)
+
+	handler := jobHandlerFromTask(task)
+	if handler != JobHandlerName && meta[jobMetaNameKey] == "" {
+		return
+	}
+
+	event := AdminJobEvent{
+		TaskID:       task.ID.String(),
+		Name:         strings.TrimSpace(meta[jobMetaNameKey]),
+		Status:       jobStatusLabel(Running),
+		Queue:        jobQueue(task, meta, tm.defaultQueue),
+		Repo:         strings.TrimSpace(meta[jobMetaRepoKey]),
+		Tag:          strings.TrimSpace(meta[jobMetaTagKey]),
+		Path:         strings.TrimSpace(meta[jobMetaPathKey]),
+		Dockerfile:   strings.TrimSpace(meta[jobMetaDockerfileKey]),
+		Command:      strings.TrimSpace(meta[jobMetaCommandKey]),
+		ScheduleName: strings.TrimSpace(meta[cronMetaNameKey]),
+		ScheduleSpec: strings.TrimSpace(meta[cronMetaSpecKey]),
+		StartedAt:    task.StartedAt(),
+		Metadata:     sanitizeJobMetadata(meta),
+	}
+
+	if event.Name == "" {
+		if handler != "" {
+			event.Name = handler
+		} else {
+			event.Name = task.Name
+		}
+	}
+
+	if event.StartedAt.IsZero() {
+		event.StartedAt = time.Now()
+	}
+
+	tm.jobEventsMu.Lock()
+
+	tm.jobEvents = append(tm.jobEvents, event)
+	if tm.jobEventLimit > 0 && len(tm.jobEvents) > tm.jobEventLimit {
 		tm.jobEvents = tm.jobEvents[len(tm.jobEvents)-tm.jobEventLimit:]
+	}
+
+	tm.jobEventsMu.Unlock()
+
+	tm.persistJobEvent(task.Ctx, event)
+}
+
+func (tm *TaskManager) recordJobQueued(task DurableTask) {
+	if tm == nil {
+		return
+	}
+
+	meta := task.Metadata
+
+	handler := strings.TrimSpace(task.Handler)
+	if handler != JobHandlerName && meta[jobMetaNameKey] == "" {
+		return
+	}
+
+	event := AdminJobEvent{
+		TaskID:       task.ID.String(),
+		Name:         strings.TrimSpace(meta[jobMetaNameKey]),
+		Status:       jobStatusLabel(Queued),
+		Queue:        jobQueue(nil, meta, tm.defaultQueue),
+		Repo:         strings.TrimSpace(meta[jobMetaRepoKey]),
+		Tag:          strings.TrimSpace(meta[jobMetaTagKey]),
+		Path:         strings.TrimSpace(meta[jobMetaPathKey]),
+		Dockerfile:   strings.TrimSpace(meta[jobMetaDockerfileKey]),
+		Command:      strings.TrimSpace(meta[jobMetaCommandKey]),
+		ScheduleName: strings.TrimSpace(meta[cronMetaNameKey]),
+		ScheduleSpec: strings.TrimSpace(meta[cronMetaSpecKey]),
+		StartedAt:    time.Now(),
+		Metadata:     sanitizeJobMetadata(meta),
+	}
+
+	if event.Name == "" {
+		if handler != "" {
+			event.Name = handler
+		} else {
+			event.Name = task.ID.String()
+		}
+	}
+
+	tm.jobEventsMu.Lock()
+
+	tm.jobEvents = append(tm.jobEvents, event)
+	if tm.jobEventLimit > 0 && len(tm.jobEvents) > tm.jobEventLimit {
+		tm.jobEvents = tm.jobEvents[len(tm.jobEvents)-tm.jobEventLimit:]
+	}
+
+	tm.jobEventsMu.Unlock()
+
+	tm.persistJobEvent(tm.ctx, event)
+}
+
+func (tm *TaskManager) persistJobEvent(ctx context.Context, event AdminJobEvent) {
+	if tm == nil {
+		return
+	}
+
+	recorder, ok := tm.durableBackend.(adminJobEventRecorder)
+	if !ok || recorder == nil {
+		return
+	}
+
+	if ctx == nil {
+		return
+	}
+
+	ctx = context.WithoutCancel(ctx)
+
+	persistCtx, cancel := context.WithTimeout(ctx, adminJobEventPersistTimeout)
+	defer cancel()
+
+	err := recorder.AdminRecordJobEvent(persistCtx, event, tm.jobEventLimit)
+	if err != nil {
+		// Best-effort persistence; ignore to avoid blocking task completion.
+		fmt.Fprintln(os.Stderr, err)
 	}
 }
 
