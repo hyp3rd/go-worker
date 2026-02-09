@@ -15,6 +15,15 @@ The admin UI now talks to the worker admin gateway (HTTP/JSON over mTLS). Config
 - `NEXT_PUBLIC_WORKER_ADMIN_ORIGIN` (optional override for API fetch origin)
 - `WORKER_ADMIN_PASSWORD` (required to sign into the UI)
 
+## Crash-test preset
+
+The Jobs page includes a "Crash-test preset" button that fills the form with a
+local tarball job. Build the tarball with
+`__examples/job_runner_dummy/create-tarball.sh` and place it under
+`WORKER_JOB_TARBALL_DIR` (default `/tmp`). The job fails by default unless you
+set `DUMMY_SHOULD_FAIL=0` in the worker-service environment or provide
+`DUMMY_SHOULD_FAIL=0` directly in the job env list.
+
 ## Getting Started
 
 First, run the development server:

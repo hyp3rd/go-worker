@@ -26,7 +26,17 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
     -ldflags="all=-s -w -X main.Version=${VERSION} -X main.BuildTime=$(date +%FT%T%z)" \
     -trimpath -o /out/worker-service ./cmd/worker-service
 
-FROM gcr.io/distroless/base-debian13:nonroot
+FROM gcr.io/distroless/base-debian13:nonroot AS runtime
+
+COPY --from=builder /out/worker-service /usr/local/bin/worker-service
+
+EXPOSE 50052
+
+ENTRYPOINT ["/usr/local/bin/worker-service"]
+
+FROM alpine:3.20 AS runtime-docker
+
+RUN apk add --no-cache ca-certificates docker-cli docker-cli-buildx git
 
 COPY --from=builder /out/worker-service /usr/local/bin/worker-service
 

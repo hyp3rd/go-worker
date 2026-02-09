@@ -97,6 +97,31 @@ const jobSourceSummary = (job?: AdminJob) => {
   return { title: "Git tag", detail: `${repo} · ${tag}` };
 };
 
+const eventSourceSummary = (event?: JobEvent) => {
+  if (!event) {
+    return { title: "n/a", detail: "n/a" };
+  }
+
+  const meta = event.metadata ?? {};
+  const source = normalizeSource(meta["job.source"]);
+  if (source === "tarball_url") {
+    return {
+      title: "Tarball URL",
+      detail: meta["job.tarball_url"] || "n/a",
+    };
+  }
+  if (source === "tarball_path") {
+    return {
+      title: "Tarball path",
+      detail: meta["job.tarball_path"] || "n/a",
+    };
+  }
+
+  const repo = event.repo || meta["job.repo"] || "n/a";
+  const tag = event.tag ? `tag ${event.tag}` : "tag n/a";
+  return { title: "Git tag", detail: `${repo} · ${tag}` };
+};
+
 const normalizeEventStatus = (status?: string) => {
   if (!status) {
     return "unknown";
@@ -108,11 +133,66 @@ const normalizeEventStatus = (status?: string) => {
 const eventTimestamp = (event?: JobEvent) =>
   event?.finishedAtMs ?? event?.startedAtMs ?? 0;
 
+const optimisticTTL = 10 * 60 * 1000;
+
+const mergeEvents = (primary: JobEvent[], secondary: JobEvent[]) => {
+  const byId = new Map<string, JobEvent>();
+  for (const event of secondary) {
+    byId.set(event.taskId, event);
+  }
+  for (const event of primary) {
+    byId.set(event.taskId, event);
+  }
+
+  const latestByName = new Map<string, JobEvent>();
+  for (const event of primary) {
+    const stamp = eventTimestamp(event);
+    const current = latestByName.get(event.name);
+    if (!current || stamp > eventTimestamp(current)) {
+      latestByName.set(event.name, event);
+    }
+  }
+
+  const now = Date.now();
+  const merged: JobEvent[] = [];
+  for (const event of byId.values()) {
+    const isOptimistic = event.taskId.startsWith("pending-");
+    if (isOptimistic && now-eventTimestamp(event) > optimisticTTL) {
+      continue;
+    }
+    const latest = latestByName.get(event.name);
+    if (isOptimistic && latest && eventTimestamp(latest) >= eventTimestamp(event)) {
+      continue;
+    }
+    merged.push(event);
+  }
+
+  return merged;
+};
+
 const healthStyles: Record<string, string> = {
   healthy: "bg-emerald-100 text-emerald-700",
   watch: "bg-amber-100 text-amber-700",
   risk: "bg-rose-100 text-rose-700",
   learning: "bg-slate-100 text-slate-600",
+};
+
+const crashTestPreset = {
+  name: "job_runner_dummy",
+  description: "Crash-test dummy loaded from a local tarball.",
+  repo: "",
+  tag: "",
+  source: "tarball_path",
+  tarballUrl: "",
+  tarballPath: "job_runner_dummy.tar.gz",
+  tarballSha256: "",
+  path: "",
+  dockerfile: "Dockerfile",
+  command: "",
+  env: "DUMMY_SHOULD_FAIL",
+  queue: "default",
+  retries: "0",
+  timeoutSeconds: "",
 };
 
 export function JobsGrid({
@@ -130,7 +210,7 @@ export function JobsGrid({
     text: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
-  const [outputEvent, setOutputEvent] = useState<JobEvent | null>(null);
+  const [optimisticEvents, setOptimisticEvents] = useState<JobEvent[]>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editingName, setEditingName] = useState<string | null>(null);
@@ -153,8 +233,9 @@ export function JobsGrid({
   });
 
   const lastEvents = useMemo(() => {
+    const allEvents = mergeEvents(events, optimisticEvents);
     const map = new Map<string, JobEvent>();
-    for (const event of events) {
+    for (const event of allEvents) {
       const name = event.name?.trim();
       if (!name) {
         continue;
@@ -166,13 +247,20 @@ export function JobsGrid({
       }
     }
     return map;
-  }, [events]);
+  }, [events, optimisticEvents]);
 
   const source = normalizeSource(form.source);
 
+  const loadCrashTest = () => {
+    setEditingName(null);
+    setCreateOpen(true);
+    setForm(crashTestPreset);
+  };
+
   const eventBuckets = useMemo(() => {
+    const allEvents = mergeEvents(events, optimisticEvents);
     const map = new Map<string, JobEvent[]>();
-    for (const event of events) {
+    for (const event of allEvents) {
       const name = event.name?.trim();
       if (!name) {
         continue;
@@ -185,7 +273,7 @@ export function JobsGrid({
       list.sort((a, b) => eventTimestamp(b) - eventTimestamp(a));
     }
     return map;
-  }, [events]);
+  }, [events, optimisticEvents]);
 
   const healthFor = (jobName: string) => {
     const list = eventBuckets.get(jobName) ?? [];
@@ -284,17 +372,6 @@ export function JobsGrid({
     });
   }, [jobs, lastEvents, query, statusFilter]);
 
-  const outputJob = outputEvent
-    ? jobs.find((job) => job.name === outputEvent.name)
-    : undefined;
-  const outputSource = outputJob
-    ? jobSourceSummary(outputJob)
-    : {
-        title: "Git tag",
-        detail: outputEvent
-          ? `${outputEvent.repo || "n/a"}@${outputEvent.tag || "n/a"}`
-          : "n/a",
-      };
 
   const resetForm = (job?: AdminJob) => {
     setEditingName(job?.name ?? null);
@@ -487,6 +564,26 @@ export function JobsGrid({
 
     setMessage(null);
     try {
+      const optimistic: JobEvent = {
+        taskId: `pending-${job.name}-${Date.now()}`,
+        name: job.name,
+        status: "running",
+        queue: job.queue || "default",
+        repo: job.repo ?? "",
+        tag: job.tag ?? "",
+        path: job.path,
+        dockerfile: job.dockerfile,
+        command: formatList(job.command),
+        startedAtMs: Date.now(),
+        metadata: {
+          "job.source": job.source ?? "",
+          "job.tarball_url": job.tarballUrl ?? "",
+          "job.tarball_path": job.tarballPath ?? "",
+          "job.tarball_sha256": job.tarballSha256 ?? "",
+          "job.optimistic": "true",
+        },
+      };
+
       const res = await fetch(
         `/api/jobs/${encodeURIComponent(job.name)}/run`,
         { method: "POST" }
@@ -495,6 +592,8 @@ export function JobsGrid({
         const payload = (await res.json()) as { error?: string };
         throw new Error(payload?.error ?? "Job run failed");
       }
+      setOptimisticEvents((prev) => mergeEvents(prev, [optimistic]));
+      window.dispatchEvent(new CustomEvent("job-run-start", { detail: optimistic }));
       setMessage({ tone: "success", text: "Job enqueued." });
     } catch (error) {
       setMessage({
@@ -504,16 +603,6 @@ export function JobsGrid({
     }
   };
 
-  const openOutput = (event: JobEvent | null) => {
-    if (!event) {
-      return;
-    }
-    setOutputEvent(event);
-  };
-
-  const closeOutput = () => {
-    setOutputEvent(null);
-  };
 
   return (
     <div className="mt-6 space-y-4">
@@ -568,17 +657,33 @@ export function JobsGrid({
         onQuery={setQuery}
         onStatus={setStatusFilter}
         rightSlot={
-          <button
-            onClick={toggleCreate}
-            className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white"
-          >
-            {createOpen ? "Close" : "New job"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={loadCrashTest}
+              className="rounded-full border border-soft bg-white px-4 py-2 text-xs font-semibold text-slate-700"
+            >
+              Crash-test preset
+            </button>
+            <button
+              onClick={toggleCreate}
+              className="rounded-full border border-soft bg-black px-4 py-2 text-xs font-semibold text-white"
+            >
+              {createOpen ? "Close" : "New job"}
+            </button>
+          </div>
         }
       />
 
       {createOpen ? (
         <div className="rounded-2xl border border-soft bg-[var(--card)] p-4">
+          {form.name === crashTestPreset.name ? (
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              Crash-test preset loaded. Ensure the tarball exists under
+              WORKER_JOB_TARBALL_DIR (default: /tmp). Build it with
+              __examples/job_runner_dummy/create-tarball.sh so Dockerfile is at
+              the tarball root.
+            </div>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="text-xs uppercase tracking-[0.2em] text-muted">
@@ -838,7 +943,7 @@ export function JobsGrid({
                   setForm((prev) => ({ ...prev, env: event.target.value }))
                 }
                 className="mt-2 h-24 w-full rounded-2xl border border-soft bg-white px-4 py-2 text-sm"
-                placeholder="WORKER_ADMIN_API_URL"
+                placeholder="WORKER_ADMIN_API_URL or KEY=VALUE"
               />
             </div>
           </div>
@@ -979,7 +1084,7 @@ export function JobsGrid({
                 <div className="flex flex-wrap justify-end gap-2">
                   {lastEvent ? (
                     <Link
-                      href={`/jobs?job=${encodeURIComponent(job.name)}#job-events`}
+                      href={`/jobs/runs/${encodeURIComponent(lastEvent.taskId)}`}
                       className="rounded-full border border-soft px-3 py-1 text-xs font-semibold text-muted"
                     >
                       View run
@@ -987,18 +1092,6 @@ export function JobsGrid({
                   ) : (
                     <span className="rounded-full border border-soft px-3 py-1 text-xs font-semibold text-slate-400">
                       View run
-                    </span>
-                  )}
-                  {lastEvent ? (
-                    <button
-                      onClick={() => openOutput(lastEvent)}
-                      className="rounded-full border border-soft px-3 py-1 text-xs font-semibold text-muted"
-                    >
-                      View output
-                    </button>
-                  ) : (
-                    <span className="rounded-full border border-soft px-3 py-1 text-xs font-semibold text-slate-400">
-                      View output
                     </span>
                   )}
                   <button
@@ -1026,86 +1119,6 @@ export function JobsGrid({
           })
         )}
       </Table>
-      {outputEvent ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-soft bg-white p-6 shadow-soft">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-muted">
-                  job output
-                </p>
-                <p className="mt-1 font-display text-xl font-semibold text-slate-900">
-                  {outputEvent.name}
-                </p>
-                <p className="text-sm text-slate-600">
-                  {outputSource.title}: {outputSource.detail} ·{" "}
-                  {outputEvent.queue || "default"}
-                </p>
-              </div>
-              <button
-                onClick={closeOutput}
-                className="rounded-full border border-soft px-4 py-2 text-xs font-semibold text-muted"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-soft bg-[var(--card)] p-3 text-xs text-slate-600">
-                <p className="uppercase tracking-[0.2em] text-muted">status</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {statusLabels[normalizeEventStatus(outputEvent.status)] ?? "n/a"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-soft bg-[var(--card)] p-3 text-xs text-slate-600">
-                <p className="uppercase tracking-[0.2em] text-muted">duration</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {outputEvent.durationMs ? `${outputEvent.durationMs}ms` : "n/a"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-soft bg-[var(--card)] p-3 text-xs text-slate-600">
-                <p className="uppercase tracking-[0.2em] text-muted">command</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  {outputEvent.command || "n/a"}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-soft bg-[var(--card)] p-4 text-sm text-slate-700">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted">
-                output
-              </p>
-              <p className="mt-2 whitespace-pre-wrap break-words">
-                {outputEvent.error || outputEvent.result || "No output captured."}
-              </p>
-              <p className="mt-3 text-xs text-muted">
-                Output may be truncated by the worker service configuration.
-              </p>
-            </div>
-
-            {outputEvent.metadata &&
-            Object.keys(outputEvent.metadata).length > 0 ? (
-              <div className="mt-4 grid gap-2 md:grid-cols-2">
-                {Object.entries(outputEvent.metadata)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([key, value]) => (
-                    <div
-                      key={key}
-                      className="rounded-xl border border-soft bg-white/90 px-3 py-2 text-xs text-slate-600"
-                    >
-                      <span className="uppercase tracking-[0.16em] text-muted">
-                        {key}
-                      </span>
-                      <p className="mt-1 break-words text-sm text-slate-800">
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

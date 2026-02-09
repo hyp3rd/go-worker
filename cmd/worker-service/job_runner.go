@@ -146,10 +146,22 @@ func (r *jobRunner) Run(ctx context.Context, job worker.AdminJob) (string, error
 	}
 
 	contextDir := jobContextDir(repoDir, job)
-	dockerfilePath := jobDockerfilePath(contextDir, job)
+	dockerfileName := jobDockerfileName(job)
+
+	contextDir, dockerfileName, err = resolveDockerfileContext(repoDir, contextDir, dockerfileName)
+	if err != nil {
+		return "", err
+	}
+
+	dockerfilePath := filepath.Join(contextDir, dockerfileName)
 	imageTag := dockerImageTag(job.Name, job.Tag)
 
-	buildOutput, err := r.buildImage(ctx, dockerfilePath, imageTag, contextDir)
+	err = validateBuildContext(contextDir, dockerfilePath)
+	if err != nil {
+		return "", err
+	}
+
+	buildOutput, err := r.buildImage(ctx, dockerfileName, imageTag, contextDir)
 	if err != nil {
 		return buildOutput, ewrap.Wrap(err, "docker build")
 	}
@@ -249,6 +261,11 @@ func (r *jobRunner) jobWorkspace() (string, func(), error) {
 	workDir := r.workDir
 	if workDir == "" {
 		workDir = os.TempDir()
+	}
+
+	err := os.MkdirAll(workDir, 0o750)
+	if err != nil {
+		return "", nil, ewrap.Wrap(err, "create job workdir")
 	}
 
 	repoDir, err := os.MkdirTemp(workDir, "worker-job-*")
@@ -717,23 +734,97 @@ func jobContextDir(repoDir string, job worker.AdminJob) string {
 	return filepath.Join(repoDir, job.Path)
 }
 
-func jobDockerfilePath(contextDir string, job worker.AdminJob) string {
+func jobDockerfileName(job worker.AdminJob) string {
 	dockerfile := job.Dockerfile
 	if dockerfile == "" {
 		dockerfile = "Dockerfile"
 	}
 
-	return filepath.Join(contextDir, dockerfile)
+	return dockerfile
+}
+
+func validateBuildContext(contextDir, dockerfilePath string) error {
+	info, err := os.Stat(contextDir)
+	if err != nil {
+		return ewrap.Wrap(err, "stat build context")
+	}
+
+	if !info.IsDir() {
+		return ewrap.New("build context is not a directory")
+	}
+
+	info, err = os.Stat(dockerfilePath)
+	if err != nil {
+		return ewrap.Wrap(err, "stat dockerfile")
+	}
+
+	if info.IsDir() {
+		return ewrap.New("dockerfile path is a directory")
+	}
+
+	return nil
+}
+
+func resolveDockerfileContext(
+	repoDir string,
+	contextDir string,
+	dockerfileName string,
+) (foundDir, dockerfile string, err error) {
+	dockerfilePath := filepath.Join(contextDir, dockerfileName)
+
+	_, err = os.Stat(dockerfilePath)
+	if err == nil {
+		return contextDir, dockerfileName, nil
+	}
+
+	if !os.IsNotExist(err) {
+		return "", "", ewrap.Wrap(err, "stat dockerfile")
+	}
+
+	if contextDir != repoDir {
+		return "", "", ewrap.Wrap(err, "stat dockerfile")
+	}
+
+	foundDir = ""
+
+	entries, readErr := os.ReadDir(repoDir)
+	if readErr != nil {
+		return "", "", ewrap.Wrap(readErr, "scan dockerfile")
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		candidate := filepath.Join(repoDir, entry.Name(), dockerfileName)
+
+		_, statErr := os.Stat(candidate)
+		if statErr == nil {
+			if foundDir != "" {
+				return "", "", ewrap.New("multiple dockerfiles found; set job path")
+			}
+
+			foundDir = filepath.Join(repoDir, entry.Name())
+		}
+	}
+
+	if foundDir == "" {
+		return "", "", ewrap.New("dockerfile not found; rebuild tarball or set job path")
+	}
+
+	return foundDir, dockerfileName, nil
 }
 
 func (r *jobRunner) buildImage(
 	ctx context.Context,
-	dockerfilePath string,
+	dockerfileName string,
 	imageTag string,
 	contextDir string,
 ) (string, error) {
 	// #nosec G204 -- docker binary/path is configured, inputs are normalized
-	cmd := exec.CommandContext(ctx, r.dockerBin, "build", "-f", dockerfilePath, "-t", imageTag, contextDir)
+	cmd := exec.CommandContext(ctx, r.dockerBin, "build", "-f", dockerfileName, "-t", imageTag, ".")
+	cmd.Dir = contextDir
 
 	return runCommand(cmd, r.outputBytes)
 }
@@ -745,6 +836,17 @@ func (r *jobRunner) runImage(ctx context.Context, job worker.AdminJob, imageTag 
 	}
 
 	for _, envKey := range job.Env {
+		envKey = strings.TrimSpace(envKey)
+		if envKey == "" {
+			continue
+		}
+
+		if strings.Contains(envKey, "=") {
+			runArgs = append(runArgs, "--env", envKey)
+
+			continue
+		}
+
 		value := os.Getenv(envKey)
 		if value == "" {
 			continue
