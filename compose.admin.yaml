@@ -84,8 +84,10 @@ services:
       WORKER_ADMIN_MTLS_KEY: /certs/client.key
       WORKER_ADMIN_MTLS_CA: /certs/ca.crt
       WORKER_ADMIN_PASSWORD: change-me
+      WORKER_ADMIN_JOB_TARBALL_DIR: /workspace
     volumes:
       - ./certs:/certs:ro
+      - ./:/workspace:ro
     ports:
       - "3000:3000"
     depends_on:

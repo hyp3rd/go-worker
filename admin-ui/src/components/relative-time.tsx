@@ -21,11 +21,15 @@ export function RelativeTime({
   overdueLabel = "overdue",
   refreshMs = 15000,
 }: RelativeTimeProps) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
+    const bootstrapId = window.setTimeout(() => setNow(Date.now()), 0);
     const id = window.setInterval(() => setNow(Date.now()), refreshMs);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearTimeout(bootstrapId);
+      window.clearInterval(id);
+    };
   }, [refreshMs]);
 
   if (!valueMs || valueMs <= 0) {

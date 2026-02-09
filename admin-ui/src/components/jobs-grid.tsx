@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import type { AdminJob, JobEvent } from "@/lib/types";
+import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
-import { Table, TableCell, TableRow } from "@/components/table";
 import { RelativeTime } from "@/components/relative-time";
-import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
+import { Table, TableCell, TableRow } from "@/components/table";
+import type { AdminJob, JobEvent } from "@/lib/types";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 
 const parseList = (value: string) =>
   value
@@ -99,31 +99,6 @@ const jobSourceSummary = (job?: AdminJob) => {
   return { title: "Git tag", detail: `${repo} · ${tag}` };
 };
 
-const eventSourceSummary = (event?: JobEvent) => {
-  if (!event) {
-    return { title: "n/a", detail: "n/a" };
-  }
-
-  const meta = event.metadata ?? {};
-  const source = normalizeSource(meta["job.source"]);
-  if (source === "tarball_url") {
-    return {
-      title: "Tarball URL",
-      detail: meta["job.tarball_url"] || "n/a",
-    };
-  }
-  if (source === "tarball_path") {
-    return {
-      title: "Tarball path",
-      detail: meta["job.tarball_path"] || "n/a",
-    };
-  }
-
-  const repo = event.repo || meta["job.repo"] || "n/a";
-  const tag = event.tag ? `tag ${event.tag}` : "tag n/a";
-  return { title: "Git tag", detail: `${repo} · ${tag}` };
-};
-
 const normalizeEventStatus = (status?: string) => {
   if (!status) {
     return "unknown";
@@ -191,7 +166,7 @@ const mergeEvents = (primary: JobEvent[], secondary: JobEvent[]) => {
   const merged: JobEvent[] = [];
   for (const event of byId.values()) {
     const isOptimistic = event.taskId.startsWith("pending-");
-    if (isOptimistic && now-eventTimestamp(event) > optimisticTTL) {
+    if (isOptimistic && now - eventTimestamp(event) > optimisticTTL) {
       continue;
     }
     const latest = latestByName.get(event.name);
@@ -228,6 +203,80 @@ const crashTestPreset = {
   retries: "0",
   timeoutSeconds: "",
 };
+
+type IconProps = { className?: string };
+
+const iconBaseClass = "h-3.5 w-3.5";
+
+const EyeIcon = ({ className = iconBaseClass }: IconProps) => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.9"
+    className={className}
+  >
+    <path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const PencilIcon = ({ className = iconBaseClass }: IconProps) => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.9"
+    className={className}
+  >
+    <path d="m4 20 4.4-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z" />
+    <path d="m13.5 6.5 4 4" />
+  </svg>
+);
+
+const PlayIcon = ({ className = iconBaseClass }: IconProps) => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+  >
+    <path d="M8 5.7c0-1 1-1.6 1.9-1.1l9.4 6.3c.8.6.8 1.7 0 2.3l-9.4 6.3c-.9.6-1.9 0-1.9-1.1V5.7Z" />
+  </svg>
+);
+
+const TrashIcon = ({ className = iconBaseClass }: IconProps) => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.9"
+    className={className}
+  >
+    <path d="M3 6h18" />
+    <path d="M8 6V4h8v2" />
+    <path d="M6 6l1 14h10l1-14" />
+    <path d="M10 10v7M14 10v7" />
+  </svg>
+);
+
+const DownloadIcon = ({ className = iconBaseClass }: IconProps) => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.9"
+    className={className}
+  >
+    <path d="M12 3v12" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M4 21h16" />
+  </svg>
+);
 
 export function JobsGrid({
   jobs,
@@ -725,11 +774,10 @@ export function JobsGrid({
     <div className="mt-6 space-y-4">
       {message ? (
         <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            message.tone === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-rose-200 bg-rose-50 text-rose-800"
-          }`}
+          className={`rounded-2xl border px-4 py-3 text-sm ${message.tone === "success"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : "border-rose-200 bg-rose-50 text-rose-800"
+            }`}
         >
           {message.text}
         </div>
@@ -1096,7 +1144,6 @@ export function JobsGrid({
           { key: "timeout", label: "Timeout" },
           { key: "status", label: "Status" },
           { key: "updated", label: "Updated" },
-          { key: "actions", label: "" },
         ]}
       >
         {filtered.length === 0 ? (
@@ -1104,7 +1151,6 @@ export function JobsGrid({
             <TableCell align="left">
               <p className="text-sm text-muted">No jobs yet.</p>
             </TableCell>
-            <TableCell align="left">{"\u00a0"}</TableCell>
             <TableCell align="left">{"\u00a0"}</TableCell>
             <TableCell align="left">{"\u00a0"}</TableCell>
             <TableCell align="left">{"\u00a0"}</TableCell>
@@ -1121,6 +1167,8 @@ export function JobsGrid({
             const preview = lastEvent?.error ?? lastEvent?.result ?? "";
             const previewLabel = lastEvent?.error ? "last error" : "last output";
             const sourceSummary = jobSourceSummary(job);
+            const sourceKey = normalizeSource(job.source);
+            const tarballPathDownloadHref = `/api/jobs/${encodeURIComponent(job.name)}/artifact`;
             const bucket = eventBuckets.get(job.name) ?? [];
             const counts = statusCounts(bucket);
             const activityParts = [
@@ -1130,120 +1178,154 @@ export function JobsGrid({
             ].filter(Boolean);
 
             return (
-            <TableRow key={job.name}>
-              <TableCell align="left">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-900">{job.name}</p>
-                    <span
-                      className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
-                        healthStyles[health.key] ?? healthStyles.learning
-                      }`}
-                    >
-                      {health.label}
+              <Fragment key={job.name}>
+                <TableRow>
+                  <TableCell align="left">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-slate-900">{job.name}</p>
+                        <span
+                          className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${healthStyles[health.key] ?? healthStyles.learning
+                            }`}
+                        >
+                          {health.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted">
+                        {job.description || "No description"}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell align="left">
+                    <div className="text-xs text-muted">
+                      <p className="text-sm text-slate-700">{sourceSummary.title}</p>
+                      {sourceKey === "tarball_url" && job.tarballUrl ? (
+                        <a
+                          href={job.tarballUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-blue-700 hover:text-blue-800 hover:underline"
+                        >
+                          <DownloadIcon />
+                          <span className="truncate">{sourceSummary.detail}</span>
+                        </a>
+                      ) : null}
+                      {sourceKey === "tarball_path" && job.tarballPath ? (
+                        <a
+                          href={tarballPathDownloadHref}
+                          className="mt-1 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-blue-700 hover:text-blue-800 hover:underline"
+                        >
+                          <DownloadIcon />
+                          <span className="truncate">{sourceSummary.detail}</span>
+                        </a>
+                      ) : null}
+                      {sourceKey === "git_tag" ? (
+                        <p className="mt-1 truncate">{sourceSummary.detail}</p>
+                      ) : null}
+                      {isTarballSource(sourceKey) ? (
+                        <p className="mt-1 truncate font-mono text-[10px] text-muted">
+                          sha256 {job.tarballSha256 || "n/a"}
+                        </p>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell align="left">
+                    <span className="text-sm text-slate-700">
+                      {job.queue || "default"}
                     </span>
-                  </div>
-                  <p className="text-xs text-muted">
-                    {job.description || "No description"}
-                  </p>
-                </div>
-              </TableCell>
-              <TableCell align="left">
-                <div className="text-xs text-muted">
-                  <p className="text-sm text-slate-700">{sourceSummary.title}</p>
-                  <p className="mt-1 truncate">{sourceSummary.detail}</p>
-                </div>
-              </TableCell>
-              <TableCell align="left">
-                <span className="text-sm text-slate-700">
-                  {job.queue || "default"}
-                </span>
-              </TableCell>
-              <TableCell align="left">
-                <span className="text-sm text-slate-700">
-                  {job.retries ?? 0}
-                </span>
-              </TableCell>
-              <TableCell align="left">
-                <span className="text-sm text-slate-700">
-                  {job.timeoutSeconds ? `${job.timeoutSeconds}s` : "n/a"}
-                </span>
-              </TableCell>
-              <TableCell align="left">
-                <div className="relative group">
-                  <div className="flex flex-col gap-1">
-                    <span
-                      className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
-                        statusStyles[statusKey] ?? statusStyles.unknown
-                      }`}
-                    >
-                      {statusLabels[statusKey] ?? statusKey}
+                  </TableCell>
+                  <TableCell align="left">
+                    <span className="text-sm text-slate-700">
+                      {job.retries ?? 0}
                     </span>
-                    <span className="text-[11px] text-muted">
-                      {activityParts.length > 0
-                        ? activityParts.join(" · ")
-                        : "no active runs"}
+                  </TableCell>
+                  <TableCell align="left">
+                    <span className="text-sm text-slate-700">
+                      {job.timeoutSeconds ? `${job.timeoutSeconds}s` : "n/a"}
                     </span>
-                    {displayTime ? (
-                      <RelativeTime valueMs={displayTime} mode="past" />
+                  </TableCell>
+                  <TableCell align="left">
+                    <div className="relative group">
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={`w-fit rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${statusStyles[statusKey] ?? statusStyles.unknown
+                            }`}
+                        >
+                          {statusLabels[statusKey] ?? statusKey}
+                        </span>
+                        <span className="text-[11px] text-muted">
+                          {activityParts.length > 0
+                            ? activityParts.join(" · ")
+                            : "no active runs"}
+                        </span>
+                        {displayTime ? (
+                          <RelativeTime valueMs={displayTime} mode="past" />
+                        ) : (
+                          <span className="text-xs text-muted">n/a</span>
+                        )}
+                      </div>
+                      {preview ? (
+                        <div className="pointer-events-none absolute left-0 top-full z-10 mt-2 w-64 rounded-xl border border-soft bg-white/95 p-3 text-xs text-slate-700 opacity-0 shadow-soft transition group-hover:opacity-100">
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-muted">
+                            {previewLabel}
+                          </p>
+                          <p className="mt-1 max-h-20 overflow-hidden break-words">
+                            {preview}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell align="left">
+                    {job.updatedAtMs ? (
+                      <RelativeTime valueMs={job.updatedAtMs} mode="past" />
                     ) : (
                       <span className="text-xs text-muted">n/a</span>
                     )}
-                  </div>
-                  {preview ? (
-                    <div className="pointer-events-none absolute left-0 top-full z-10 mt-2 w-64 rounded-xl border border-soft bg-white/95 p-3 text-xs text-slate-700 opacity-0 shadow-soft transition group-hover:opacity-100">
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted">
-                        {previewLabel}
-                      </p>
-                      <p className="mt-1 max-h-20 overflow-hidden break-words">
-                        {preview}
-                      </p>
+                  </TableCell>
+                </TableRow>
+                <tr className="border-t border-soft bg-[var(--card)]/30">
+                  <td colSpan={7} className="px-4 pb-4 pt-2">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {lastEvent ? (
+                        <Link
+                          href={`/jobs/runs/${encodeURIComponent(lastEvent.taskId)}`}
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-soft px-3 py-1 text-xs font-semibold text-muted"
+                        >
+                          <EyeIcon />
+                          View run
+                        </Link>
+                      ) : (
+                        <span className="inline-flex cursor-not-allowed items-center gap-1 rounded-full border border-soft px-3 py-1 text-xs font-semibold text-slate-400">
+                          <EyeIcon />
+                          View run
+                        </span>
+                      )}
+                      <button
+                        onClick={() => startEdit(job)}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-soft px-3 py-1 text-xs font-semibold text-muted"
+                      >
+                        <PencilIcon />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => runJob(job)}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-soft bg-black px-3 py-1 text-xs font-semibold text-white"
+                      >
+                        <PlayIcon />
+                        Run now
+                      </button>
+                      <button
+                        onClick={() => deleteJob(job)}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600"
+                      >
+                        <TrashIcon />
+                        Delete
+                      </button>
                     </div>
-                  ) : null}
-                </div>
-              </TableCell>
-              <TableCell align="left">
-                {job.updatedAtMs ? (
-                  <RelativeTime valueMs={job.updatedAtMs} mode="past" />
-                ) : (
-                  <span className="text-xs text-muted">n/a</span>
-                )}
-              </TableCell>
-              <TableCell align="right">
-                <div className="flex flex-wrap justify-end gap-2">
-                  {lastEvent ? (
-                    <Link
-                      href={`/jobs/runs/${encodeURIComponent(lastEvent.taskId)}`}
-                      className="rounded-full border border-soft px-3 py-1 text-xs font-semibold text-muted"
-                    >
-                      View run
-                    </Link>
-                  ) : (
-                    <span className="rounded-full border border-soft px-3 py-1 text-xs font-semibold text-slate-400">
-                      View run
-                    </span>
-                  )}
-                  <button
-                    onClick={() => startEdit(job)}
-                    className="rounded-full border border-soft px-3 py-1 text-xs font-semibold text-muted"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => runJob(job)}
-                    className="rounded-full border border-soft bg-black px-3 py-1 text-xs font-semibold text-white"
-                  >
-                    Run now
-                  </button>
-                  <button
-                    onClick={() => deleteJob(job)}
-                    className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </TableCell>
-            </TableRow>
+                  </td>
+                </tr>
+              </Fragment>
             );
           })
         )}

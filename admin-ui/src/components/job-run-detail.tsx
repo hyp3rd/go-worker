@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RelativeTime } from "@/components/relative-time";
 import type { JobEvent } from "@/lib/types";
@@ -91,14 +91,11 @@ export function JobRunDetail({
   const finishedAt = event?.finishedAtMs ?? 0;
   const durationMs = event?.durationMs ?? 0;
 
-  const metadata = useMemo(() => {
-    if (!event?.metadata) {
-      return [];
-    }
-    return Object.entries(event.metadata).sort(([a], [b]) =>
-      a.localeCompare(b)
-    );
-  }, [event?.metadata]);
+  const metadata = event?.metadata
+    ? Object.entries(event.metadata).sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    : [];
 
   return (
     <section className="rounded-3xl border border-soft bg-white/90 p-6 shadow-soft">

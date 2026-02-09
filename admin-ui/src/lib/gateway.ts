@@ -144,7 +144,7 @@ const executeGatewayRequest = async <T>({
 
         try {
           resolve(JSON.parse(raw) as T);
-        } catch (err) {
+        } catch {
           const message = `invalid json${requestId ? ` [${requestId}]` : ""}`;
           reject(new Error(message));
         }
