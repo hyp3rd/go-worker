@@ -107,6 +107,10 @@ export function DlqTable({
     updateParams({ page: String(Math.max(1, page - 1)) });
   };
 
+  const handlePageSize = (value: number) => {
+    updateParams({ limit: String(value), page: "1" });
+  };
+
   const toggleSelect = (id: string) => {
     setSelected((current) => {
       const next = new Set(current);
@@ -539,6 +543,8 @@ export function DlqTable({
         pageSize={pageSize}
         onNext={handleNext}
         onPrev={handlePrev}
+        onPageSizeChange={handlePageSize}
+        pageSizeOptions={[5, 10, 25, 50]}
       />
     </div>
   );

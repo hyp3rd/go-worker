@@ -1015,6 +1015,7 @@ func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Dur
 	}
 
 	tm.hookStart(task)
+	tm.recordJobStart(task)
 
 	tm.metrics.running.Add(1)
 	defer tm.metrics.running.Add(1 * -1)

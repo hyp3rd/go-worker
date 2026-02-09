@@ -490,6 +490,7 @@ func (tm *TaskManager) runDurableTask(ctx context.Context, task *Task, timeout t
 	}
 
 	tm.hookStart(task)
+	tm.recordJobStart(task)
 
 	tm.metrics.running.Add(1)
 	defer tm.metrics.running.Add(1 * -1)

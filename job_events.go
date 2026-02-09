@@ -72,6 +72,59 @@ func (tm *TaskManager) recordJobCompletion(task *Task, status TaskStatus, result
 	}
 }
 
+func (tm *TaskManager) recordJobStart(task *Task) {
+	if tm == nil || task == nil {
+		return
+	}
+
+	meta := jobMetadataFromTask(task)
+
+	handler := jobHandlerFromTask(task)
+	if handler != JobHandlerName && meta[jobMetaNameKey] == "" {
+		return
+	}
+
+	event := AdminJobEvent{
+		TaskID:       task.ID.String(),
+		Name:         strings.TrimSpace(meta[jobMetaNameKey]),
+		Status:       jobStatusLabel(Running),
+		Queue:        jobQueue(task, meta, tm.defaultQueue),
+		Repo:         strings.TrimSpace(meta[jobMetaRepoKey]),
+		Tag:          strings.TrimSpace(meta[jobMetaTagKey]),
+		Path:         strings.TrimSpace(meta[jobMetaPathKey]),
+		Dockerfile:   strings.TrimSpace(meta[jobMetaDockerfileKey]),
+		Command:      strings.TrimSpace(meta[jobMetaCommandKey]),
+		ScheduleName: strings.TrimSpace(meta[cronMetaNameKey]),
+		ScheduleSpec: strings.TrimSpace(meta[cronMetaSpecKey]),
+		StartedAt:    task.StartedAt(),
+		Metadata:     sanitizeJobMetadata(meta),
+	}
+
+	if event.Name == "" {
+		if handler != "" {
+			event.Name = handler
+		} else {
+			event.Name = task.Name
+		}
+	}
+
+	if event.StartedAt.IsZero() {
+		event.StartedAt = time.Now()
+	}
+
+	tm.jobEventsMu.Lock()
+	defer tm.jobEventsMu.Unlock()
+
+	tm.jobEvents = append(tm.jobEvents, event)
+	if tm.jobEventLimit <= 0 {
+		return
+	}
+
+	if len(tm.jobEvents) > tm.jobEventLimit {
+		tm.jobEvents = tm.jobEvents[len(tm.jobEvents)-tm.jobEventLimit:]
+	}
+}
+
 func jobStatusLabel(status TaskStatus) string {
 	switch status {
 	case RateLimited:

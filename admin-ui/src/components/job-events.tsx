@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RelativeTime } from "@/components/relative-time";
+import { Pagination } from "@/components/pagination";
 import { formatDuration } from "@/lib/format";
 import type { JobEvent } from "@/lib/types";
 
 const refreshIntervalMs = 15000;
+const eventPageSizes = [5, 10, 25, 50];
 
 const statusStyles: Record<string, string> = {
   completed: "bg-emerald-100 text-emerald-700",
@@ -42,6 +44,20 @@ const sourceSummary = (event: JobEvent) => {
 
   return "n/a";
 };
+
+const sourceKey = (event: JobEvent) => {
+  const meta = event.metadata ?? {};
+  const raw = (meta["job.source"] ?? "").toLowerCase();
+  if (raw === "git_tag" || raw === "tarball_url" || raw === "tarball_path") {
+    return raw;
+  }
+  if (event.repo || event.tag) {
+    return "git_tag";
+  }
+  return "unknown";
+};
+
+const queueKey = (event: JobEvent) => event.queue || "default";
 
 const eventTimestamp = (event: JobEvent) =>
   event.finishedAtMs ?? event.startedAtMs ?? 0;
@@ -85,6 +101,12 @@ const mergeEventList = (primary: JobEvent[], secondary: JobEvent[]) => {
 
 export function JobEvents({ events }: { events: JobEvent[] }) {
   const [items, setItems] = useState<JobEvent[]>(events);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [queueFilter, setQueueFilter] = useState("all");
+  const [rangeFilter, setRangeFilter] = useState("7d");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(eventPageSizes[0]);
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -179,21 +201,80 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
     };
   }, []);
 
-  const visibleItems = useMemo(() => {
-    if (!filterName) {
-      return items;
+  const queueOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach((event) => {
+      set.add(queueKey(event));
+    });
+    return ["all", ...Array.from(set).sort()];
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    let list = items;
+
+    if (filterName) {
+      list = list.filter((event) => event.name === filterName);
     }
-    return items.filter((event) => event.name === filterName);
-  }, [filterName, items]);
+
+    if (statusFilter !== "all") {
+      list = list.filter((event) => {
+        const status = normalizeStatus(event.status ?? "unknown");
+        if (statusFilter === "success") {
+          return status === "completed";
+        }
+        if (statusFilter === "running") {
+          return status === "running";
+        }
+        if (statusFilter === "failed") {
+          return (
+            status === "failed" ||
+            status === "deadline" ||
+            status === "cancelled" ||
+            status === "invalid"
+          );
+        }
+        return true;
+      });
+    }
+
+    if (sourceFilter !== "all") {
+      list = list.filter((event) => sourceKey(event) === sourceFilter);
+    }
+
+    if (queueFilter !== "all") {
+      list = list.filter((event) => queueKey(event) === queueFilter);
+    }
+
+    const now = Date.now();
+    let windowMs = 0;
+    if (rangeFilter === "24h") {
+      windowMs = 24 * 60 * 60 * 1000;
+    } else if (rangeFilter === "7d") {
+      windowMs = 7 * 24 * 60 * 60 * 1000;
+    } else if (rangeFilter === "30d") {
+      windowMs = 30 * 24 * 60 * 60 * 1000;
+    }
+    if (windowMs > 0) {
+      const cutoff = now - windowMs;
+      list = list.filter((event) => eventTimestamp(event) >= cutoff);
+    }
+
+    return list;
+  }, [filterName, items, queueFilter, rangeFilter, sourceFilter, statusFilter]);
+
+  const visibleItems = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, page, pageSize]);
 
   const summary = useMemo(() => {
     const counts = {
       completed: 0,
       failed: 0,
       running: 0,
-      total: visibleItems.length,
+      total: filteredItems.length,
     };
-    for (const event of visibleItems) {
+    for (const event of filteredItems) {
       const status = normalizeStatus(event.status ?? "unknown");
       if (status === "completed") {
         counts.completed += 1;
@@ -204,7 +285,16 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
       }
     }
     return counts;
-  }, [visibleItems]);
+  }, [filteredItems]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterName, queueFilter, rangeFilter, sourceFilter, statusFilter]);
+
+  const handlePageSize = (value: number) => {
+    setPageSize(value);
+    setPage(1);
+  };
 
   const clearFilter = () => {
     const params = new URLSearchParams(searchParams.toString());
@@ -234,6 +324,63 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
           <span className="text-rose-600">failed {summary.failed}</span>
           <span className="text-slate-600">running {summary.running}</span>
         </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-2xl border border-soft bg-white/80 p-3 text-xs text-muted md:grid-cols-[1.2fr_1fr_1fr_1fr]">
+        <label className="flex flex-col gap-2">
+          <span className="uppercase tracking-[0.2em]">Status</span>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="rounded-2xl border border-soft bg-white px-3 py-2 text-xs text-slate-700"
+          >
+            <option value="all">all</option>
+            <option value="success">success</option>
+            <option value="running">running</option>
+            <option value="failed">failed</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="uppercase tracking-[0.2em]">Job type</span>
+          <select
+            value={sourceFilter}
+            onChange={(event) => setSourceFilter(event.target.value)}
+            className="rounded-2xl border border-soft bg-white px-3 py-2 text-xs text-slate-700"
+          >
+            <option value="all">all</option>
+            <option value="git_tag">git tag</option>
+            <option value="tarball_url">tarball url</option>
+            <option value="tarball_path">tarball path</option>
+            <option value="unknown">unknown</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="uppercase tracking-[0.2em]">Queue</span>
+          <select
+            value={queueFilter}
+            onChange={(event) => setQueueFilter(event.target.value)}
+            className="rounded-2xl border border-soft bg-white px-3 py-2 text-xs text-slate-700"
+          >
+            {queueOptions.map((queue) => (
+              <option key={queue} value={queue}>
+                {queue}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="uppercase tracking-[0.2em]">Date</span>
+          <select
+            value={rangeFilter}
+            onChange={(event) => setRangeFilter(event.target.value)}
+            className="rounded-2xl border border-soft bg-white px-3 py-2 text-xs text-slate-700"
+          >
+            <option value="24h">last 24h</option>
+            <option value="7d">last 7d</option>
+            <option value="30d">last 30d</option>
+            <option value="all">all</option>
+          </select>
+        </label>
       </div>
 
       {filterName ? (
@@ -359,6 +506,15 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
           })
         )}
       </div>
+      <Pagination
+        page={page}
+        total={filteredItems.length}
+        pageSize={pageSize}
+        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setPage((prev) => Math.max(1, prev - 1))}
+        onPageSizeChange={handlePageSize}
+        pageSizeOptions={eventPageSizes}
+      />
     </section>
   );
 }

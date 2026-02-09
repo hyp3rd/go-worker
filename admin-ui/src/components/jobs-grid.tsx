@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { AdminJob, JobEvent } from "@/lib/types";
 import { FilterBar } from "@/components/filters";
+import { Pagination } from "@/components/pagination";
 import { Table, TableCell, TableRow } from "@/components/table";
 import { RelativeTime } from "@/components/relative-time";
 
@@ -211,6 +212,8 @@ export function JobsGrid({
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const [optimisticEvents, setOptimisticEvents] = useState<JobEvent[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editingName, setEditingName] = useState<string | null>(null);
@@ -372,6 +375,11 @@ export function JobsGrid({
     });
   }, [jobs, lastEvents, query, statusFilter]);
 
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
 
   const resetForm = (job?: AdminJob) => {
     setEditingName(job?.name ?? null);
@@ -402,6 +410,21 @@ export function JobsGrid({
     }
     resetForm();
     setCreateOpen(true);
+  };
+
+  const handleQuery = (value: string) => {
+    setQuery(value);
+    setPage(1);
+  };
+
+  const handleStatus = (value: string) => {
+    setStatusFilter(value);
+    setPage(1);
+  };
+
+  const handlePageSize = (value: number) => {
+    setPageSize(value);
+    setPage(1);
   };
 
   const startEdit = (job: AdminJob) => {
@@ -654,8 +677,8 @@ export function JobsGrid({
       <FilterBar
         placeholder="Search job name"
         statusOptions={statusOptions}
-        onQuery={setQuery}
-        onStatus={setStatusFilter}
+        onQuery={handleQuery}
+        onStatus={handleStatus}
         rightSlot={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -996,7 +1019,7 @@ export function JobsGrid({
             <TableCell align="left">{"\u00a0"}</TableCell>
           </TableRow>
         ) : (
-          filtered.map((job) => {
+          paged.map((job) => {
             const lastEvent = lastEvents.get(job.name);
             const statusKey = normalizeEventStatus(lastEvent?.status);
             const displayTime = eventTimestamp(lastEvent);
@@ -1119,6 +1142,15 @@ export function JobsGrid({
           })
         )}
       </Table>
+      <Pagination
+        page={page}
+        total={filtered.length}
+        pageSize={pageSize}
+        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setPage((prev) => Math.max(1, prev - 1))}
+        onPageSizeChange={handlePageSize}
+        pageSizeOptions={[5, 10, 25, 50]}
+      />
     </div>
   );
 }
