@@ -277,7 +277,7 @@ export function OperationsTimeline({
   useEffect(() => {
     let active = true;
     let source: EventSource | null = null;
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let timer: number | null = null;
 
     const refresh = async () => {
       try {
