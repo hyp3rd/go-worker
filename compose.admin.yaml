@@ -35,8 +35,12 @@ services:
       WORKER_ADMIN_TLS_CERT: /certs/server.crt
       WORKER_ADMIN_TLS_KEY: /certs/server.key
       WORKER_ADMIN_TLS_CA: /certs/ca.crt
+      WORKER_ADMIN_JOB_TARBALL_DIR: /workspace
+      WORKER_ADMIN_AUDIT_EVENT_LIMIT: "500"
+      WORKER_ADMIN_AUDIT_EXPORT_LIMIT_MAX: "5000"
     volumes:
       - ./certs:/certs:ro
+      - ./:/workspace:ro
     ports:
       - "8081:8081"
     depends_on:
@@ -62,6 +66,7 @@ services:
       WORKER_JOB_EVENT_DIR: /var/lib/go-worker/job-events
       WORKER_JOB_EVENT_MAX_ENTRIES: "10000"
       WORKER_JOB_EVENT_CACHE_TTL: 5s
+      WORKER_ADMIN_AUDIT_EVENT_LIMIT: "500"
       DOCKER_BUILDKIT: "1"
     ports:
       - "50052:50052"
@@ -84,10 +89,8 @@ services:
       WORKER_ADMIN_MTLS_KEY: /certs/client.key
       WORKER_ADMIN_MTLS_CA: /certs/ca.crt
       WORKER_ADMIN_PASSWORD: change-me
-      WORKER_ADMIN_JOB_TARBALL_DIR: /workspace
     volumes:
       - ./certs:/certs:ro
-      - ./:/workspace:ro
     ports:
       - "3000:3000"
     depends_on:

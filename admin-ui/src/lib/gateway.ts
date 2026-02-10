@@ -9,6 +9,12 @@ type GatewayRequest = {
   body?: unknown;
 };
 
+type GatewayRawRequest = {
+  method?: "GET" | "POST" | "DELETE";
+  path: string;
+  headers?: Record<string, string>;
+};
+
 type GatewayConfig = {
   baseUrl: string;
   certPath: string;
@@ -187,7 +193,10 @@ const parseGatewayError = (
   }
 };
 
-export const gatewayStream = async (path: string) => {
+export const gatewayStream = async (
+  path: string,
+  opts?: { lastEventId?: string }
+) => {
   const config = loadConfig();
   const url = new URL(path, config.baseUrl);
   const isTLS = url.protocol === "https:";
@@ -196,9 +205,72 @@ export const gatewayStream = async (path: string) => {
     Accept: "text/event-stream",
     "X-Request-Id": crypto.randomUUID(),
   };
+  const lastEventID = opts?.lastEventId?.trim();
+  if (lastEventID) {
+    headers["Last-Event-ID"] = lastEventID;
+  }
 
   const requestOptions: https.RequestOptions = {
     method: "GET",
+    headers,
+  };
+
+  if (isTLS) {
+    Object.assign(requestOptions, loadTLS(config));
+  }
+
+  const client = isTLS ? https : http;
+
+  return new Promise<{
+    statusCode: number;
+    headers: http.IncomingHttpHeaders;
+    stream: NodeJS.ReadableStream;
+  }>((resolve, reject) => {
+    const req = client.request(url, requestOptions, (res) => {
+      const statusCode = res.statusCode ?? 0;
+      if (statusCode >= 400) {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          const parsed = parseGatewayError(raw);
+          const message = parsed
+            ? `${parsed.message} (${parsed.code})`
+            : raw || `gateway error ${statusCode}`;
+          reject(new Error(message));
+        });
+        return;
+      }
+
+      resolve({
+        statusCode,
+        headers: res.headers,
+        stream: res,
+      });
+    });
+
+    req.on("error", (err) => reject(err));
+    req.end();
+  });
+};
+
+export const gatewayRawRequest = async ({
+  method = "GET",
+  path,
+  headers: extraHeaders,
+}: GatewayRawRequest) => {
+  const config = loadConfig();
+  const url = new URL(path, config.baseUrl);
+  const isTLS = url.protocol === "https:";
+
+  const headers: Record<string, string> = {
+    Accept: "*/*",
+    "X-Request-Id": crypto.randomUUID(),
+    ...extraHeaders,
+  };
+
+  const requestOptions: https.RequestOptions = {
+    method,
     headers,
   };
 

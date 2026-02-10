@@ -150,12 +150,13 @@ Status updated: **_February 5, 2026_**
 
 ### Admin Service & Admin UI
 
-- **Admin Service (gRPC + HTTP gateway)**: Done (mTLS required, request IDs, timeouts, consistent error envelope, queue detail, DLQ pagination/filters, schedules, health/version).
-- **Admin UI (Next.js + Tailwind)**: Done (overview/queues/DLQ/schedules, queue detail page, server-side DLQ paging/filters, runbook actions, session auth, audit banner, replay‑by‑ID selection).
+- **Admin Service (gRPC + HTTP gateway)**: Implemented with gaps (resumable SSE, central audit log, per-endpoint metrics, gateway artifact API parity).
+- **Admin UI (Next.js + Tailwind)**: Implemented with gaps (cross-resource timeline, trend analytics, richer operator workflows, stronger diagnostics UX).
 - **Docker/Compose**: Done (`Dockerfile` + `compose.admin.yaml` + cert generation script).
 - **Schedule management**: Done (create/delete/pause via gateway + UI).
 - **Admin action counters**: Done (pause/resume/replay counts exposed in overview).
-- **UI polish**: In progress (settings metadata panel added; continued UX refinements ongoing).
+- **UI polish**: In progress (actions, events, run detail, docs; deeper productization still in progress).
+- **Canonical admin status**: See `PRD-admin-service.md` for detailed service/UI gap matrix and priority backlog.
 
 ## Milestones
 
@@ -198,6 +199,6 @@ Status updated: **_February 5, 2026_**
 ### Roadmap (future milestones)
 
 1. **Durable backend**: add additional backends (Postgres) and stronger transactional enqueue semantics.
-1. **Operational tooling**: admin UI and admin service implemented; expand CLI release workflow and deep admin features (filters, export, advanced replay).
+1. **Operational tooling**: admin service/UI are implemented; close remaining productization gaps (resumable events, auditability, analytics, advanced workflows).
 1. **Scheduled jobs**: cron/delayed scheduling layer (cron now implemented; cron UX improvements TBD).
 1. **Multi‑node coordination**: optional distributed workers via backend (global rate limit/leader lock implemented; quorum/leader election improvements TBD).

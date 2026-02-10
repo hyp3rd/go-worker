@@ -2,15 +2,19 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { readAuditEvents, recordAuditEvent, type AuditEvent } from "@/lib/audit";
+import type { AdminAuditEvent } from "@/lib/types";
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 
 type RunbookActionsProps = {
   paused: boolean;
+  initialAuditEvents: AdminAuditEvent[];
 };
 
 const replayDefault = 100;
 const replayMax = 1000;
+const auditExportDefault = 500;
+const auditExportMax = 5000;
+type AuditExportFormat = "jsonl" | "json" | "csv";
 
 const formatError = (error: unknown) => {
   if (error instanceof Error) {
@@ -19,16 +23,47 @@ const formatError = (error: unknown) => {
   return "Action failed";
 };
 
-export function RunbookActions({ paused }: RunbookActionsProps) {
+const maxAuditItems = 20;
+
+const summarizeAction = (action: string) => {
+  const normalized = action.replaceAll("_", " ").replaceAll(".", " ").trim();
+  if (!normalized) {
+    return "action";
+  }
+  return normalized;
+};
+
+export function RunbookActions({ paused, initialAuditEvents }: RunbookActionsProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AdminAuditEvent[]>(initialAuditEvents);
   const [replayLimit, setReplayLimit] = useState(replayDefault);
+  const [exportFormat, setExportFormat] = useState<AuditExportFormat>("jsonl");
+  const [exportLimit, setExportLimit] = useState(auditExportDefault);
+  const [exportAction, setExportAction] = useState("");
+  const [exportTarget, setExportTarget] = useState("");
   const { confirm, dialogProps } = useConfirmDialog();
 
   useEffect(() => {
-    setAuditEvents(readAuditEvents());
+    setAuditEvents(initialAuditEvents);
+  }, [initialAuditEvents]);
+
+  useEffect(() => {
+    const source = new EventSource("/api/events");
+    source.addEventListener("audit_events", (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { events?: AdminAuditEvent[] };
+        if (payload.events) {
+          setAuditEvents(payload.events.slice(0, maxAuditItems));
+        }
+      } catch {
+        // keep previous audit events on parse failure
+      }
+    });
+    return () => {
+      source.close();
+    };
   }, []);
 
   const runAction = async (action: "pause" | "resume" | "replay") => {
@@ -87,13 +122,18 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
       const payload = (await res.json()) as { message?: string };
       const detail = payload.message ?? "Action complete";
       setMessage(detail);
-      const event: AuditEvent = {
+      const optimistic: AdminAuditEvent = {
         action,
-        at: Date.now(),
+        status: "ok",
+        target: "*",
+        actor: "admin-ui",
+        requestId: "pending",
+        payloadHash: "",
+        metadata: {},
+        atMs: Date.now(),
         detail,
       };
-      recordAuditEvent(event);
-      setAuditEvents((current) => [event, ...current].slice(0, 20));
+      setAuditEvents((current) => [optimistic, ...current].slice(0, maxAuditItems));
 
       startTransition(() => {
         router.refresh();
@@ -101,6 +141,32 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
     } catch (error) {
       setMessage(formatError(error));
     }
+  };
+
+  const triggerAuditExport = () => {
+    const query = new URLSearchParams();
+    query.set("format", exportFormat);
+    query.set(
+      "limit",
+      String(Math.max(1, Math.min(auditExportMax, exportLimit || auditExportDefault)))
+    );
+
+    const action = exportAction.trim();
+    if (action) {
+      query.set("action", action);
+    }
+
+    const target = exportTarget.trim();
+    if (target) {
+      query.set("target", target);
+    }
+
+    const link = document.createElement("a");
+    link.href = `/api/audit/export?${query.toString()}`;
+    link.style.display = "none";
+    document.body.append(link);
+    link.click();
+    link.remove();
   };
 
   return (
@@ -147,13 +213,59 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
           </span>
         </div>
       </div>
-      <button
-        disabled
-        className="flex w-full items-center justify-between rounded-2xl border border-soft bg-[var(--card)] px-4 py-3 text-sm font-semibold opacity-40"
-      >
-        Export snapshot
-        <span className="text-xs text-muted">cmd</span>
-      </button>
+      <div className="rounded-2xl border border-soft bg-[var(--card)] px-4 py-3 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold">Export audit</span>
+          <span className="text-xs text-muted">csv/json/jsonl</span>
+        </div>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          <input
+            value={exportAction}
+            onChange={(event) => setExportAction(event.target.value)}
+            className="rounded-xl border border-soft bg-white px-3 py-2 text-xs"
+            placeholder="action filter (optional)"
+          />
+          <input
+            value={exportTarget}
+            onChange={(event) => setExportTarget(event.target.value)}
+            className="rounded-xl border border-soft bg-white px-3 py-2 text-xs"
+            placeholder="target filter (optional)"
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select
+            value={exportFormat}
+            onChange={(event) =>
+              setExportFormat(event.target.value as AuditExportFormat)
+            }
+            className="rounded-xl border border-soft bg-white px-3 py-2 text-xs"
+          >
+            <option value="jsonl">jsonl</option>
+            <option value="json">json</option>
+            <option value="csv">csv</option>
+          </select>
+          <input
+            type="number"
+            min={1}
+            max={auditExportMax}
+            value={exportLimit}
+            onChange={(event) =>
+              setExportLimit(
+                Math.max(1, Math.min(auditExportMax, Number(event.target.value || 1)))
+              )
+            }
+            className="w-24 rounded-xl border border-soft bg-white px-3 py-2 text-xs"
+          />
+          <button
+            type="button"
+            onClick={triggerAuditExport}
+            className="rounded-full border border-soft bg-white px-3 py-1 text-xs font-semibold"
+          >
+            Download
+          </button>
+          <span className="text-[11px] text-muted">max {auditExportMax}</span>
+        </div>
+      </div>
       {message ? <p className="text-xs text-muted">{message}</p> : null}
       <div className="rounded-2xl border border-soft bg-white/60 p-3">
         <p className="text-xs uppercase tracking-[0.2em] text-muted">
@@ -165,13 +277,13 @@ export function RunbookActions({ paused }: RunbookActionsProps) {
           ) : (
             auditEvents.slice(0, 5).map((event) => (
               <div
-                key={`${event.action}-${event.at}`}
+                key={`${event.requestId}-${event.atMs}-${event.action}`}
                 className="rounded-xl border border-soft bg-white/80 p-3 text-xs text-slate-600"
               >
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-muted">
-                  <span>{new Date(event.at).toLocaleTimeString()}</span>
+                  <span>{new Date(event.atMs).toLocaleTimeString()}</span>
                   <span className="rounded-full border border-soft bg-[var(--card)] px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                    {event.action}
+                    {summarizeAction(event.action)}
                   </span>
                 </div>
                 <p className="mt-2 text-sm font-medium text-slate-800">

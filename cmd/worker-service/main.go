@@ -36,6 +36,11 @@ const (
 	defaultJobTarballWait = 30 * time.Second
 	defaultJobEventCache  = 10 * time.Second
 	defaultJobEventMax    = 10000
+	defaultAuditEventMax  = 500
+	defaultAdminReplayCap = 1000
+	defaultAdminReplayIDs = 1000
+	defaultAdminRunCap    = 30
+	defaultAdminRunWindow = time.Minute
 )
 
 func defaultDurableCronHandlers() []string {
@@ -89,6 +94,8 @@ type config struct {
 	jobEventDir         string
 	jobEventCacheTTL    time.Duration
 	jobEventMaxEntries  int
+	auditEventLimit     int
+	adminGuardrails     worker.AdminGuardrails
 }
 
 func main() {
@@ -100,6 +107,7 @@ func main() {
 
 func run() error {
 	cfg := loadConfig()
+	observability := worker.NewAdminObservability()
 
 	client, backend, err := newDurableBackend(cfg)
 	if err != nil {
@@ -107,7 +115,7 @@ func run() error {
 	}
 	defer client.Close()
 
-	jobRunner := newJobRunner(cfg)
+	jobRunner := newJobRunner(cfg, observability)
 
 	handlers, durableHandlers := buildHandlerMaps(cfg, jobRunner)
 	tm := worker.NewTaskManagerWithOptions(
@@ -115,6 +123,7 @@ func run() error {
 		worker.WithDurableBackend(backend),
 		worker.WithDurableLease(cfg.durableLease),
 		worker.WithDurableHandlers(durableHandlers),
+		worker.WithAdminAuditEventLimit(cfg.auditEventLimit),
 	)
 	tm.StartWorkers(context.Background())
 
@@ -128,8 +137,8 @@ func run() error {
 		log.Printf("job factories: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
-	grpcSvc := worker.NewGRPCServer(tm, handlers)
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(observability.UnaryServerInterceptor()))
+	grpcSvc := worker.NewGRPCServer(tm, handlers, worker.WithAdminGuardrails(cfg.adminGuardrails))
 	workerpb.RegisterWorkerServiceServer(grpcServer, grpcSvc)
 	workerpb.RegisterAdminServiceServer(grpcServer, grpcSvc)
 
@@ -226,6 +235,7 @@ func loadConfig() config {
 		jobEventDir:         strings.TrimSpace(os.Getenv("WORKER_JOB_EVENT_DIR")),
 		jobEventCacheTTL:    defaultDuration(os.Getenv("WORKER_JOB_EVENT_CACHE_TTL"), defaultJobEventCache),
 		jobEventMaxEntries:  parseIntWithDefault(os.Getenv("WORKER_JOB_EVENT_MAX_ENTRIES"), defaultJobEventMax),
+		auditEventLimit:     parseIntWithDefault(os.Getenv("WORKER_ADMIN_AUDIT_EVENT_LIMIT"), defaultAuditEventMax),
 	}
 
 	cfg.durableCronHandlers = append([]string{}, defaultDurableCronHandlers()...)
@@ -242,6 +252,14 @@ func loadConfig() config {
 
 	cfg.durableCronHandlers = mergeUnique(cfg.durableCronHandlers, presetKeys(cfg.durableCronSpecs))
 	cfg.cronHandlers = mergeUnique(cfg.cronHandlers, presetKeys(cfg.cronSpecs))
+	cfg.adminGuardrails = worker.AdminGuardrails{
+		ReplayLimitMax:    parseIntWithDefault(os.Getenv("WORKER_ADMIN_REPLAY_LIMIT_MAX"), defaultAdminReplayCap),
+		ReplayIDsMax:      parseIntWithDefault(os.Getenv("WORKER_ADMIN_REPLAY_IDS_MAX"), defaultAdminReplayIDs),
+		ScheduleRunMax:    parseIntWithDefault(os.Getenv("WORKER_ADMIN_SCHEDULE_RUN_MAX"), defaultAdminRunCap),
+		ScheduleRunWindow: defaultDuration(os.Getenv("WORKER_ADMIN_SCHEDULE_RUN_WINDOW"), defaultAdminRunWindow),
+		RequireApproval:   parseBool(os.Getenv("WORKER_ADMIN_REQUIRE_APPROVAL")),
+		ApprovalToken:     strings.TrimSpace(os.Getenv("WORKER_ADMIN_APPROVAL_TOKEN")),
+	}
 
 	return cfg
 }

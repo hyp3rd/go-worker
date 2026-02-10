@@ -4,9 +4,11 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { stream } = await gatewayStream("/admin/v1/events");
+    const { stream } = await gatewayStream("/admin/v1/events", {
+      lastEventId: request.headers.get("last-event-id") ?? "",
+    });
 
     const body = new ReadableStream<Uint8Array>({
       start(controller) {

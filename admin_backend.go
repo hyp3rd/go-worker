@@ -30,6 +30,14 @@ var (
 	ErrAdminReplayIDsRequired = ewrap.New("admin replay ids are required")
 	// ErrAdminReplayIDsTooLarge indicates too many ids were provided.
 	ErrAdminReplayIDsTooLarge = ewrap.New("admin replay ids limit exceeded")
+	// ErrAdminReplayLimitExceeded indicates replay limit exceeds policy.
+	ErrAdminReplayLimitExceeded = ewrap.New("admin replay limit exceeds policy")
+	// ErrAdminScheduleRunRateLimited indicates schedule run cap was exceeded.
+	ErrAdminScheduleRunRateLimited = ewrap.New("admin schedule run rate limit exceeded")
+	// ErrAdminApprovalRequired indicates a policy approval token is required.
+	ErrAdminApprovalRequired = ewrap.New("admin approval token is required")
+	// ErrAdminApprovalInvalid indicates a policy approval token is invalid.
+	ErrAdminApprovalInvalid = ewrap.New("admin approval token is invalid")
 	// ErrAdminScheduleNameRequired indicates a schedule name is required.
 	ErrAdminScheduleNameRequired = ewrap.New("admin schedule name is required")
 	// ErrAdminScheduleSpecRequired indicates a schedule spec is required.
@@ -170,6 +178,31 @@ type AdminJobEventPage struct {
 	Events []AdminJobEvent
 }
 
+// AdminAuditEvent describes an admin mutation audit record.
+type AdminAuditEvent struct {
+	At          time.Time         `json:"at"`
+	Actor       string            `json:"actor"`
+	RequestID   string            `json:"request_id"`
+	Action      string            `json:"action"`
+	Target      string            `json:"target"`
+	Status      string            `json:"status"`
+	PayloadHash string            `json:"payload_hash"`
+	Detail      string            `json:"detail"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+// AdminAuditEventFilter filters admin audit records.
+type AdminAuditEventFilter struct {
+	Action string
+	Target string
+	Limit  int
+}
+
+// AdminAuditEventPage represents admin audit records.
+type AdminAuditEventPage struct {
+	Events []AdminAuditEvent
+}
+
 // AdminScheduleEventFilter filters schedule events.
 type AdminScheduleEventFilter struct {
 	Name  string
@@ -249,6 +282,7 @@ type AdminBackend interface {
 	adminSchedules
 	adminDLQ
 	adminJobs
+	adminAudit
 }
 
 type adminQueues interface {
@@ -285,4 +319,9 @@ type adminJobs interface {
 	AdminUpsertJob(ctx context.Context, spec AdminJobSpec) (AdminJob, error)
 	AdminDeleteJob(ctx context.Context, name string) (bool, error)
 	AdminJobEvents(ctx context.Context, filter AdminJobEventFilter) (AdminJobEventPage, error)
+}
+
+type adminAudit interface {
+	AdminAuditEvents(ctx context.Context, filter AdminAuditEventFilter) (AdminAuditEventPage, error)
+	AdminRecordAuditEvent(ctx context.Context, event AdminAuditEvent, limit int) error
 }

@@ -7,6 +7,7 @@ import { JobOverview } from "@/components/job-overview";
 import Link from "next/link";
 import {
   getAdminActionCounters,
+  getAuditEvents,
   getCoordinationStatus,
   getJobEvents,
   getJobSchedules,
@@ -18,13 +19,14 @@ import { formatLatency, formatNumber } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [stats, queues, jobs, coordination, actions, jobEvents] = await Promise.all([
+  const [stats, queues, jobs, coordination, actions, jobEvents, auditEvents] = await Promise.all([
     getOverviewStats(),
     getQueueSummaries(),
     getJobSchedules(),
     getCoordinationStatus(),
     getAdminActionCounters(),
     getJobEvents({ limit: 200 }),
+    getAuditEvents({ limit: 50 }),
   ]);
 
   return (
@@ -99,7 +101,7 @@ export default async function Home() {
             title="Runbook"
             description="High‑confidence actions for production."
           />
-          <RunbookActions paused={coordination.paused} />
+          <RunbookActions paused={coordination.paused} initialAuditEvents={auditEvents} />
           <div className="mt-6 rounded-2xl border border-soft bg-[var(--card)] p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-muted">
               Action counters

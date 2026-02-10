@@ -128,24 +128,24 @@ func (tm *TaskManager) appendCronEventLocked(event AdminScheduleEvent) {
 func cronStatusLabel(status TaskStatus) string {
 	switch status {
 	case RateLimited:
-		return "rate_limited"
+		return adminStatusRateLimited
 	case Queued:
-		return "queued"
+		return adminStatusQueued
 	case Running:
-		return "running"
+		return adminStatusRunning
 	case ContextDeadlineReached:
-		return "deadline"
+		return adminStatusDeadline
 	case Completed:
-		return "completed"
+		return adminStatusCompleted
 	case Failed:
-		return "failed"
+		return adminStatusFailed
 	case Cancelled:
-		return "cancelled"
+		return adminStatusCancelled
 	case Invalid:
-		return "invalid"
+		return adminStatusInvalid
 	}
 
-	return "unknown"
+	return adminStatusUnknown
 }
 
 func cronFinishedAt(task *Task, status TaskStatus) time.Time {

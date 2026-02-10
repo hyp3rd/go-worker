@@ -245,6 +245,28 @@ message ListJobEventsResponse {
   repeated JobEvent events = 1;
 }
 
+message AuditEvent {
+  int64 at_ms = 1;
+  string actor = 2;
+  string request_id = 3;
+  string action = 4;
+  string target = 5;
+  string status = 6;
+  string payload_hash = 7;
+  string detail = 8;
+  map<string, string> metadata = 9;
+}
+
+message ListAuditEventsRequest {
+  string action = 1;
+  string target = 2;
+  int32 limit = 3;
+}
+
+message ListAuditEventsResponse {
+  repeated AuditEvent events = 1;
+}
+
 message GetJobRequest {
   string name = 1;
 }
@@ -357,6 +379,7 @@ service AdminService {
   rpc PauseQueue(PauseQueueRequest) returns (PauseQueueResponse);
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   rpc ListJobEvents(ListJobEventsRequest) returns (ListJobEventsResponse);
+  rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
   rpc GetJob(GetJobRequest) returns (GetJobResponse);
   rpc UpsertJob(UpsertJobRequest) returns (UpsertJobResponse);
   rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse);

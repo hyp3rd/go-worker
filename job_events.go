@@ -13,6 +13,15 @@ const (
 	defaultAdminJobEventLimit   = 200
 	jobEventResultMaxLen        = 240
 	adminJobEventPersistTimeout = 2 * time.Second
+	adminStatusRateLimited      = "rate_limited"
+	adminStatusQueued           = "queued"
+	adminStatusRunning          = "running"
+	adminStatusDeadline         = "deadline"
+	adminStatusCompleted        = "completed"
+	adminStatusFailed           = "failed"
+	adminStatusCancelled        = "cancelled"
+	adminStatusInvalid          = "invalid"
+	adminStatusUnknown          = "unknown"
 )
 
 type adminJobEventRecorder interface {
@@ -207,24 +216,24 @@ func (tm *TaskManager) persistJobEvent(ctx context.Context, event AdminJobEvent)
 func jobStatusLabel(status TaskStatus) string {
 	switch status {
 	case RateLimited:
-		return "rate_limited"
+		return adminStatusRateLimited
 	case Queued:
-		return "queued"
+		return adminStatusQueued
 	case Running:
-		return "running"
+		return adminStatusRunning
 	case ContextDeadlineReached:
-		return "deadline"
+		return adminStatusDeadline
 	case Completed:
-		return "completed"
+		return adminStatusCompleted
 	case Failed:
-		return "failed"
+		return adminStatusFailed
 	case Cancelled:
-		return "cancelled"
+		return adminStatusCancelled
 	case Invalid:
-		return "invalid"
+		return adminStatusInvalid
 	}
 
-	return "unknown"
+	return adminStatusUnknown
 }
 
 func jobFinishedAt(task *Task, status TaskStatus) time.Time {

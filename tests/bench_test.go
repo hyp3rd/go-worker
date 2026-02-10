@@ -19,11 +19,11 @@ const (
 	benchRetryDelay          = time.Second
 	benchMaxRetries          = 0
 	benchRetentionMaxEntries = 128
+	benchBatchLarge          = 100
 )
 
 func benchBatchSizes() []int {
-	//nolint:revive
-	return []int{1, 10, 100}
+	return []int{1, 10, benchBatchLarge}
 }
 
 func BenchmarkTaskManager_RegisterWait(b *testing.B) {

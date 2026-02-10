@@ -1,9 +1,6 @@
-import { createReadStream, promises as fsp } from "fs";
-import path from "path";
 import { Readable } from "stream";
 import { NextResponse, type NextRequest } from "next/server";
-import type { AdminJob } from "@/lib/types";
-import { gatewayRequest } from "@/lib/gateway";
+import { gatewayRawRequest, gatewayRequest } from "@/lib/gateway";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,102 +11,67 @@ type RouteParams = {
   }>;
 };
 
-const normalizeSource = (value?: string) => {
-  const key = value?.trim().toLowerCase();
-  if (!key) {
-    return "git_tag";
-  }
-  if (key === "git_tag" || key === "tarball_url" || key === "tarball_path") {
-    return key;
-  }
-  return "git_tag";
-};
-
-const resolveTarballFile = (baseDir: string, relativePath: string) => {
-  const sanitized = relativePath.trim();
-  if (!sanitized) {
-    throw new Error("Tarball path is required");
-  }
-  if (path.isAbsolute(sanitized)) {
-    throw new Error("Absolute tarball paths are not allowed");
-  }
-
-  const resolvedBase = path.resolve(baseDir);
-  const resolvedFile = path.resolve(resolvedBase, sanitized);
-  const allowedPrefix = `${resolvedBase}${path.sep}`;
-  if (resolvedFile !== resolvedBase && !resolvedFile.startsWith(allowedPrefix)) {
-    throw new Error("Tarball path escapes configured base directory");
-  }
-
-  return resolvedFile;
+type ArtifactMeta = {
+  artifact: {
+    downloadable: boolean;
+    redirectUrl?: string;
+    filename?: string;
+    sha256?: string;
+    sizeBytes?: number;
+  };
 };
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const { name } = await params;
     const decoded = decodeURIComponent(name ?? "");
-    const payload = await gatewayRequest<{ job: AdminJob }>({
+    const encoded = encodeURIComponent(decoded);
+    const metaPayload = await gatewayRequest<ArtifactMeta>({
       method: "GET",
-      path: `/admin/v1/jobs/${encodeURIComponent(decoded)}`,
+      path: `/admin/v1/jobs/${encoded}/artifact/meta`,
     });
-    const job = payload.job;
-    if (!job) {
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
-    }
 
-    const source = normalizeSource(job.source);
-    if (source === "tarball_url") {
-      const target = job.tarballUrl?.trim();
-      if (!target) {
-        return NextResponse.json(
-          { error: "Tarball URL missing for this job" },
-          { status: 400 }
-        );
-      }
-      return NextResponse.redirect(target, 307);
-    }
-
-    if (source !== "tarball_path") {
+    const artifact = metaPayload.artifact;
+    if (!artifact?.downloadable) {
       return NextResponse.json(
         { error: "This job source has no downloadable tarball" },
         { status: 400 }
       );
     }
 
-    const baseDir =
-      process.env.WORKER_ADMIN_JOB_TARBALL_DIR ??
-      process.env.WORKER_JOB_TARBALL_DIR ??
-      "";
-    if (!baseDir) {
-      return NextResponse.json(
-        {
-          error:
-            "Tarball downloads are disabled. Set WORKER_ADMIN_JOB_TARBALL_DIR.",
-        },
-        { status: 501 }
-      );
+    const redirectURL = artifact.redirectUrl?.trim();
+    if (redirectURL) {
+      return NextResponse.redirect(redirectURL, 307);
     }
 
-    const relativePath = job.tarballPath?.trim() ?? "";
-    const tarballPath = resolveTarballFile(baseDir, relativePath);
-    const stat = await fsp.stat(tarballPath);
-    if (!stat.isFile()) {
-      return NextResponse.json({ error: "Tarball not found" }, { status: 404 });
-    }
+    const { stream, headers } = await gatewayRawRequest({
+      method: "GET",
+      path: `/admin/v1/jobs/${encoded}/artifact`,
+    });
+    const webStream = Readable.toWeb(
+      stream as unknown as Readable
+    ) as ReadableStream<Uint8Array>;
 
-    const stream = createReadStream(tarballPath);
-    const webStream = Readable.toWeb(stream) as ReadableStream<Uint8Array>;
-    const filename = path.basename(tarballPath);
+    const contentType = getHeaderValue(headers["content-type"]) ?? "application/gzip";
+    const contentLength = getHeaderValue(headers["content-length"]);
+    const disposition =
+      getHeaderValue(headers["content-disposition"]) ??
+      `attachment; filename="${artifact.filename ?? `${decoded}.tar.gz`}"`;
+
     const response = new NextResponse(webStream, {
       status: 200,
       headers: {
-        "Content-Type": "application/gzip",
-        "Content-Length": stat.size.toString(),
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Type": contentType,
+        "Content-Disposition": disposition,
         "Cache-Control": "no-store",
       },
     });
-    const sha256 = job.tarballSha256?.trim();
+    if (contentLength) {
+      response.headers.set("Content-Length", contentLength);
+    }
+    const sha256 =
+      getHeaderValue(headers["x-tarball-sha256"]) ??
+      artifact.sha256?.trim();
     if (sha256) {
       response.headers.set("X-Tarball-SHA256", sha256);
     }
@@ -122,3 +84,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     );
   }
 }
+
+const getHeaderValue = (value: string | string[] | undefined) => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+};
