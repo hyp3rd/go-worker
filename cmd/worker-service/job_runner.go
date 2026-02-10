@@ -41,6 +41,7 @@ type jobRunner struct {
 	tarballDir       string
 	tarballMaxBytes  int64
 	tarballTimeout   time.Duration
+	observability    *worker.AdminObservability
 }
 
 const (
@@ -48,7 +49,7 @@ const (
 	tarballFileMode = 0o600
 )
 
-func newJobRunner(cfg config) *jobRunner {
+func newJobRunner(cfg config, observability *worker.AdminObservability) *jobRunner {
 	allowAll := false
 	allowlist := map[string]struct{}{}
 
@@ -100,6 +101,7 @@ func newJobRunner(cfg config) *jobRunner {
 		tarballDir:       strings.TrimSpace(cfg.jobTarballDir),
 		tarballMaxBytes:  cfg.jobTarballMaxBytes,
 		tarballTimeout:   cfg.jobTarballTimeout,
+		observability:    observability,
 	}
 }
 
@@ -124,12 +126,15 @@ func jobDurableHandlerSpec(runner *jobRunner) worker.DurableHandlerSpec {
 	}
 }
 
-func (r *jobRunner) Run(ctx context.Context, job worker.AdminJob) (string, error) {
+func (r *jobRunner) Run(ctx context.Context, job worker.AdminJob) (output string, err error) {
+	finishObservation := r.startRunObservation()
+	defer finishObservation(&err)
+
 	if r == nil {
 		return "", ewrap.New("job runner not configured")
 	}
 
-	err := r.validate(job)
+	err = r.validate(job)
 	if err != nil {
 		return "", err
 	}
@@ -176,6 +181,25 @@ func (r *jobRunner) Run(ctx context.Context, job worker.AdminJob) (string, error
 	}
 
 	return runOutput, nil
+}
+
+func (r *jobRunner) startRunObservation() func(*error) {
+	if r == nil || r.observability == nil {
+		return func(_ *error) {}
+	}
+
+	startedAt := time.Now()
+
+	r.observability.RecordJobQueued()
+
+	return func(runErr *error) {
+		outcome := "completed"
+		if runErr != nil && *runErr != nil {
+			outcome = "failed"
+		}
+
+		r.observability.RecordJobOutcome(outcome, time.Since(startedAt))
+	}
 }
 
 func (r *jobRunner) validate(job worker.AdminJob) error {

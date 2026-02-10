@@ -23,14 +23,20 @@ import (
 )
 
 const (
-	defaultRedisAddr     = "redis:6379"
-	defaultRedisPrefix   = "go-worker"
-	defaultGRPCAddr      = "0.0.0.0:50052"
-	defaultHTTPAddr      = "0.0.0.0:8081"
-	defaultBatchSize     = 50
-	defaultLeaseDuration = 30 * time.Second
-	adminShutdownTimeout = 5 * time.Second
-	parseFloatBitSize    = 64
+	defaultRedisAddr      = "redis:6379"
+	defaultRedisPrefix    = "go-worker"
+	defaultGRPCAddr       = "0.0.0.0:50052"
+	defaultHTTPAddr       = "0.0.0.0:8081"
+	defaultBatchSize      = 50
+	defaultLeaseDuration  = 30 * time.Second
+	adminShutdownTimeout  = 5 * time.Second
+	parseFloatBitSize     = 64
+	defaultAdminAuditMax  = 500
+	defaultAuditExportMax = 5000
+	defaultAdminReplayCap = 1000
+	defaultAdminReplayIDs = 1000
+	defaultAdminRunCap    = 30
+	defaultAdminRunWindow = time.Minute
 )
 
 type config struct {
@@ -44,13 +50,17 @@ type config struct {
 	grpcTarget string
 	httpAddr   string
 
-	tlsCert string
-	tlsKey  string
-	tlsCA   string
+	tlsCert    string
+	tlsKey     string
+	tlsCA      string
+	tarballDir string
 
-	globalRate  float64
-	globalBurst int
-	leaderLease time.Duration
+	globalRate      float64
+	globalBurst     int
+	leaderLease     time.Duration
+	auditEventLimit int
+	auditExportMax  int
+	adminGuardrails worker.AdminGuardrails
 }
 
 func main() {
@@ -65,6 +75,8 @@ func run() error {
 	if err != nil {
 		return ewrap.Wrap(err, "config")
 	}
+
+	observability := worker.NewAdminObservability()
 
 	startGRPC := cfg.grpcTarget == cfg.grpcAddr
 
@@ -94,15 +106,16 @@ func run() error {
 			context.Background(),
 			worker.WithDurableBackend(backend),
 			worker.WithDurableLease(defaultLeaseDuration),
+			worker.WithAdminAuditEventLimit(cfg.auditEventLimit),
 		)
 
-		grpcServer, err = startAdminGRPCServer(cfg, tm)
+		grpcServer, err = startAdminGRPCServer(cfg, tm, observability)
 		if err != nil {
 			return err
 		}
 	}
 
-	gatewayServer, err := startAdminGateway(cfg)
+	gatewayServer, err := startAdminGateway(cfg, observability)
 	if err != nil {
 		return err
 	}
@@ -124,9 +137,13 @@ func run() error {
 	return nil
 }
 
-func startAdminGRPCServer(cfg config, tm *worker.TaskManager) (*grpc.Server, error) {
-	grpcServer := grpc.NewServer()
-	adminServer := worker.NewGRPCServer(tm, nil)
+func startAdminGRPCServer(
+	cfg config,
+	tm *worker.TaskManager,
+	observability *worker.AdminObservability,
+) (*grpc.Server, error) {
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(observability.UnaryServerInterceptor()))
+	adminServer := worker.NewGRPCServer(tm, nil, worker.WithAdminGuardrails(cfg.adminGuardrails))
 	workerpb.RegisterAdminServiceServer(grpcServer, adminServer)
 
 	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", cfg.grpcAddr)
@@ -146,13 +163,16 @@ func startAdminGRPCServer(cfg config, tm *worker.TaskManager) (*grpc.Server, err
 	return grpcServer, nil
 }
 
-func startAdminGateway(cfg config) (*http.Server, error) {
+func startAdminGateway(cfg config, observability *worker.AdminObservability) (*http.Server, error) {
 	gatewayServer, err := worker.NewAdminGatewayServer(worker.AdminGatewayConfig{
-		GRPCAddr:    cfg.grpcTarget,
-		HTTPAddr:    cfg.httpAddr,
-		TLSCertFile: cfg.tlsCert,
-		TLSKeyFile:  cfg.tlsKey,
-		TLSCAFile:   cfg.tlsCA,
+		GRPCAddr:       cfg.grpcTarget,
+		HTTPAddr:       cfg.httpAddr,
+		TLSCertFile:    cfg.tlsCert,
+		TLSKeyFile:     cfg.tlsKey,
+		TLSCAFile:      cfg.tlsCA,
+		JobTarballDir:  cfg.tarballDir,
+		AuditExportMax: cfg.auditExportMax,
+		Observability:  observability,
 	})
 	if err != nil {
 		return nil, ewrap.Wrap(err, "admin gateway")
@@ -183,6 +203,7 @@ func loadConfig() (config, error) {
 		tlsCert:       os.Getenv("WORKER_ADMIN_TLS_CERT"),
 		tlsKey:        os.Getenv("WORKER_ADMIN_TLS_KEY"),
 		tlsCA:         os.Getenv("WORKER_ADMIN_TLS_CA"),
+		tarballDir:    getenv("WORKER_ADMIN_JOB_TARBALL_DIR", getenv("WORKER_JOB_TARBALL_DIR", "")),
 	}
 
 	if cfg.grpcTarget == "" {
@@ -192,6 +213,16 @@ func loadConfig() (config, error) {
 	cfg.globalRate = parseFloat(os.Getenv("WORKER_ADMIN_GLOBAL_RATE"))
 	cfg.globalBurst = parseInt(os.Getenv("WORKER_ADMIN_GLOBAL_BURST"))
 	cfg.leaderLease = parseDuration(os.Getenv("WORKER_ADMIN_LEADER_LEASE"))
+	cfg.auditEventLimit = parseIntWithDefault(os.Getenv("WORKER_ADMIN_AUDIT_EVENT_LIMIT"), defaultAdminAuditMax)
+	cfg.auditExportMax = parseIntWithDefault(os.Getenv("WORKER_ADMIN_AUDIT_EXPORT_LIMIT_MAX"), defaultAuditExportMax)
+	cfg.adminGuardrails = worker.AdminGuardrails{
+		ReplayLimitMax:    parseIntWithDefault(os.Getenv("WORKER_ADMIN_REPLAY_LIMIT_MAX"), defaultAdminReplayCap),
+		ReplayIDsMax:      parseIntWithDefault(os.Getenv("WORKER_ADMIN_REPLAY_IDS_MAX"), defaultAdminReplayIDs),
+		ScheduleRunMax:    parseIntWithDefault(os.Getenv("WORKER_ADMIN_SCHEDULE_RUN_MAX"), defaultAdminRunCap),
+		ScheduleRunWindow: parseDurationWithDefault(os.Getenv("WORKER_ADMIN_SCHEDULE_RUN_WINDOW"), defaultAdminRunWindow),
+		RequireApproval:   parseBool(os.Getenv("WORKER_ADMIN_REQUIRE_APPROVAL")),
+		ApprovalToken:     strings.TrimSpace(os.Getenv("WORKER_ADMIN_APPROVAL_TOKEN")),
+	}
 
 	if cfg.tlsCert == "" || cfg.tlsKey == "" || cfg.tlsCA == "" {
 		return cfg, ewrap.New("WORKER_ADMIN_TLS_CERT/KEY/CA are required")
@@ -249,6 +280,15 @@ func parseInt(raw string) int {
 	return value
 }
 
+func parseIntWithDefault(raw string, fallback int) int {
+	value := parseInt(raw)
+	if value <= 0 {
+		return fallback
+	}
+
+	return value
+}
+
 func parseDuration(raw string) time.Duration {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -258,6 +298,15 @@ func parseDuration(raw string) time.Duration {
 	value, err := time.ParseDuration(raw)
 	if err != nil || value <= 0 {
 		return 0
+	}
+
+	return value
+}
+
+func parseDurationWithDefault(raw string, fallback time.Duration) time.Duration {
+	value := parseDuration(raw)
+	if value <= 0 {
+		return fallback
 	}
 
 	return value

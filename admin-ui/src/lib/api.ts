@@ -6,6 +6,7 @@ import type {
   DlqEntry,
   HealthInfo,
   JobEvent,
+  AdminAuditEvent,
   JobSchedule,
   OverviewStats,
   QueueDetail,
@@ -125,6 +126,26 @@ export async function fetchJobEvents(params?: {
   }
   const suffix = search.toString();
   const path = suffix ? `/api/jobs/events?${suffix}` : "/api/jobs/events";
+  return fetchJson(path);
+}
+
+export async function fetchAuditEvents(params?: {
+  action?: string;
+  target?: string;
+  limit?: number;
+}): Promise<{ events: AdminAuditEvent[] }> {
+  const search = new URLSearchParams();
+  if (params?.action) {
+    search.set("action", params.action);
+  }
+  if (params?.target) {
+    search.set("target", params.target);
+  }
+  if (params?.limit) {
+    search.set("limit", String(params.limit));
+  }
+  const suffix = search.toString();
+  const path = suffix ? `/api/audit?${suffix}` : "/api/audit";
   return fetchJson(path);
 }
 

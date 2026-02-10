@@ -175,7 +175,7 @@ linters:
           arguments: [140]
 
         - name: max-public-structs
-          arguments: [20]
+          arguments: [25]
 
         - name: var-naming
           disabled: true

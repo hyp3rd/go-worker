@@ -38,8 +38,10 @@ type GRPCServer struct {
 	idempotencyMu sync.Mutex
 	idempotency   map[string]*idempotencyRecord
 
-	auth  GRPCAuthFunc
-	admin AdminBackend
+	auth               GRPCAuthFunc
+	admin              AdminBackend
+	adminGuardrails    AdminGuardrails
+	scheduleRunLimiter *adminScheduleRunLimiter
 }
 
 // GRPCAuthFunc authorizes a gRPC request before handling it.
@@ -63,12 +65,24 @@ func WithAdminBackend(backend AdminBackend) GRPCServerOption {
 	}
 }
 
+// WithAdminGuardrails configures safety limits for admin mutations.
+func WithAdminGuardrails(guardrails AdminGuardrails) GRPCServerOption {
+	return func(s *GRPCServer) {
+		s.adminGuardrails = normalizeAdminGuardrails(guardrails)
+		s.scheduleRunLimiter = newAdminScheduleRunLimiter(s.adminGuardrails)
+	}
+}
+
 // NewGRPCServer creates a new gRPC server backed by the provided Service.
 func NewGRPCServer(svc Service, handlers map[string]HandlerSpec, opts ...GRPCServerOption) *GRPCServer {
+	defaultGuardrails := normalizeAdminGuardrails(AdminGuardrails{})
+
 	server := &GRPCServer{
-		svc:         svc,
-		handlers:    handlers,
-		idempotency: make(map[string]*idempotencyRecord),
+		svc:                svc,
+		handlers:           handlers,
+		idempotency:        make(map[string]*idempotencyRecord),
+		adminGuardrails:    defaultGuardrails,
+		scheduleRunLimiter: newAdminScheduleRunLimiter(defaultGuardrails),
 	}
 
 	for _, opt := range opts {

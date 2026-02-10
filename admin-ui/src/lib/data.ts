@@ -10,6 +10,7 @@ import {
   fetchSchedules,
   fetchJobs,
   fetchJobEvents,
+  fetchAuditEvents,
 } from "@/lib/api";
 import {
   coordinationStatus,
@@ -227,5 +228,20 @@ export const getDlqEntries = cache(async (params?: {
     const detail =
       error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to load DLQ entries: ${detail}`);
+  }
+});
+
+export const getAuditEvents = cache(async (params?: {
+  action?: string;
+  target?: string;
+  limit?: number;
+}) => {
+  try {
+    const { events } = await fetchAuditEvents(params);
+    return events;
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(`Failed to load admin audit events: ${detail}`);
   }
 });

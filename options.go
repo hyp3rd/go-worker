@@ -11,14 +11,15 @@ const (
 type TaskManagerOption func(*taskManagerConfig)
 
 type taskManagerConfig struct {
-	maxWorkers     int
-	maxTasks       int
-	tasksPerSecond float64
-	timeout        time.Duration
-	retryDelay     time.Duration
-	maxRetries     int
-	defaultQueue   string
-	queueWeights   map[string]int
+	maxWorkers      int
+	maxTasks        int
+	tasksPerSecond  float64
+	timeout         time.Duration
+	retryDelay      time.Duration
+	maxRetries      int
+	defaultQueue    string
+	queueWeights    map[string]int
+	auditEventLimit int
 
 	durableBackend      DurableBackend
 	durableHandlers     map[string]DurableHandlerSpec
@@ -47,6 +48,7 @@ func defaultTaskManagerConfig() taskManagerConfig {
 		durableLeaseRenewal: 0,
 		durableCodec:        ProtoDurableCodec{},
 		cronLocation:        time.UTC,
+		auditEventLimit:     defaultAdminAuditEventLimit,
 	}
 }
 
@@ -170,5 +172,12 @@ func WithCronLocation(location *time.Location) TaskManagerOption {
 		if location != nil {
 			cfg.cronLocation = location
 		}
+	}
+}
+
+// WithAdminAuditEventLimit sets the maximum number of in-memory admin audit events.
+func WithAdminAuditEventLimit(limit int) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		cfg.auditEventLimit = limit
 	}
 }

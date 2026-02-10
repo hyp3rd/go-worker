@@ -33,7 +33,10 @@ const (
 	parseIntBitSize              = 64
 	adminJobsKeyName             = "admin:jobs"
 	adminJobEventsKeyName        = "admin:job_events"
+	adminAuditEventsKeyName      = "admin:audit_events"
 	adminJobDefaultDockerfile    = "Dockerfile"
+	adminAuditReadMultiplier     = 5
+	adminAuditReadCapMultiplier  = 10
 )
 
 //nolint:revive,dupword,nolintlint
@@ -1210,6 +1213,10 @@ func (b *RedisDurableBackend) AdminRecordJobEvent(ctx context.Context, event Adm
 		return ErrInvalidTaskContext
 	}
 
+	if b.jobEventStore != nil {
+		return b.jobEventStore.Record(ctx, event)
+	}
+
 	raw, err := json.Marshal(event)
 	if err != nil {
 		return ewrap.Wrap(err, "encode admin job event")
@@ -1228,20 +1235,12 @@ func (b *RedisDurableBackend) AdminRecordJobEvent(ctx context.Context, event Adm
 
 	name := strings.TrimSpace(event.Name)
 	if name == "" {
-		if b.jobEventStore != nil {
-			return b.jobEventStore.Record(ctx, event)
-		}
-
 		return nil
 	}
 
 	err = b.pushJobEvent(ctx, b.jobEventsKeyForName(name), raw, limit)
 	if err != nil {
 		return err
-	}
-
-	if b.jobEventStore != nil {
-		return b.jobEventStore.Record(ctx, event)
 	}
 
 	return nil
@@ -1304,6 +1303,96 @@ func (b *RedisDurableBackend) pushJobEvent(ctx context.Context, key string, raw 
 	trimResp := b.client.Do(ctx, b.client.B().Ltrim().Key(key).Start(0).Stop(int64(limit-1)).Build())
 	if trimResp.Error() != nil {
 		return ewrap.Wrap(trimResp.Error(), "trim admin job events")
+	}
+
+	return nil
+}
+
+// AdminRecordAuditEvent persists an admin mutation audit event.
+func (b *RedisDurableBackend) AdminRecordAuditEvent(ctx context.Context, event AdminAuditEvent, limit int) error {
+	if ctx == nil {
+		return ErrInvalidTaskContext
+	}
+
+	raw, err := json.Marshal(event)
+	if err != nil {
+		return ewrap.Wrap(err, "encode admin audit event")
+	}
+
+	if limit <= 0 {
+		limit = defaultAdminAuditEventLimit
+	}
+
+	return b.pushAuditEvent(ctx, b.auditEventsKey(), raw, limit)
+}
+
+// AdminAuditEvents returns recent admin mutation audit events.
+func (b *RedisDurableBackend) AdminAuditEvents(ctx context.Context, filter AdminAuditEventFilter) (AdminAuditEventPage, error) {
+	if ctx == nil {
+		return AdminAuditEventPage{}, ErrInvalidTaskContext
+	}
+
+	limit := normalizeAdminEventLimit(filter.Limit, 0)
+	if limit <= 0 {
+		return AdminAuditEventPage{Events: []AdminAuditEvent{}}, nil
+	}
+
+	// Pull a bounded superset so action/target filtering can still return enough rows.
+	readLimit := max(
+		min(limit*adminAuditReadMultiplier, defaultAdminAuditEventLimit*adminAuditReadCapMultiplier),
+		limit,
+	)
+
+	resp := b.client.Do(ctx, b.client.B().Lrange().Key(b.auditEventsKey()).Start(0).Stop(int64(readLimit-1)).Build())
+
+	values, err := resp.AsStrSlice()
+	if err != nil {
+		return AdminAuditEventPage{}, ewrap.Wrap(err, "read admin audit events")
+	}
+
+	action := strings.TrimSpace(filter.Action)
+	target := strings.TrimSpace(filter.Target)
+	events := make([]AdminAuditEvent, 0, min(limit, len(values)))
+
+	for _, raw := range values {
+		if len(events) >= limit {
+			break
+		}
+
+		var event AdminAuditEvent
+
+		err = json.Unmarshal([]byte(raw), &event)
+		if err != nil {
+			return AdminAuditEventPage{}, ewrap.Wrap(err, "decode admin audit event")
+		}
+
+		if action != "" && event.Action != action {
+			continue
+		}
+
+		if target != "" && event.Target != target {
+			continue
+		}
+
+		events = append(events, event)
+	}
+
+	return AdminAuditEventPage{Events: events}, nil
+}
+
+func (b *RedisDurableBackend) pushAuditEvent(ctx context.Context, key string, raw []byte, limit int) error {
+	resp := b.client.Do(ctx, b.client.B().Lpush().Key(key).Element(string(raw)).Build())
+	if resp.Error() != nil {
+		return ewrap.Wrap(resp.Error(), "write admin audit event")
+	}
+
+	if limit <= 0 {
+		return nil
+	}
+
+	trimResp := b.client.Do(ctx, b.client.B().Ltrim().Key(key).Start(0).Stop(int64(limit-1)).Build())
+	if trimResp.Error() != nil {
+		return ewrap.Wrap(trimResp.Error(), "trim admin audit events")
 	}
 
 	return nil
@@ -1507,6 +1596,10 @@ func (b *RedisDurableBackend) jobsKey() string {
 
 func (b *RedisDurableBackend) jobEventsKey() string {
 	return b.keyPrefix() + redisKVSeparator + adminJobEventsKeyName
+}
+
+func (b *RedisDurableBackend) auditEventsKey() string {
+	return b.keyPrefix() + redisKVSeparator + adminAuditEventsKeyName
 }
 
 func (b *RedisDurableBackend) jobEventsKeyForName(name string) string {

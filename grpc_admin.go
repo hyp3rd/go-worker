@@ -2,19 +2,28 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/hyp3rd/ewrap"
 	sectconv "github.com/hyp3rd/sectools/pkg/converters"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	workerpb "github.com/hyp3rd/go-worker/pkg/worker/v1"
 )
 
-const defaultAdminDLQLimit = 100
+const (
+	defaultAdminDLQLimit = 100
+	adminAuditStatusOK   = "ok"
+	adminAuditStatusErr  = "error"
+	adminAuditMetaActor  = "x-admin-actor"
+)
 
 func (s *GRPCServer) adminBackend() (AdminBackend, error) {
 	if s == nil || s.admin == nil {
@@ -156,22 +165,36 @@ func (s *GRPCServer) UpdateQueueWeight(
 	ctx context.Context,
 	req *workerpb.UpdateQueueWeightRequest,
 ) (*workerpb.UpdateQueueWeightResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "queue.update_weight", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_UpdateQueueWeight_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
-	name := strings.TrimSpace(req.GetName())
+	name := target
 	weight := int(req.GetWeight())
 
 	queue, err := backend.AdminSetQueueWeight(ctx, name, weight)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.UpdateQueueWeightResponse{
@@ -191,21 +214,35 @@ func (s *GRPCServer) ResetQueueWeight(
 	ctx context.Context,
 	req *workerpb.ResetQueueWeightRequest,
 ) (*workerpb.ResetQueueWeightResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "queue.reset_weight", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_ResetQueueWeight_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
-	name := strings.TrimSpace(req.GetName())
+	name := target
 
 	queue, err := backend.AdminResetQueueWeight(ctx, name)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.ResetQueueWeightResponse{
@@ -279,6 +316,41 @@ func (s *GRPCServer) ListJobEvents(
 	return resp, nil
 }
 
+// ListAuditEvents returns recent admin mutation audit records.
+func (s *GRPCServer) ListAuditEvents(
+	ctx context.Context,
+	req *workerpb.ListAuditEventsRequest,
+) (*workerpb.ListAuditEventsResponse, error) {
+	err := s.authorize(ctx, workerpb.AdminService_ListAuditEvents_FullMethodName, req)
+	if err != nil {
+		return nil, err
+	}
+
+	backend, err := s.adminBackend()
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	page, err := backend.AdminAuditEvents(ctx, AdminAuditEventFilter{
+		Action: strings.TrimSpace(req.GetAction()),
+		Target: strings.TrimSpace(req.GetTarget()),
+		Limit:  int(req.GetLimit()),
+	})
+	if err != nil {
+		return nil, toAdminStatus(err)
+	}
+
+	resp := &workerpb.ListAuditEventsResponse{
+		Events: make([]*workerpb.AuditEvent, 0, len(page.Events)),
+	}
+
+	for _, event := range page.Events {
+		resp.Events = append(resp.Events, auditEventToProto(event))
+	}
+
+	return resp, nil
+}
+
 // GetJob returns a job definition by name.
 func (s *GRPCServer) GetJob(ctx context.Context, req *workerpb.GetJobRequest) (*workerpb.GetJobResponse, error) {
 	err := s.authorize(ctx, workerpb.AdminService_GetJob_FullMethodName, req)
@@ -301,21 +373,35 @@ func (s *GRPCServer) GetJob(ctx context.Context, req *workerpb.GetJobRequest) (*
 
 // UpsertJob creates or updates a job definition.
 func (s *GRPCServer) UpsertJob(ctx context.Context, req *workerpb.UpsertJobRequest) (*workerpb.UpsertJobResponse, error) {
+	target := strings.TrimSpace(req.GetSpec().GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "job.upsert", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_UpsertJob_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	spec := jobSpecFromProto(req.GetSpec())
 
 	job, err := backend.AdminUpsertJob(ctx, spec)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.UpsertJobResponse{Job: jobToProto(job)}, nil
@@ -323,19 +409,33 @@ func (s *GRPCServer) UpsertJob(ctx context.Context, req *workerpb.UpsertJobReque
 
 // DeleteJob removes a job definition.
 func (s *GRPCServer) DeleteJob(ctx context.Context, req *workerpb.DeleteJobRequest) (*workerpb.DeleteJobResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "job.delete", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_DeleteJob_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
-	deleted, err := backend.AdminDeleteJob(ctx, strings.TrimSpace(req.GetName()))
+	deleted, err := backend.AdminDeleteJob(ctx, target)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.DeleteJobResponse{Deleted: deleted}, nil
@@ -343,8 +443,18 @@ func (s *GRPCServer) DeleteJob(ctx context.Context, req *workerpb.DeleteJobReque
 
 // RunJob enqueues a job immediately.
 func (s *GRPCServer) RunJob(ctx context.Context, req *workerpb.RunJobRequest) (*workerpb.RunJobResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "job.run", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_RunJob_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
@@ -352,12 +462,16 @@ func (s *GRPCServer) RunJob(ctx context.Context, req *workerpb.RunJobRequest) (*
 		AdminRunJob(ctx context.Context, name string) (string, error)
 	})
 	if !ok {
-		return nil, toAdminStatus(ErrAdminUnsupported)
+		opErr = toAdminStatus(ErrAdminUnsupported)
+
+		return nil, opErr
 	}
 
-	taskID, err := runner.AdminRunJob(ctx, strings.TrimSpace(req.GetName()))
+	taskID, err := runner.AdminRunJob(ctx, target)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.RunJobResponse{TaskId: taskID}, nil
@@ -365,19 +479,33 @@ func (s *GRPCServer) RunJob(ctx context.Context, req *workerpb.RunJobRequest) (*
 
 // PauseQueue pauses or resumes a queue.
 func (s *GRPCServer) PauseQueue(ctx context.Context, req *workerpb.PauseQueueRequest) (*workerpb.PauseQueueResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "queue.pause", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_PauseQueue_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
-	queue, err := backend.AdminPauseQueue(ctx, req.GetName(), req.GetPaused())
+	queue, err := backend.AdminPauseQueue(ctx, target, req.GetPaused())
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.PauseQueueResponse{
@@ -487,14 +615,26 @@ func (s *GRPCServer) ListScheduleEvents(
 
 // CreateSchedule registers or updates a cron schedule.
 func (s *GRPCServer) CreateSchedule(ctx context.Context, req *workerpb.CreateScheduleRequest) (*workerpb.CreateScheduleResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "schedule.create", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_CreateSchedule_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	schedule, err := backend.AdminCreateSchedule(ctx, AdminScheduleSpec{
@@ -503,7 +643,9 @@ func (s *GRPCServer) CreateSchedule(ctx context.Context, req *workerpb.CreateSch
 		Durable: req.GetDurable(),
 	})
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.CreateScheduleResponse{Schedule: scheduleToProto(schedule)}, nil
@@ -511,19 +653,33 @@ func (s *GRPCServer) CreateSchedule(ctx context.Context, req *workerpb.CreateSch
 
 // DeleteSchedule removes a cron schedule.
 func (s *GRPCServer) DeleteSchedule(ctx context.Context, req *workerpb.DeleteScheduleRequest) (*workerpb.DeleteScheduleResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "schedule.delete", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_DeleteSchedule_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
-	deleted, err := backend.AdminDeleteSchedule(ctx, req.GetName())
+	deleted, err := backend.AdminDeleteSchedule(ctx, target)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.DeleteScheduleResponse{Deleted: deleted}, nil
@@ -531,19 +687,33 @@ func (s *GRPCServer) DeleteSchedule(ctx context.Context, req *workerpb.DeleteSch
 
 // PauseSchedule pauses or resumes a cron schedule.
 func (s *GRPCServer) PauseSchedule(ctx context.Context, req *workerpb.PauseScheduleRequest) (*workerpb.PauseScheduleResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "schedule.pause", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_PauseSchedule_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
-	schedule, err := backend.AdminPauseSchedule(ctx, req.GetName(), req.GetPaused())
+	schedule, err := backend.AdminPauseSchedule(ctx, target, req.GetPaused())
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.PauseScheduleResponse{Schedule: scheduleToProto(schedule)}, nil
@@ -554,19 +724,31 @@ func (s *GRPCServer) PauseSchedules(
 	ctx context.Context,
 	req *workerpb.PauseSchedulesRequest,
 ) (*workerpb.PauseSchedulesResponse, error) {
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "schedule.pause_all", "*", req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_PauseSchedules_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	updated, err := backend.AdminPauseSchedules(ctx, req.GetPaused())
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.PauseSchedulesResponse{
@@ -577,19 +759,47 @@ func (s *GRPCServer) PauseSchedules(
 
 // RunSchedule triggers a cron schedule immediately.
 func (s *GRPCServer) RunSchedule(ctx context.Context, req *workerpb.RunScheduleRequest) (*workerpb.RunScheduleResponse, error) {
+	target := strings.TrimSpace(req.GetName())
+
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "schedule.run", target, req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_RunSchedule_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
+	}
+
+	err = s.enforceAdminApproval(ctx)
+	if err != nil {
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
+	}
+
+	err = s.enforceScheduleRun(target)
+	if err != nil {
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
-	taskID, err := backend.AdminRunSchedule(ctx, req.GetName())
+	taskID, err := backend.AdminRunSchedule(ctx, target)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.RunScheduleResponse{TaskId: taskID}, nil
@@ -680,19 +890,31 @@ func (s *GRPCServer) GetDLQEntry(ctx context.Context, req *workerpb.GetDLQEntryR
 
 // PauseDequeue pauses durable dequeue.
 func (s *GRPCServer) PauseDequeue(ctx context.Context, req *workerpb.PauseDequeueRequest) (*workerpb.PauseDequeueResponse, error) {
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "dequeue.pause", "*", req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_PauseDequeue_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	err = backend.AdminPause(ctx)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.PauseDequeueResponse{Paused: true}, nil
@@ -700,19 +922,31 @@ func (s *GRPCServer) PauseDequeue(ctx context.Context, req *workerpb.PauseDequeu
 
 // ResumeDequeue resumes durable dequeue.
 func (s *GRPCServer) ResumeDequeue(ctx context.Context, req *workerpb.ResumeDequeueRequest) (*workerpb.ResumeDequeueResponse, error) {
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "dequeue.resume", "*", req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_ResumeDequeue_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	err = backend.AdminResume(ctx)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.ResumeDequeueResponse{Paused: false}, nil
@@ -720,14 +954,38 @@ func (s *GRPCServer) ResumeDequeue(ctx context.Context, req *workerpb.ResumeDequ
 
 // ReplayDLQ replays DLQ entries.
 func (s *GRPCServer) ReplayDLQ(ctx context.Context, req *workerpb.ReplayDLQRequest) (*workerpb.ReplayDLQResponse, error) {
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "dlq.replay", "*", req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_ReplayDLQ_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
+	}
+
+	err = s.enforceAdminApproval(ctx)
+	if err != nil {
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
+	}
+
+	err = s.enforceReplayLimit(int(req.GetLimit()))
+	if err != nil {
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	limit := int(req.GetLimit())
@@ -737,7 +995,9 @@ func (s *GRPCServer) ReplayDLQ(ctx context.Context, req *workerpb.ReplayDLQReque
 
 	moved, err := backend.AdminReplayDLQ(ctx, limit)
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.ReplayDLQResponse{Moved: clampInt32(moved)}, nil
@@ -745,19 +1005,45 @@ func (s *GRPCServer) ReplayDLQ(ctx context.Context, req *workerpb.ReplayDLQReque
 
 // ReplayDLQByID replays DLQ entries by ID.
 func (s *GRPCServer) ReplayDLQByID(ctx context.Context, req *workerpb.ReplayDLQByIDRequest) (*workerpb.ReplayDLQByIDResponse, error) {
+	var opErr error
+
+	defer func() {
+		s.recordAdminAudit(ctx, "dlq.replay_ids", "*", req, opErr)
+	}()
+
 	err := s.authorize(ctx, workerpb.AdminService_ReplayDLQByID_FullMethodName, req)
 	if err != nil {
+		opErr = err
+
 		return nil, err
+	}
+
+	err = s.enforceAdminApproval(ctx)
+	if err != nil {
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
+	}
+
+	err = s.enforceReplayIDsLimit(req.GetIds())
+	if err != nil {
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	backend, err := s.adminBackend()
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	moved, err := backend.AdminReplayDLQByID(ctx, req.GetIds())
 	if err != nil {
-		return nil, toAdminStatus(err)
+		opErr = toAdminStatus(err)
+
+		return nil, opErr
 	}
 
 	return &workerpb.ReplayDLQByIDResponse{Moved: clampInt32(moved)}, nil
@@ -915,6 +1201,116 @@ func jobEventToProto(event AdminJobEvent) *workerpb.JobEvent {
 	}
 }
 
+func auditEventToProto(event AdminAuditEvent) *workerpb.AuditEvent {
+	return &workerpb.AuditEvent{
+		AtMs:        timeToMillis(event.At),
+		Actor:       event.Actor,
+		RequestId:   event.RequestID,
+		Action:      event.Action,
+		Target:      event.Target,
+		Status:      event.Status,
+		PayloadHash: event.PayloadHash,
+		Detail:      event.Detail,
+		Metadata:    event.Metadata,
+	}
+}
+
+func (s *GRPCServer) recordAdminAudit(
+	ctx context.Context,
+	action string,
+	target string,
+	request any,
+	opErr error,
+) {
+	if s == nil || s.admin == nil {
+		return
+	}
+
+	if ctx == nil {
+		return
+	}
+
+	event := AdminAuditEvent{
+		At:          time.Now(),
+		Actor:       adminActorFromContext(ctx),
+		RequestID:   adminRequestIDFromContext(ctx),
+		Action:      strings.TrimSpace(action),
+		Target:      strings.TrimSpace(target),
+		Status:      adminAuditStatusOK,
+		PayloadHash: hashAdminPayload(request),
+		Detail:      adminAuditStatusOK,
+	}
+
+	if opErr != nil {
+		event.Status = adminAuditStatusErr
+		event.Detail = strings.TrimSpace(opErr.Error())
+	}
+
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminRequestTimeout)
+	defer cancel()
+
+	err := s.admin.AdminRecordAuditEvent(recordCtx, event, defaultAdminAuditEventLimit)
+	if err != nil {
+		return
+	}
+}
+
+func adminRequestIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+
+	values := md.Get(adminRequestIDMetaKey)
+	if len(values) == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(values[0])
+}
+
+func adminActorFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return "unknown"
+	}
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "unknown"
+	}
+
+	values := md.Get(adminAuditMetaActor)
+	if len(values) == 0 {
+		return "unknown"
+	}
+
+	value := strings.TrimSpace(values[0])
+	if value == "" {
+		return "unknown"
+	}
+
+	return value
+}
+
+func hashAdminPayload(payload any) string {
+	if payload == nil {
+		return ""
+	}
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+
+	sum := sha256.Sum256(raw)
+
+	return hex.EncodeToString(sum[:])
+}
+
 func toAdminStatus(err error) error {
 	if err == nil {
 		return nil
@@ -941,7 +1337,12 @@ func mapAdminError(err error) error {
 		return ewrap.Wrap(status.Error(codes.InvalidArgument, err.Error()), "invalid task context")
 	}
 
-	mapped := mapAdminQueueError(err)
+	mapped := mapAdminPolicyError(err)
+	if mapped != nil {
+		return mapped
+	}
+
+	mapped = mapAdminQueueError(err)
 	if mapped != nil {
 		return mapped
 	}
@@ -959,6 +1360,22 @@ func mapAdminError(err error) error {
 	mapped = mapAdminJobError(err)
 	if mapped != nil {
 		return mapped
+	}
+
+	return nil
+}
+
+func mapAdminPolicyError(err error) error {
+	if errors.Is(err, ErrAdminApprovalRequired) || errors.Is(err, ErrAdminApprovalInvalid) {
+		return ewrap.Wrap(status.Error(codes.PermissionDenied, err.Error()), "admin approval policy")
+	}
+
+	if errors.Is(err, ErrAdminReplayLimitExceeded) {
+		return ewrap.Wrap(status.Error(codes.ResourceExhausted, err.Error()), "replay limit policy")
+	}
+
+	if errors.Is(err, ErrAdminScheduleRunRateLimited) {
+		return ewrap.Wrap(status.Error(codes.ResourceExhausted, err.Error()), "schedule run limit policy")
 	}
 
 	return nil

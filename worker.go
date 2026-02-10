@@ -111,6 +111,10 @@ type TaskManager struct {
 	jobEventsMu   sync.RWMutex
 	jobEvents     []AdminJobEvent
 	jobEventLimit int
+
+	auditEventsMu   sync.RWMutex
+	auditEvents     []AdminAuditEvent
+	auditEventLimit int
 }
 
 // NewTaskManagerWithDefaults creates a new task manager with default values.
@@ -240,6 +244,7 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 		cronEventLimit:      defaultAdminScheduleEventLimit,
 		cronRuns:            map[uuid.UUID]cronRunInfo{},
 		jobEventLimit:       defaultAdminJobEventLimit,
+		auditEventLimit:     normalizeAdminEventLimit(cfg.auditEventLimit, defaultAdminAuditEventLimit),
 	}
 
 	tm.queueCond = sync.NewCond(&tm.queueMu)

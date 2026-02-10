@@ -4,14 +4,18 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -42,6 +46,7 @@ const (
 	adminErrReadBodyMsg   = "failed to read request body"
 	adminErrParseBodyMsg  = "failed to parse request body"
 	adminErrInvalidBody   = "invalid_body"
+	adminErrArtifactDown  = "artifact_unavailable"
 	adminErrMissingQueue  = "missing_queue"
 	adminErrQueueRequired = "Queue name is required"
 	adminErrMissingJob    = "missing_job"
@@ -51,10 +56,21 @@ const (
 	adminRequestTimeout   = 5 * time.Second
 	adminRequestIDHeader  = "X-Request-Id"
 	adminRequestIDMetaKey = "x-request-id"
+	adminApprovalHeader   = "X-Admin-Approval"
+	adminHeaderType       = "Content-Type"
 	adminPathSeparator    = "/"
+	adminQueryLimit       = "limit"
 	adminScheduleLag      = 2 * time.Minute
 	adminEventsInterval   = 10 * time.Second
 	adminEventsMaxCount   = 25
+	adminEventsReplaySize = 300
+	adminExportFmtJSON    = "json"
+	adminExportFmtCSV     = "csv"
+	adminExportFmtJSONL   = "jsonl"
+	adminParseIntBitSize  = 64
+	adminTarballMimeType  = "application/gzip"
+	adminErrNoArtifact    = "This job source has no downloadable tarball"
+	adminAuditExportMax   = 5000
 )
 
 // AdminGatewayConfig configures the admin HTTP gateway.
@@ -66,12 +82,15 @@ type AdminGatewayConfig struct {
 	GRPCTLS *tls.Config
 
 	// TLSCertFile, TLSKeyFile, and TLSCAFile are required for mTLS.
-	TLSCertFile string
-	TLSKeyFile  string
-	TLSCAFile   string
+	TLSCertFile    string
+	TLSKeyFile     string
+	TLSCAFile      string
+	JobTarballDir  string
+	AuditExportMax int
 
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+	Observability *AdminObservability
 }
 
 // LoadAdminMTLSConfig loads a server TLS config that enforces mTLS.
@@ -132,42 +151,120 @@ func LoadAdminMTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) 
 
 // NewAdminGatewayServer builds an HTTPS gateway that proxies to AdminService.
 func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
-	grpcAddr := cfg.GRPCAddr
-	if grpcAddr == "" {
-		grpcAddr = adminDefaultGRPCAddr
-	}
-
-	httpAddr := cfg.HTTPAddr
-	if httpAddr == "" {
-		httpAddr = adminDefaultHTTPAddr
-	}
+	grpcAddr, httpAddr := adminGatewayAddresses(cfg)
 
 	tlsConfig, err := LoadAdminMTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSCAFile)
 	if err != nil {
 		return nil, err
 	}
 
-	dialOpts := []grpc.DialOption{}
-	if cfg.GRPCTLS != nil {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(cfg.GRPCTLS)))
-	} else {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := newAdminGatewayConnection(grpcAddr, cfg)
+	if err != nil {
+		return nil, err
 	}
 
-	conn, err := grpc.NewClient(grpcAddr, dialOpts...)
+	observability := adminGatewayObservability(cfg.Observability)
+	handler := newAdminGatewayHandler(
+		workerpb.NewAdminServiceClient(conn),
+		observability,
+		cfg.JobTarballDir,
+		cfg.AuditExportMax,
+	)
+
+	server := &http.Server{
+		Addr:         httpAddr,
+		Handler:      observability.Middleware(newAdminGatewayMux(handler)),
+		TLSConfig:    tlsConfig,
+		ReadTimeout:  defaultDuration(cfg.ReadTimeout, adminDefaultReadTime),
+		WriteTimeout: defaultDuration(cfg.WriteTimeout, adminDefaultWriteTime),
+	}
+	registerAdminGatewayConnClose(server, conn)
+
+	return server, nil
+}
+
+func newAdminGatewayConnection(grpcAddr string, cfg AdminGatewayConfig) (*grpc.ClientConn, error) {
+	conn, err := grpc.NewClient(grpcAddr, adminGatewayDialOptions(cfg)...)
 	if err != nil {
 		return nil, ewrap.Wrap(err, "dial admin gRPC")
 	}
 
-	client := workerpb.NewAdminServiceClient(conn)
-	handler := &adminGatewayHandler{client: client}
+	return conn, nil
+}
 
+func adminGatewayObservability(observability *AdminObservability) *AdminObservability {
+	if observability != nil {
+		return observability
+	}
+
+	return NewAdminObservability()
+}
+
+func registerAdminGatewayConnClose(server *http.Server, conn *grpc.ClientConn) {
+	server.RegisterOnShutdown(func() {
+		closeErr := conn.Close()
+		if closeErr != nil {
+			_ = closeErr
+		}
+	})
+}
+
+func adminGatewayAddresses(cfg AdminGatewayConfig) (grpcAddr, httpAddr string) {
+	grpcAddr = cfg.GRPCAddr
+	if grpcAddr == "" {
+		grpcAddr = adminDefaultGRPCAddr
+	}
+
+	httpAddr = cfg.HTTPAddr
+	if httpAddr == "" {
+		httpAddr = adminDefaultHTTPAddr
+	}
+
+	return grpcAddr, httpAddr
+}
+
+func adminGatewayDialOptions(cfg AdminGatewayConfig) []grpc.DialOption {
+	if cfg.GRPCTLS != nil {
+		return []grpc.DialOption{
+			grpc.WithTransportCredentials(credentials.NewTLS(cfg.GRPCTLS)),
+		}
+	}
+
+	return []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+}
+
+func newAdminGatewayHandler(
+	client workerpb.AdminServiceClient,
+	observability *AdminObservability,
+	jobTarballDir string,
+	auditExportMax int,
+) *adminGatewayHandler {
+	limit := auditExportMax
+	if limit <= 0 {
+		limit = adminAuditExportMax
+	}
+
+	return &adminGatewayHandler{
+		client:         client,
+		eventBuffer:    newAdminEventBuffer(adminEventsReplaySize),
+		observability:  observability,
+		artifacts:      newAdminArtifactStore(jobTarballDir),
+		auditExportMax: limit,
+	}
+}
+
+func newAdminGatewayMux(handler *adminGatewayHandler) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/admin/v1/health", handler.handleHealth)
 	mux.HandleFunc("/admin/v1/overview", handler.handleOverview)
 	mux.HandleFunc("/admin/v1/queues", handler.handleQueues)
 	mux.HandleFunc("/admin/v1/queues/", handler.handleQueue)
 	mux.HandleFunc("/admin/v1/jobs/events", handler.handleJobEvents)
+	mux.HandleFunc("/admin/v1/audit/export", handler.handleAuditExport)
+	mux.HandleFunc("/admin/v1/audit", handler.handleAudit)
+	mux.HandleFunc("/admin/v1/metrics", handler.handleMetrics)
 	mux.HandleFunc("/admin/v1/jobs", handler.handleJobs)
 	mux.HandleFunc("/admin/v1/jobs/", handler.handleJob)
 	mux.HandleFunc("/admin/v1/schedules", handler.handleSchedules)
@@ -183,25 +280,15 @@ func NewAdminGatewayServer(cfg AdminGatewayConfig) (*http.Server, error) {
 	mux.HandleFunc("/admin/v1/dlq/replay", handler.handleReplay)
 	mux.HandleFunc("/admin/v1/dlq/replay/ids", handler.handleReplayIDs)
 
-	server := &http.Server{
-		Addr:         httpAddr,
-		Handler:      mux,
-		TLSConfig:    tlsConfig,
-		ReadTimeout:  defaultDuration(cfg.ReadTimeout, adminDefaultReadTime),
-		WriteTimeout: defaultDuration(cfg.WriteTimeout, adminDefaultWriteTime),
-	}
-	server.RegisterOnShutdown(func() {
-		err := conn.Close()
-		if err != nil {
-			_ = err
-		}
-	})
-
-	return server, nil
+	return mux
 }
 
 type adminGatewayHandler struct {
-	client workerpb.AdminServiceClient
+	client         workerpb.AdminServiceClient
+	eventBuffer    *adminEventBuffer
+	observability  *AdminObservability
+	artifacts      adminArtifactStore
+	auditExportMax int
 }
 
 func (h *adminGatewayHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -608,6 +695,20 @@ func (h *adminGatewayHandler) handleJob(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if before, ok := strings.CutSuffix(path, "/artifact/meta"); ok {
+		name := strings.TrimSuffix(before, adminPathSeparator)
+		h.handleJobArtifactMeta(w, r, name)
+
+		return
+	}
+
+	if before, ok := strings.CutSuffix(path, "/artifact"); ok {
+		name := strings.TrimSuffix(before, adminPathSeparator)
+		h.handleJobArtifact(w, r, name)
+
+		return
+	}
+
 	if before, ok := strings.CutSuffix(path, "/run"); ok {
 		name := strings.TrimSuffix(before, adminPathSeparator)
 		h.handleJobRun(w, r, name)
@@ -697,6 +798,170 @@ func (h *adminGatewayHandler) handleJobRun(w http.ResponseWriter, r *http.Reques
 	)
 }
 
+func (h *adminGatewayHandler) handleJobArtifactMeta(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	job, reqID, err := h.fetchJobForRequest(r, w, name)
+	if err != nil {
+		return
+	}
+
+	artifact, err := h.artifacts.Resolve(job)
+	if err != nil {
+		writeAdminArtifactError(w, reqID, err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminJobArtifactMetaResponse{Artifact: artifact})
+}
+
+func (h *adminGatewayHandler) handleJobArtifact(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	job, reqID, err := h.fetchJobForRequest(r, w, name)
+	if err != nil {
+		return
+	}
+
+	artifact, err := h.artifacts.Resolve(job)
+	if err != nil {
+		writeAdminArtifactError(w, reqID, err)
+
+		return
+	}
+
+	if artifact.RedirectURL != "" {
+		http.Redirect(w, r, artifact.RedirectURL, http.StatusTemporaryRedirect)
+
+		return
+	}
+
+	file, err := artifact.Reader.OpenFile(artifact.LocalPath)
+	if err != nil {
+		writeAdminArtifactError(w, reqID, ewrap.Wrap(err, "open artifact file"))
+
+		return
+	}
+
+	defer func() {
+		closeErr := file.Close()
+		if closeErr != nil {
+			log.Printf("admin gateway artifact close request_id=%s err=%v", reqID, closeErr)
+		}
+	}()
+
+	stat, err := file.Stat()
+	if err != nil {
+		writeAdminArtifactError(w, reqID, ewrap.Wrap(err, "stat artifact file"))
+
+		return
+	}
+
+	if !stat.Mode().IsRegular() {
+		writeAdminError(w, http.StatusBadRequest, adminErrArtifactDown, "Artifact is not a regular file", reqID)
+
+		return
+	}
+
+	w.Header().Set(adminHeaderType, adminTarballMimeType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Disposition", contentDispositionFilename(artifact.Filename))
+
+	if artifact.SHA256 != "" {
+		w.Header().Set("X-Tarball-Sha256", artifact.SHA256)
+	}
+
+	http.ServeContent(w, r, artifact.Filename, stat.ModTime(), file)
+}
+
+func (h *adminGatewayHandler) fetchJobForRequest(
+	r *http.Request,
+	w http.ResponseWriter,
+	name string,
+) (*workerpb.Job, string, error) {
+	reqID := requestID(r, w)
+
+	decoded, err := decodeAdminJobName(name)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrInvalidJob, adminErrInvalidJobMsg, reqID)
+
+		return nil, reqID, err
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.GetJob(ctx, &workerpb.GetJobRequest{Name: decoded})
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return nil, reqID, err
+	}
+
+	return resp.GetJob(), reqID, nil
+}
+
+func writeAdminArtifactError(w http.ResponseWriter, requestID string, err error) {
+	if err == nil {
+		writeAdminError(w, http.StatusBadRequest, adminErrArtifactDown, "Artifact is unavailable", requestID)
+
+		return
+	}
+
+	if errors.Is(err, ErrAdminJobTarballPathRequired) || errors.Is(err, ErrAdminJobTarballURLRequired) {
+		writeAdminError(w, http.StatusBadRequest, adminErrArtifactDown, err.Error(), requestID)
+
+		return
+	}
+
+	if errors.Is(err, os.ErrNotExist) {
+		writeAdminError(w, http.StatusNotFound, "artifact_not_found", "Artifact not found", requestID)
+
+		return
+	}
+
+	if errors.Is(err, ErrAdminUnsupported) {
+		writeAdminError(w, http.StatusBadRequest, "artifact_unsupported", adminErrNoArtifact, requestID)
+
+		return
+	}
+
+	writeAdminError(w, http.StatusBadGateway, adminErrArtifactDown, err.Error(), requestID)
+}
+
+func decodeAdminJobName(raw string) (string, error) {
+	decoded, err := url.PathUnescape(strings.TrimSpace(raw))
+	if err != nil {
+		return "", ewrap.Wrap(err, "decode job name")
+	}
+
+	if decoded == "" {
+		return "", ErrAdminJobNameRequired
+	}
+
+	return decoded, nil
+}
+
+func contentDispositionFilename(filename string) string {
+	name := strings.TrimSpace(filename)
+	if name == "" {
+		name = "artifact.tar.gz"
+	}
+
+	return fmt.Sprintf(`attachment; filename="%s"`, name)
+}
+
 func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
@@ -705,7 +970,7 @@ func (h *adminGatewayHandler) handleDLQ(w http.ResponseWriter, r *http.Request) 
 	}
 
 	queryValues := r.URL.Query()
-	limit := parseIntParam(queryValues.Get("limit"), defaultAdminScheduleEventLimit)
+	limit := parseIntParam(queryValues.Get(adminQueryLimit), defaultAdminScheduleEventLimit)
 	offset := parseOffsetParam(queryValues.Get("offset"))
 	queueFilter := strings.TrimSpace(queryValues.Get("queue"))
 	handlerFilter := strings.TrimSpace(queryValues.Get("handler"))
@@ -860,7 +1125,7 @@ func (h *adminGatewayHandler) handleReplay(w http.ResponseWriter, r *http.Reques
 
 	reqID := requestID(r, w)
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
-	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+	ctx = withAdminMetadata(ctx, r, reqID)
 
 	defer cancel()
 
@@ -901,7 +1166,7 @@ func (h *adminGatewayHandler) handleReplayIDs(w http.ResponseWriter, r *http.Req
 
 	reqID := requestID(r, w)
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
-	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+	ctx = withAdminMetadata(ctx, r, reqID)
 
 	defer cancel()
 
@@ -981,6 +1246,176 @@ func (h *adminGatewayHandler) handleJobEvents(w http.ResponseWriter, r *http.Req
 	writeAdminJSON(w, http.StatusOK, adminJobEventsJSON{Events: events})
 }
 
+func (h *adminGatewayHandler) handleAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	queryValues := r.URL.Query()
+	limit := parseIntParam(queryValues.Get(adminQueryLimit), defaultAdminAuditEventLimit)
+	action := strings.TrimSpace(queryValues.Get("action"))
+	target := strings.TrimSpace(queryValues.Get("target"))
+
+	events, err := h.fetchAuditEvents(r.Context(), requestID(r, w), action, target, limit)
+	if err != nil {
+		writeAdminGRPCError(w, requestID(r, w), err)
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, adminAuditEventsJSON{Events: events})
+}
+
+func (h *adminGatewayHandler) handleAuditExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	reqID := requestID(r, w)
+	queryValues := r.URL.Query()
+	action := strings.TrimSpace(queryValues.Get("action"))
+	target := strings.TrimSpace(queryValues.Get("target"))
+	format := parseAuditExportFormat(queryValues.Get("format"))
+	limit := parseIntParam(queryValues.Get(adminQueryLimit), defaultAdminAuditEventLimit)
+
+	limit = min(limit, h.auditExportMax)
+	if limit <= 0 {
+		limit = defaultAdminAuditEventLimit
+	}
+
+	events, err := h.fetchAuditEvents(r.Context(), reqID, action, target, limit)
+	if err != nil {
+		writeAdminGRPCError(w, reqID, err)
+
+		return
+	}
+
+	writeAuditExportHeaders(w, format)
+
+	switch format {
+	case adminExportFmtJSON:
+		writeAuditExportJSON(w, events)
+	case adminExportFmtCSV:
+		writeAuditExportCSV(w, events)
+	default:
+		writeAuditExportJSONL(w, events)
+	}
+}
+
+func parseAuditExportFormat(raw string) string {
+	format := strings.ToLower(strings.TrimSpace(raw))
+	switch format {
+	case adminExportFmtJSON, adminExportFmtCSV:
+		return format
+	default:
+		return adminExportFmtJSONL
+	}
+}
+
+func writeAuditExportHeaders(w http.ResponseWriter, format string) {
+	filename := fmt.Sprintf("admin-audit-%d.%s", time.Now().UTC().Unix(), format)
+
+	var contentType string
+
+	switch format {
+	case adminExportFmtJSON:
+		contentType = "application/json"
+	case adminExportFmtCSV:
+		contentType = "text/csv"
+	default:
+		contentType = "application/x-ndjson"
+	}
+
+	w.Header().Set(adminHeaderType, contentType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Disposition", contentDispositionFilename(filename))
+}
+
+func writeAuditExportJSON(w http.ResponseWriter, events []adminAuditEventJSON) {
+	writeAdminJSON(w, http.StatusOK, adminAuditEventsJSON{Events: events})
+}
+
+func writeAuditExportJSONL(w http.ResponseWriter, events []adminAuditEventJSON) {
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	for _, event := range events {
+		err := encoder.Encode(event)
+		if err != nil {
+			log.Printf("admin gateway audit export jsonl encode: %v", err)
+
+			return
+		}
+	}
+}
+
+func writeAuditExportCSV(w http.ResponseWriter, events []adminAuditEventJSON) {
+	w.WriteHeader(http.StatusOK)
+
+	writer := csv.NewWriter(w)
+
+	err := writer.Write([]string{
+		"at",
+		"actor",
+		"request_id",
+		"action",
+		"target",
+		"status",
+		"payload_hash",
+		"detail",
+	})
+	if err != nil {
+		log.Printf("admin gateway audit export csv header: %v", err)
+
+		return
+	}
+
+	for _, event := range events {
+		err = writer.Write([]string{
+			strconv.FormatInt(event.AtMs, 10),
+			event.Actor,
+			event.RequestID,
+			event.Action,
+			event.Target,
+			event.Status,
+			event.PayloadHash,
+			event.Detail,
+		})
+		if err != nil {
+			log.Printf("admin gateway audit export csv row: %v", err)
+
+			return
+		}
+	}
+
+	writer.Flush()
+
+	err = writer.Error()
+	if err != nil {
+		log.Printf("admin gateway audit export csv flush: %v", err)
+	}
+}
+
+func (h *adminGatewayHandler) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
+
+		return
+	}
+
+	if h == nil || h.observability == nil {
+		writeAdminJSON(w, http.StatusOK, AdminObservabilitySnapshot{})
+
+		return
+	}
+
+	writeAdminJSON(w, http.StatusOK, h.observability.Snapshot())
+}
+
 func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
@@ -995,7 +1430,7 @@ func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set(adminHeaderType, "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -1006,9 +1441,17 @@ func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Reques
 	ticker := time.NewTicker(adminEventsInterval)
 	defer ticker.Stop()
 
-	writer := newAdminEventWriter(w, flusher)
+	writer := newAdminEventWriter(w, flusher, h.eventBuffer)
 
-	if !h.emitAdminEvents(ctx, reqID, writer) {
+	lastEventID, hasLastEventID := parseLastEventID(r)
+	if hasLastEventID {
+		ok = writeAdminEventOrError(writer, writer.ReplayFrom(lastEventID))
+		if !ok {
+			return
+		}
+	}
+
+	if !hasLastEventID && !h.emitAdminEvents(ctx, reqID, writer) {
 		return
 	}
 
@@ -1024,9 +1467,31 @@ func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+func parseLastEventID(r *http.Request) (int64, bool) {
+	if r == nil {
+		return 0, false
+	}
+
+	header := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
+	if header == "" {
+		header = strings.TrimSpace(r.URL.Query().Get("lastEventId"))
+	}
+
+	if header == "" {
+		return 0, false
+	}
+
+	value, err := strconv.ParseInt(header, 10, adminParseIntBitSize)
+	if err != nil || value <= 0 {
+		return 0, false
+	}
+
+	return value, true
+}
+
 func parseAdminEventQuery(r *http.Request, defaultLimit int) (string, int) {
 	queryValues := r.URL.Query()
-	limit := parseIntParam(queryValues.Get("limit"), defaultLimit)
+	limit := parseIntParam(queryValues.Get(adminQueryLimit), defaultLimit)
 	name := strings.TrimSpace(queryValues.Get("name"))
 
 	return name, limit
@@ -1086,6 +1551,35 @@ func (h *adminGatewayHandler) fetchJobEvents(
 	return events, nil
 }
 
+func (h *adminGatewayHandler) fetchAuditEvents(
+	ctx context.Context,
+	reqID string,
+	action string,
+	target string,
+	limit int,
+) ([]adminAuditEventJSON, error) {
+	eventsCtx, cancel := context.WithTimeout(ctx, adminRequestTimeout)
+	eventsCtx = metadata.AppendToOutgoingContext(eventsCtx, adminRequestIDMetaKey, reqID)
+
+	defer cancel()
+
+	resp, err := h.client.ListAuditEvents(eventsCtx, &workerpb.ListAuditEventsRequest{
+		Action: action,
+		Target: target,
+		Limit:  clampLimit32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]adminAuditEventJSON, 0, len(resp.GetEvents()))
+	for _, event := range resp.GetEvents() {
+		events = append(events, adminAuditEventFromProto(event))
+	}
+
+	return events, nil
+}
+
 func (h *adminGatewayHandler) emitAdminEvents(
 	ctx context.Context,
 	reqID string,
@@ -1103,6 +1597,10 @@ func (h *adminGatewayHandler) emitAdminEvents(
 		return false
 	}
 
+	if !writeAdminEventOrError(writer, h.sendAuditEventsEvent(ctx, reqID, writer)) {
+		return false
+	}
+
 	return writer.Write("heartbeat", map[string]any{"ts": time.Now().UnixMilli()}) == nil
 }
 
@@ -1117,10 +1615,11 @@ func writeAdminEventOrError(writer *adminEventWriter, err error) bool {
 type adminEventWriter struct {
 	writer  io.Writer
 	flusher http.Flusher
+	buffer  *adminEventBuffer
 }
 
-func newAdminEventWriter(writer io.Writer, flusher http.Flusher) *adminEventWriter {
-	return &adminEventWriter{writer: writer, flusher: flusher}
+func newAdminEventWriter(writer io.Writer, flusher http.Flusher, buffer *adminEventBuffer) *adminEventWriter {
+	return &adminEventWriter{writer: writer, flusher: flusher, buffer: buffer}
 }
 
 func (w *adminEventWriter) Write(eventName string, payload any) error {
@@ -1129,7 +1628,17 @@ func (w *adminEventWriter) Write(eventName string, payload any) error {
 		return ewrap.Wrap(err, "marshal event payload").WithMetadata("event", eventName)
 	}
 
-	_, err = fmt.Fprintf(w.writer, "event: %s\ndata: %s\n\n", eventName, data)
+	id := int64(0)
+	if w.buffer != nil {
+		id = w.buffer.Append(eventName, data)
+	}
+
+	if id > 0 {
+		_, err = fmt.Fprintf(w.writer, "id: %d\nevent: %s\ndata: %s\n\n", id, eventName, data)
+	} else {
+		_, err = fmt.Fprintf(w.writer, "event: %s\ndata: %s\n\n", eventName, data)
+	}
+
 	if err != nil {
 		return ewrap.Wrap(err, "write event payload").WithMetadata("event", eventName)
 	}
@@ -1137,6 +1646,106 @@ func (w *adminEventWriter) Write(eventName string, payload any) error {
 	w.flusher.Flush()
 
 	return nil
+}
+
+func (w *adminEventWriter) ReplayFrom(lastID int64) error {
+	if w.buffer == nil {
+		return nil
+	}
+
+	events := w.buffer.EventsSince(lastID)
+	for _, event := range events {
+		_, err := fmt.Fprintf(
+			w.writer,
+			"id: %d\nevent: %s\ndata: %s\n\n",
+			event.ID,
+			event.Name,
+			event.Data,
+		)
+		if err != nil {
+			return ewrap.Wrap(err, "write replay event payload").WithMetadata("event", event.Name)
+		}
+	}
+
+	if len(events) > 0 {
+		w.flusher.Flush()
+	}
+
+	return nil
+}
+
+type adminEventMessage struct {
+	ID   int64
+	Name string
+	Data []byte
+}
+
+type adminEventBuffer struct {
+	mu     sync.Mutex
+	max    int
+	nextID int64
+	events []adminEventMessage
+}
+
+func newAdminEventBuffer(maxEvents int) *adminEventBuffer {
+	if maxEvents <= 0 {
+		maxEvents = adminEventsReplaySize
+	}
+
+	return &adminEventBuffer{
+		max:    maxEvents,
+		nextID: 1,
+		events: make([]adminEventMessage, 0, maxEvents),
+	}
+}
+
+func (b *adminEventBuffer) Append(name string, data []byte) int64 {
+	if b == nil {
+		return 0
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	id := b.nextID
+	b.nextID++
+
+	entry := adminEventMessage{
+		ID:   id,
+		Name: name,
+		Data: append([]byte(nil), data...),
+	}
+
+	b.events = append(b.events, entry)
+	if len(b.events) > b.max {
+		b.events = b.events[len(b.events)-b.max:]
+	}
+
+	return id
+}
+
+func (b *adminEventBuffer) EventsSince(lastID int64) []adminEventMessage {
+	if b == nil {
+		return nil
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	events := make([]adminEventMessage, 0, len(b.events))
+	for _, entry := range b.events {
+		if entry.ID <= lastID {
+			continue
+		}
+
+		events = append(events, adminEventMessage{
+			ID:   entry.ID,
+			Name: entry.Name,
+			Data: append([]byte(nil), entry.Data...),
+		})
+	}
+
+	return events
 }
 
 func (h *adminGatewayHandler) sendOverviewEvent(ctx context.Context, reqID string, writer *adminEventWriter) error {
@@ -1214,6 +1823,15 @@ func (h *adminGatewayHandler) sendJobEventsEvent(ctx context.Context, reqID stri
 	}
 
 	return writer.Write("job_events", adminJobEventsJSON{Events: events})
+}
+
+func (h *adminGatewayHandler) sendAuditEventsEvent(ctx context.Context, reqID string, writer *adminEventWriter) error {
+	events, err := h.fetchAuditEvents(ctx, reqID, "", "", adminEventsMaxCount)
+	if err != nil {
+		return err
+	}
+
+	return writer.Write("audit_events", adminAuditEventsJSON{Events: events})
 }
 
 func (h *adminGatewayHandler) handleSchedules(w http.ResponseWriter, r *http.Request) {
@@ -1485,7 +2103,7 @@ func handleRunAction(
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
-	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+	ctx = withAdminMetadata(ctx, r, reqID)
 
 	defer cancel()
 
@@ -1497,6 +2115,20 @@ func handleRunAction(
 	}
 
 	writeAdminJSON(w, http.StatusOK, response(taskID))
+}
+
+func withAdminMetadata(ctx context.Context, r *http.Request, reqID string) context.Context {
+	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+	if r == nil {
+		return ctx
+	}
+
+	approval := strings.TrimSpace(r.Header.Get(adminApprovalHeader))
+	if approval != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, adminApprovalMetaKey, approval)
+	}
+
+	return ctx
 }
 
 type adminOverviewJSON struct {
@@ -1542,6 +2174,10 @@ type adminJobResponse struct {
 	Job adminJobJSON `json:"job"`
 }
 
+type adminJobArtifactMetaResponse struct {
+	Artifact adminJobArtifactJSON `json:"artifact"`
+}
+
 type adminJobDeleteResponse struct {
 	Deleted bool `json:"deleted"`
 }
@@ -1564,6 +2200,10 @@ type adminScheduleEventsJSON struct {
 
 type adminJobEventsJSON struct {
 	Events []jobEventJSON `json:"events"`
+}
+
+type adminAuditEventsJSON struct {
+	Events []adminAuditEventJSON `json:"events"`
 }
 
 type adminQueueWeightRequest struct {
@@ -1624,6 +2264,18 @@ type adminJobJSON struct {
 	UpdatedAtMs    int64    `json:"updatedAtMs"`
 }
 
+type adminJobArtifactJSON struct {
+	Name         string           `json:"name"`
+	Source       string           `json:"source"`
+	Downloadable bool             `json:"downloadable"`
+	RedirectURL  string           `json:"redirectUrl,omitempty"`
+	Filename     string           `json:"filename,omitempty"`
+	SizeBytes    int64            `json:"sizeBytes,omitempty"`
+	SHA256       string           `json:"sha256,omitempty"`
+	LocalPath    string           `json:"-"`
+	Reader       *sectools.Client `json:"-"`
+}
+
 type scheduleFactoryJSON struct {
 	Name    string `json:"name"`
 	Durable bool   `json:"durable"`
@@ -1662,6 +2314,18 @@ type jobEventJSON struct {
 	Result       string            `json:"result,omitempty"`
 	Error        string            `json:"error,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
+}
+
+type adminAuditEventJSON struct {
+	AtMs        int64             `json:"atMs"`
+	Actor       string            `json:"actor"`
+	RequestID   string            `json:"requestId"`
+	Action      string            `json:"action"`
+	Target      string            `json:"target"`
+	Status      string            `json:"status"`
+	PayloadHash string            `json:"payloadHash"`
+	Detail      string            `json:"detail"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 type adminScheduleCreateRequest struct {
@@ -1762,7 +2426,7 @@ func writeAdminJSON(w http.ResponseWriter, statusCode int, payload any) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(adminHeaderType, "application/json")
 	w.WriteHeader(statusCode)
 
 	_, err = w.Write(data)
@@ -2002,6 +2666,24 @@ func jobEventFromProto(event *workerpb.JobEvent) jobEventJSON {
 		Result:       event.GetResult(),
 		Error:        event.GetError(),
 		Metadata:     event.GetMetadata(),
+	}
+}
+
+func adminAuditEventFromProto(event *workerpb.AuditEvent) adminAuditEventJSON {
+	if event == nil {
+		return adminAuditEventJSON{}
+	}
+
+	return adminAuditEventJSON{
+		AtMs:        event.GetAtMs(),
+		Actor:       event.GetActor(),
+		RequestID:   event.GetRequestId(),
+		Action:      event.GetAction(),
+		Target:      event.GetTarget(),
+		Status:      event.GetStatus(),
+		PayloadHash: event.GetPayloadHash(),
+		Detail:      event.GetDetail(),
+		Metadata:    event.GetMetadata(),
 	}
 }
 

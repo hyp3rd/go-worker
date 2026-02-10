@@ -81,6 +81,18 @@ export type JobEvent = {
   metadata?: Record<string, string>;
 };
 
+export type AdminAuditEvent = {
+  atMs: number;
+  actor: string;
+  requestId: string;
+  action: string;
+  target: string;
+  status: string;
+  payloadHash?: string;
+  detail: string;
+  metadata?: Record<string, string>;
+};
+
 export type OverviewStats = {
   activeWorkers: number;
   queuedTasks: number;
