@@ -60,6 +60,22 @@ gateway audit records with optional filters.
       - `action`: optional action filter
       - `target`: optional target filter
 
+## Operations timeline
+
+Overview includes a single timeline that merges:
+
+- Job run events
+- Schedule run events
+- Audit events (including queue and DLQ actions)
+
+Features:
+
+- Live updates via SSE (`/api/events`) with polling fallback.
+- Filters by source/status/time window + text search.
+- Pagination + page-size selector.
+- Deep-link to per-run job detail from timeline rows.
+- Timeline filter state persisted in browser `localStorage`.
+
 ## Crash-test preset
 
 The Jobs page includes a "Crash-test preset" button that fills the form with a
