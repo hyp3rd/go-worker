@@ -36,8 +36,7 @@ workerctl:
 	go build -trimpath -o bin/workerctl ./cmd/workerctl
 
 update-deps:
-	go get -v -u ./...
-	go mod tidy
+	go get -u -t ./... && go mod tidy -v && go mod verify
 
 init:
 	./setup-project.sh --module $(shell grep "^module " go.mod | awk '{print $$2}')
