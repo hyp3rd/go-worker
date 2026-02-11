@@ -1,5 +1,6 @@
 include .project-settings.env
 
+REPO_ROOT = $(shell git rev-parse --show-toplevel)
 GOLANGCI_LINT_VERSION ?= v2.8.0
 BUF_VERSION ?= v1.65.0
 GO_VERSION ?= 1.25.7
@@ -139,7 +140,7 @@ update-toolchain:
 	@echo "Updating staticcheck...\n"
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 
-lint: prepare-toolchain
+lint: prepare-toolchain build-frontend lint-frontend
 	@echo "Proto lint/format (if enabled and buf is installed)..."
 	@if [ "$(PROTO_ENABLED)" = "true" ] && command -v buf >/dev/null 2>&1; then \
 		buf lint; \
@@ -179,6 +180,12 @@ sec:
 
 	@echo "\nRunning gosec..."
 	gosec -exclude-generated -exclude-dir=__examples/* ./...
+
+lint-frontend:
+	cd $(REPO_ROOT)/admin-ui && npm run lint && cd $(REPO_ROOT)
+
+build-frontend:
+	cd $(REPO_ROOT)/admin-ui && npm run build && cd $(REPO_ROOT)
 
 start-dev:
 	docker compose -f compose.admin.yaml down && docker compose -f compose.admin.yaml up --build --force-recreate --remove-orphans
