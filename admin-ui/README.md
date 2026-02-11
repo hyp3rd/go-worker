@@ -76,6 +76,18 @@ Features:
 - Deep-link to per-run job detail from timeline rows.
 - Timeline filter state persisted in browser `localStorage`.
 
+## UI continuity and diagnostics
+
+- Queues, Schedules, and Jobs retain filter/page/page-size state across reloads.
+- DLQ filter and pagination state is URL-backed (`/dlq?...`) for deep-linking.
+- Error banners surface structured diagnostics when available:
+      - mapped gateway/API error code
+      - request ID for log correlation
+      - recovery hint
+- API routes normalize failure payloads as:
+      - `error` (string message)
+      - `errorDetail` (`message`, `code`, `requestId`, `hint`)
+
 ## Crash-test preset
 
 The Jobs page includes a "Crash-test preset" button that fills the form with a

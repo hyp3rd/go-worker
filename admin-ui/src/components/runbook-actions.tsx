@@ -3,7 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { AdminAuditEvent } from "@/lib/types";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
+import { NoticeBanner } from "@/components/notice-banner";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
 
 type RunbookActionsProps = {
   paused: boolean;
@@ -15,13 +19,6 @@ const replayMax = 1000;
 const auditExportDefault = 500;
 const auditExportMax = 5000;
 type AuditExportFormat = "jsonl" | "json" | "csv";
-
-const formatError = (error: unknown) => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "Action failed";
-};
 
 const maxAuditItems = 20;
 
@@ -35,7 +32,11 @@ const summarizeAction = (action: string) => {
 
 export function RunbookActions({ paused, initialAuditEvents }: RunbookActionsProps) {
   const router = useRouter();
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+    diagnostic?: ErrorDiagnostic;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
   const [auditEvents, setAuditEvents] = useState<AdminAuditEvent[]>(initialAuditEvents);
   const [replayLimit, setReplayLimit] = useState(replayDefault);
@@ -115,13 +116,15 @@ export function RunbookActions({ paused, initialAuditEvents }: RunbookActionsPro
       );
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Action failed");
+        await throwAPIResponseError(res, "Action failed");
       }
 
       const payload = (await res.json()) as { message?: string };
       const detail = payload.message ?? "Action complete";
-      setMessage(detail);
+      setMessage({
+        tone: "success",
+        text: detail,
+      });
       const optimistic: AdminAuditEvent = {
         action,
         status: "ok",
@@ -139,7 +142,12 @@ export function RunbookActions({ paused, initialAuditEvents }: RunbookActionsPro
         router.refresh();
       });
     } catch (error) {
-      setMessage(formatError(error));
+      const diagnostic = parseErrorDiagnostic(error, "Action failed");
+      setMessage({
+        tone: "error",
+        text: diagnostic.message,
+        diagnostic,
+      });
     }
   };
 
@@ -266,7 +274,13 @@ export function RunbookActions({ paused, initialAuditEvents }: RunbookActionsPro
           <span className="text-[11px] text-muted">max {auditExportMax}</span>
         </div>
       </div>
-      {message ? <p className="text-xs text-muted">{message}</p> : null}
+      {message ? (
+        <NoticeBanner
+          tone={message.tone}
+          text={message.text}
+          diagnostic={message.diagnostic}
+        />
+      ) : null}
       <div className="rounded-2xl border border-soft bg-white/60 p-3">
         <p className="text-xs uppercase tracking-[0.2em] text-muted">
           audit trail

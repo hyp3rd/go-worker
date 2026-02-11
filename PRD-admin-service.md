@@ -205,11 +205,13 @@ Worker service job runner (containerized):
         - SSE + polling fallback for live updates.
         - Overview now includes a unified operations timeline (jobs + schedules + audit/queue/DLQ actions) with filters, paging, and run deep-links.
         - Timeline filter state persists locally between page visits.
+        - Section state persistence is implemented for Queues, Schedules, Jobs, and DLQ (DLQ via URL query params).
+        - Action/API failures now surface structured diagnostics in-page (mapped cause hints + request ID when available).
+        - Gateway-facing Next API routes now emit a normalized error envelope (`error` + `errorDetail`) to keep diagnostics consistent across UI sections.
 - **Partial / gaps**
         - Overview analytics are snapshot-focused; no built-in trend charts across day/week/month windows for all domains.
         - Timeline is implemented, but correlation is still basic (no causal graph/grouping by request/task chain).
         - Some high-value admin workflows are still split across pages (no global command palette / cross-page quick actions).
-        - State persistence is not yet consistent across all sections (currently implemented for timeline filters/page size).
         - Artifact handling is source-aware but still operationally coupled to environment mounts for local tarballs.
 
 ## Gap Analysis (Production Focus)

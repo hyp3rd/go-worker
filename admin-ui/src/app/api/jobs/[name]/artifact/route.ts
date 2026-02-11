@@ -1,5 +1,6 @@
 import { Readable } from "stream";
 import { NextResponse, type NextRequest } from "next/server";
+import { apiErrorResponse } from "@/lib/api-errors";
 import { gatewayRawRequest, gatewayRequest } from "@/lib/gateway";
 
 export const runtime = "nodejs";
@@ -78,10 +79,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     return response;
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message ?? "artifact_download_failed" },
-      { status: 502 }
-    );
+    return apiErrorResponse(error, "artifact_download_failed", 502);
   }
 }
 

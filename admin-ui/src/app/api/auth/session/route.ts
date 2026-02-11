@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { apiCodeErrorResponse } from "@/lib/api-errors";
 import { requireSession } from "@/lib/api-auth";
 import {
   getAdminPassword,
@@ -20,12 +21,16 @@ export async function GET(request: NextRequest) {
 
   const password = getAdminPassword();
   if (!password) {
-    return NextResponse.json({ error: "admin_password_missing" }, { status: 500 });
+    return apiCodeErrorResponse(
+      "failedprecondition",
+      "admin_password_missing",
+      500
+    );
   }
 
   const token = request.cookies.get(sessionCookieName)?.value ?? "";
   if (!token || !(await verifySessionToken(token, password))) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return apiCodeErrorResponse("unauthenticated", "unauthorized", 401);
   }
 
   const refreshed = await refreshSessionTokenIfNeeded(token, password);

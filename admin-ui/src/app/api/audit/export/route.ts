@@ -1,5 +1,6 @@
 import { Readable } from "stream";
 import { NextResponse, type NextRequest } from "next/server";
+import { apiErrorResponse } from "@/lib/api-errors";
 import { gatewayRawRequest } from "@/lib/gateway";
 
 export const runtime = "nodejs";
@@ -71,10 +72,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message ?? "audit_export_failed" },
-      { status: 502 }
-    );
+    return apiErrorResponse(error, "audit_export_failed", 502);
   }
 }
 

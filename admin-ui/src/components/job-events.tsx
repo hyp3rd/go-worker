@@ -5,7 +5,11 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RelativeTime } from "@/components/relative-time";
 import { Pagination } from "@/components/pagination";
+import { NoticeBanner } from "@/components/notice-banner";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
 import { formatDuration } from "@/lib/format";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
 import type { JobEvent } from "@/lib/types";
 
 const refreshIntervalMs = 15000;
@@ -108,6 +112,11 @@ const mergeEventList = (primary: JobEvent[], secondary: JobEvent[]) => {
 export function JobEvents({ events }: { events: JobEvent[] }) {
   const [items, setItems] = useState<JobEvent[]>(events);
   const [nowMs, setNowMs] = useState(0);
+  const [message, setMessage] = useState<{
+    tone: "error" | "info";
+    text: string;
+    diagnostic?: ErrorDiagnostic;
+  } | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [queueFilter, setQueueFilter] = useState("all");
@@ -147,14 +156,20 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
           cache: "no-store",
         });
         if (!res.ok) {
-          return;
+          await throwAPIResponseError(res, "Failed to load job events");
         }
         const payload = (await res.json()) as { events?: JobEvent[] };
         if (payload?.events) {
           setItems((prev) => mergeEventList(payload.events ?? [], prev));
         }
-      } catch {
-        // ignore polling failures
+        setMessage((current) => (current?.tone === "error" ? null : current));
+      } catch (error) {
+        const diagnostic = parseErrorDiagnostic(error, "Failed to load job events");
+        setMessage({
+          tone: "error",
+          text: diagnostic.message,
+          diagnostic,
+        });
       }
     };
 
@@ -185,6 +200,10 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
         }
         source?.close();
         source = null;
+        setMessage({
+          tone: "info",
+          text: "Live stream disconnected. Falling back to polling.",
+        });
         startPolling();
       };
     };
@@ -349,6 +368,15 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
           <span className="text-slate-500">queued {summary.queued}</span>
         </div>
       </div>
+      {message ? (
+        <div className="mt-3">
+          <NoticeBanner
+            tone={message.tone}
+            text={message.text}
+            diagnostic={message.diagnostic}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-3 rounded-2xl border border-soft bg-white/80 p-3 text-xs text-muted md:grid-cols-[1.2fr_1fr_1fr_1fr]">
         <label className="flex flex-col gap-2">

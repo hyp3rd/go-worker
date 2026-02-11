@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { readAPIErrorMessage } from "@/lib/fetch-api-error";
 import type {
   AdminActionCounters,
   AdminJob,
@@ -42,10 +43,7 @@ async function fetchJson<T>(path: string): Promise<T> {
   if (!res.ok) {
     let detail = "";
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body?.error) {
-        detail = body.error;
-      }
+      detail = await readAPIErrorMessage(res, `Request failed: ${res.status}`);
     } catch {
       // ignore response parse errors
     }
