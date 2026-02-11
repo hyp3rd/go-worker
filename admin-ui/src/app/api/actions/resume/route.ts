@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { apiErrorResponse } from "@/lib/api-errors";
 import { requireSession } from "@/lib/api-auth";
 import { gatewayRequest } from "@/lib/gateway";
 
@@ -21,9 +22,6 @@ export async function POST(request: NextRequest) {
       message: payload.paused ? "Resume requested" : "Durable dequeue resumed",
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message ?? "admin_gateway_unavailable" },
-      { status: 502 }
-    );
+    return apiErrorResponse(error, "admin_gateway_unavailable", 502);
   }
 }

@@ -2,9 +2,14 @@
 
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 import { FilterBar } from "@/components/filters";
+import { NoticeBanner } from "@/components/notice-banner";
 import { Pagination } from "@/components/pagination";
 import { RelativeTime } from "@/components/relative-time";
 import { Table, TableCell, TableRow } from "@/components/table";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
+import { loadSectionState, persistSectionState } from "@/lib/section-state";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
 import type { AdminJob, JobEvent } from "@/lib/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -137,6 +142,32 @@ const statusCounts = (events: JobEvent[]) => {
 const optimisticTTL = 10 * 60 * 1000;
 const refreshIntervalMs = 15000;
 const eventsFetchLimit = 200;
+const jobsStateKey = "workerctl_jobs_state_v1";
+const jobsPageSizes = [5, 10, 25, 50];
+
+type JobsViewState = {
+  query: string;
+  statusFilter: string;
+  page: number;
+  pageSize: number;
+};
+
+const isJobsViewState = (value: unknown): value is JobsViewState => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<JobsViewState>;
+  return (
+    typeof candidate.query === "string" &&
+    typeof candidate.statusFilter === "string" &&
+    typeof candidate.page === "number" &&
+    Number.isFinite(candidate.page) &&
+    candidate.page >= 1 &&
+    typeof candidate.pageSize === "number" &&
+    Number.isFinite(candidate.pageSize) &&
+    jobsPageSizes.includes(candidate.pageSize)
+  );
+};
 
 const mergeEvents = (primary: JobEvent[], secondary: JobEvent[]) => {
   const byId = new Map<string, JobEvent>();
@@ -285,18 +316,29 @@ export function JobsGrid({
   jobs: AdminJob[];
   events?: JobEvent[];
 }) {
+  const initialState = loadSectionState<JobsViewState>(
+    jobsStateKey,
+    {
+      query: "",
+      statusFilter: "all",
+      page: 1,
+      pageSize: 10,
+    },
+    isJobsViewState
+  );
   const router = useRouter();
   const [liveEvents, setLiveEvents] = useState<JobEvent[]>(events);
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState(initialState.query);
+  const [statusFilter, setStatusFilter] = useState(initialState.statusFilter);
   const [message, setMessage] = useState<{
     tone: "success" | "error";
     text: string;
+    diagnostic?: ErrorDiagnostic;
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const [optimisticEvents, setOptimisticEvents] = useState<JobEvent[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(initialState.page);
+  const [pageSize, setPageSize] = useState(initialState.pageSize);
   const { confirm, dialogProps } = useConfirmDialog();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -514,6 +556,15 @@ export function JobsGrid({
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
+  useEffect(() => {
+    persistSectionState<JobsViewState>(jobsStateKey, {
+      query,
+      statusFilter,
+      page,
+      pageSize,
+    });
+  }, [page, pageSize, query, statusFilter]);
+
 
   const resetForm = (job?: AdminJob) => {
     setEditingName(job?.name ?? null);
@@ -669,8 +720,7 @@ export function JobsGrid({
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Job save failed");
+        await throwAPIResponseError(res, "Job save failed");
       }
 
       setMessage({
@@ -681,9 +731,11 @@ export function JobsGrid({
       resetForm();
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Job save failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Job save failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -705,15 +757,16 @@ export function JobsGrid({
         method: "DELETE",
       });
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Job delete failed");
+        await throwAPIResponseError(res, "Job delete failed");
       }
       setMessage({ tone: "success", text: "Job deleted." });
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Job delete failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Job delete failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -755,16 +808,17 @@ export function JobsGrid({
         { method: "POST" }
       );
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Job run failed");
+        await throwAPIResponseError(res, "Job run failed");
       }
       setOptimisticEvents((prev) => mergeEvents(prev, [optimistic]));
       window.dispatchEvent(new CustomEvent("job-run-start", { detail: optimistic }));
       setMessage({ tone: "success", text: "Job enqueued." });
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Job run failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Job run failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -773,14 +827,11 @@ export function JobsGrid({
   return (
     <div className="mt-6 space-y-4">
       {message ? (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${message.tone === "success"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border-rose-200 bg-rose-50 text-rose-800"
-            }`}
-        >
-          {message.text}
-        </div>
+        <NoticeBanner
+          tone={message.tone}
+          text={message.text}
+          diagnostic={message.diagnostic}
+        />
       ) : null}
       <div className="grid gap-3 md:grid-cols-4">
         <div className="rounded-2xl border border-soft bg-[var(--card)] p-4">
@@ -819,6 +870,8 @@ export function JobsGrid({
       <FilterBar
         placeholder="Search job name"
         statusOptions={statusOptions}
+        initialQuery={query}
+        initialStatus={statusFilter}
         onQuery={handleQuery}
         onStatus={handleStatus}
         rightSlot={
@@ -1337,7 +1390,7 @@ export function JobsGrid({
         onNext={() => setPage((prev) => prev + 1)}
         onPrev={() => setPage((prev) => Math.max(1, prev - 1))}
         onPageSizeChange={handlePageSize}
-        pageSizeOptions={[5, 10, 25, 50]}
+        pageSizeOptions={jobsPageSizes}
       />
       <ConfirmDialog {...dialogProps} />
     </div>

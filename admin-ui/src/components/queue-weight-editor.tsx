@@ -3,6 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
+import { NoticeBanner } from "@/components/notice-banner";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
 
 type QueueWeightEditorProps = {
   name: string;
@@ -12,14 +16,21 @@ type QueueWeightEditorProps = {
 export function QueueWeightEditor({ name, weight }: QueueWeightEditorProps) {
   const router = useRouter();
   const [value, setValue] = useState(String(weight));
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+    diagnostic?: ErrorDiagnostic;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
   const { confirm, dialogProps } = useConfirmDialog();
 
   const submit = async () => {
     const parsed = Number(value);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      setMessage("Weight must be a positive number.");
+      setMessage({
+        tone: "error",
+        text: "Weight must be a positive number.",
+      });
       return;
     }
 
@@ -32,14 +43,21 @@ export function QueueWeightEditor({ name, weight }: QueueWeightEditorProps) {
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Failed to update weight");
+        await throwAPIResponseError(res, "Failed to update weight");
       }
 
-      setMessage("Queue weight updated.");
+      setMessage({
+        tone: "success",
+        text: "Queue weight updated.",
+      });
       startTransition(() => router.refresh());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Update failed");
+      const diagnostic = parseErrorDiagnostic(error, "Update failed");
+      setMessage({
+        tone: "error",
+        text: diagnostic.message,
+        diagnostic,
+      });
     }
   };
 
@@ -61,14 +79,21 @@ export function QueueWeightEditor({ name, weight }: QueueWeightEditorProps) {
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Failed to reset weight");
+        await throwAPIResponseError(res, "Failed to reset weight");
       }
 
-      setMessage("Queue weight reset to default.");
+      setMessage({
+        tone: "success",
+        text: "Queue weight reset to default.",
+      });
       startTransition(() => router.refresh());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Reset failed");
+      const diagnostic = parseErrorDiagnostic(error, "Reset failed");
+      setMessage({
+        tone: "error",
+        text: diagnostic.message,
+        diagnostic,
+      });
     }
   };
 
@@ -102,7 +127,15 @@ export function QueueWeightEditor({ name, weight }: QueueWeightEditorProps) {
           Reset to default
         </button>
       </div>
-      {message ? <p className="mt-2 text-xs text-muted">{message}</p> : null}
+      {message ? (
+        <div className="mt-3">
+          <NoticeBanner
+            tone={message.tone}
+            text={message.text}
+            diagnostic={message.diagnostic}
+          />
+        </div>
+      ) : null}
       <ConfirmDialog {...dialogProps} />
     </div>
   );

@@ -3,6 +3,10 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
+import { NoticeBanner } from "@/components/notice-banner";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
 
 export function QueueActions({
   name,
@@ -13,7 +17,11 @@ export function QueueActions({
 }) {
   const router = useRouter();
   const [isPaused, setIsPaused] = useState(paused);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+    diagnostic?: ErrorDiagnostic;
+  } | null>(null);
   const [pending, startTransition] = useTransition();
   const { confirm, dialogProps } = useConfirmDialog();
 
@@ -46,8 +54,7 @@ export function QueueActions({
       );
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Failed to update queue state");
+        await throwAPIResponseError(res, "Failed to update queue state");
       }
 
       const payload = (await res.json()) as {
@@ -56,12 +63,18 @@ export function QueueActions({
       const nextPaused =
         typeof payload.queue?.paused === "boolean" ? payload.queue.paused : next;
       setIsPaused(nextPaused);
-      setMessage(nextPaused ? "Queue paused." : "Queue resumed.");
+      setMessage({
+        tone: "success",
+        text: nextPaused ? "Queue paused." : "Queue resumed.",
+      });
       startTransition(() => router.refresh());
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Failed to update queue"
-      );
+      const diagnostic = parseErrorDiagnostic(error, "Failed to update queue");
+      setMessage({
+        tone: "error",
+        text: diagnostic.message,
+        diagnostic,
+      });
     }
   };
 
@@ -93,7 +106,15 @@ export function QueueActions({
           {isPaused ? "Resume queue" : "Pause queue"}
         </button>
       </div>
-      {message ? <p className="mt-2 text-xs text-muted">{message}</p> : null}
+      {message ? (
+        <div className="mt-3">
+          <NoticeBanner
+            tone={message.tone}
+            text={message.text}
+            diagnostic={message.diagnostic}
+          />
+        </div>
+      ) : null}
       <ConfirmDialog {...dialogProps} />
     </div>
   );

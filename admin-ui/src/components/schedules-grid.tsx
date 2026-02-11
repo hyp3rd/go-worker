@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { JobSchedule, ScheduleFactory } from "@/lib/types";
 import { FilterBar } from "@/components/filters";
@@ -8,6 +8,38 @@ import { Pagination } from "@/components/pagination";
 import { RelativeTime } from "@/components/relative-time";
 import { StatusPill } from "@/components/status-pill";
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
+import { NoticeBanner } from "@/components/notice-banner";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
+import { loadSectionState, persistSectionState } from "@/lib/section-state";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
+
+const schedulesStateKey = "workerctl_schedules_state_v1";
+const schedulePageSizes = [4, 6, 8, 12];
+
+type SchedulesViewState = {
+  query: string;
+  status: string;
+  page: number;
+  pageSize: number;
+};
+
+const isSchedulesViewState = (value: unknown): value is SchedulesViewState => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<SchedulesViewState>;
+  return (
+    typeof candidate.query === "string" &&
+    typeof candidate.status === "string" &&
+    typeof candidate.page === "number" &&
+    Number.isFinite(candidate.page) &&
+    candidate.page >= 1 &&
+    typeof candidate.pageSize === "number" &&
+    Number.isFinite(candidate.pageSize) &&
+    schedulePageSizes.includes(candidate.pageSize)
+  );
+};
 
 export function SchedulesGrid({
   schedules,
@@ -16,11 +48,16 @@ export function SchedulesGrid({
   schedules: JobSchedule[];
   factories: ScheduleFactory[];
 }) {
+  const initialState = loadSectionState<SchedulesViewState>(
+    schedulesStateKey,
+    { query: "", status: "all", page: 1, pageSize: 6 },
+    isSchedulesViewState
+  );
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(6);
+  const [query, setQuery] = useState(initialState.query);
+  const [status, setStatus] = useState(initialState.status);
+  const [page, setPage] = useState(initialState.page);
+  const [pageSize, setPageSize] = useState(initialState.pageSize);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createSpec, setCreateSpec] = useState("");
@@ -31,6 +68,7 @@ export function SchedulesGrid({
   const [message, setMessage] = useState<{
     tone: "success" | "error";
     text: string;
+    diagnostic?: ErrorDiagnostic;
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const { confirm, dialogProps } = useConfirmDialog();
@@ -59,6 +97,15 @@ export function SchedulesGrid({
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
+  useEffect(() => {
+    persistSectionState<SchedulesViewState>(schedulesStateKey, {
+      query,
+      status,
+      page,
+      pageSize,
+    });
+  }, [page, pageSize, query, status]);
+
   const createSchedule = async () => {
     if (!createName.trim() || !createSpec.trim()) {
       setMessage({ tone: "error", text: "Name and cron spec are required." });
@@ -78,8 +125,7 @@ export function SchedulesGrid({
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Schedule create failed");
+        await throwAPIResponseError(res, "Schedule create failed");
       }
 
       setMessage({
@@ -93,9 +139,11 @@ export function SchedulesGrid({
       setSelectedFactory("");
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Schedule create failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Schedule create failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -113,8 +161,7 @@ export function SchedulesGrid({
       );
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Schedule update failed");
+        await throwAPIResponseError(res, "Schedule update failed");
       }
 
       setMessage({
@@ -123,9 +170,11 @@ export function SchedulesGrid({
       });
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Schedule update failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Schedule update failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -149,16 +198,17 @@ export function SchedulesGrid({
       );
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Schedule delete failed");
+        await throwAPIResponseError(res, "Schedule delete failed");
       }
 
       setMessage({ tone: "success", text: "Schedule deleted." });
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Schedule delete failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Schedule delete failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -204,8 +254,7 @@ export function SchedulesGrid({
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Schedule update failed");
+        await throwAPIResponseError(res, "Schedule update failed");
       }
 
       setMessage({ tone: "success", text: "Schedule updated." });
@@ -213,9 +262,11 @@ export function SchedulesGrid({
       setEditSpec("");
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Schedule update failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Schedule update failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -238,8 +289,7 @@ export function SchedulesGrid({
       );
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Schedule run failed");
+        await throwAPIResponseError(res, "Schedule run failed");
       }
 
       const payload = (await res.json()) as { taskId?: string };
@@ -251,9 +301,11 @@ export function SchedulesGrid({
       });
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Schedule run failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Schedule run failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -284,8 +336,7 @@ export function SchedulesGrid({
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Schedules update failed");
+        await throwAPIResponseError(res, "Schedules update failed");
       }
 
       const payload = (await res.json()) as {
@@ -301,10 +352,11 @@ export function SchedulesGrid({
       });
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Schedules update failed");
       setMessage({
         tone: "error",
-        text:
-          error instanceof Error ? error.message : "Schedules update failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -312,19 +364,17 @@ export function SchedulesGrid({
   return (
     <div className="mt-6 space-y-4">
       {message ? (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            message.tone === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-rose-200 bg-rose-50 text-rose-800"
-          }`}
-        >
-          {message.text}
-        </div>
+        <NoticeBanner
+          tone={message.tone}
+          text={message.text}
+          diagnostic={message.diagnostic}
+        />
       ) : null}
       <FilterBar
         placeholder="Search schedule"
         statusOptions={["all", "healthy", "lagging", "paused"]}
+        initialQuery={query}
+        initialStatus={status}
         onQuery={(value) => {
           setQuery(value);
           setPage(1);
@@ -530,7 +580,7 @@ export function SchedulesGrid({
           setPageSize(value);
           setPage(1);
         }}
-        pageSizeOptions={[4, 6, 8, 12]}
+        pageSizeOptions={schedulePageSizes}
       />
       <ConfirmDialog {...dialogProps} />
     </div>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiErrorResponse } from "@/lib/api-errors";
 import type { JobEvent } from "@/lib/types";
 import { gatewayRequest } from "@/lib/gateway";
 
@@ -29,9 +30,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json(payload);
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message ?? "admin_gateway_unavailable" },
-      { status: 502 }
-    );
+    return apiErrorResponse(error, "admin_gateway_unavailable", 502);
   }
 }

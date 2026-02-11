@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { apiErrorResponse } from "@/lib/api-errors";
 import { gatewayRequest } from "@/lib/gateway";
 
 export const runtime = "nodejs";
@@ -21,9 +22,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json(payload);
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message ?? "admin_gateway_unavailable" },
-      { status: 502 }
-    );
+    return apiErrorResponse(error, "admin_gateway_unavailable", 502);
   }
 }

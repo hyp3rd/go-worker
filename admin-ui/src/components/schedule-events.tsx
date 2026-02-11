@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
+import { NoticeBanner } from "@/components/notice-banner";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
 import { RelativeTime } from "@/components/relative-time";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
 import { formatDuration } from "@/lib/format";
 import type { ScheduleEvent } from "@/lib/types";
 
@@ -23,6 +27,11 @@ const normalizeStatus = (status: string) => {
 
 export function ScheduleEvents({ events }: { events: ScheduleEvent[] }) {
   const [items, setItems] = useState<ScheduleEvent[]>(events);
+  const [message, setMessage] = useState<{
+    tone: "error" | "info";
+    text: string;
+    diagnostic?: ErrorDiagnostic;
+  } | null>(null);
 
   useEffect(() => {
     setItems(events);
@@ -39,14 +48,23 @@ export function ScheduleEvents({ events }: { events: ScheduleEvent[] }) {
           cache: "no-store",
         });
         if (!res.ok) {
-          return;
+          await throwAPIResponseError(res, "Failed to load schedule events");
         }
         const payload = (await res.json()) as { events?: ScheduleEvent[] };
         if (payload?.events) {
           setItems(payload.events);
         }
-      } catch {
-        // ignore polling failures
+        setMessage((current) => (current?.tone === "error" ? null : current));
+      } catch (error) {
+        const diagnostic = parseErrorDiagnostic(
+          error,
+          "Failed to load schedule events"
+        );
+        setMessage({
+          tone: "error",
+          text: diagnostic.message,
+          diagnostic,
+        });
       }
     };
 
@@ -77,6 +95,10 @@ export function ScheduleEvents({ events }: { events: ScheduleEvent[] }) {
         }
         source?.close();
         source = null;
+        setMessage({
+          tone: "info",
+          text: "Live stream disconnected. Falling back to polling.",
+        });
         startPolling();
       };
     };
@@ -113,6 +135,15 @@ export function ScheduleEvents({ events }: { events: ScheduleEvent[] }) {
           {items.length} recent
         </span>
       </div>
+      {message ? (
+        <div className="mt-3">
+          <NoticeBanner
+            tone={message.tone}
+            text={message.text}
+            diagnostic={message.diagnostic}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (

@@ -1,22 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { QueueSummary } from "@/lib/types";
 import { formatNumber } from "@/lib/format";
 import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
 import { Table, TableCell, TableRow } from "@/components/table";
+import { NoticeBanner } from "@/components/notice-banner";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
+import { loadSectionState, persistSectionState } from "@/lib/section-state";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
 
 const defaultPageSize = 5;
+const queuesStateKey = "workerctl_queues_state_v1";
+
+type QueuesViewState = {
+  query: string;
+  page: number;
+  pageSize: number;
+};
+
+const isQueuesViewState = (value: unknown): value is QueuesViewState => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<QueuesViewState>;
+  return (
+    typeof candidate.query === "string" &&
+    typeof candidate.page === "number" &&
+    Number.isFinite(candidate.page) &&
+    candidate.page >= 1 &&
+    typeof candidate.pageSize === "number" &&
+    Number.isFinite(candidate.pageSize) &&
+    candidate.pageSize > 0
+  );
+};
 
 export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
+  const initialState = loadSectionState<QueuesViewState>(
+    queuesStateKey,
+    { query: "", page: 1, pageSize: defaultPageSize },
+    isQueuesViewState
+  );
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(defaultPageSize);
+  const [query, setQuery] = useState(initialState.query);
+  const [page, setPage] = useState(initialState.page);
+  const [pageSize, setPageSize] = useState(initialState.pageSize);
   const [createOpen, setCreateOpen] = useState(
     () => searchParams.get("create") === "1"
   );
@@ -25,6 +58,7 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
   const [message, setMessage] = useState<{
     tone: "success" | "error";
     text: string;
+    diagnostic?: ErrorDiagnostic;
   } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -48,6 +82,14 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
     setPageSize(value);
     setPage(1);
   };
+
+  useEffect(() => {
+    persistSectionState<QueuesViewState>(queuesStateKey, {
+      query,
+      page,
+      pageSize,
+    });
+  }, [page, pageSize, query]);
 
   const createQueue = async () => {
     const name = createName.trim();
@@ -73,8 +115,7 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
       );
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Queue create failed");
+        await throwAPIResponseError(res, "Queue create failed");
       }
 
       setMessage({ tone: "success", text: "Queue created." });
@@ -83,9 +124,11 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
       setCreateWeight("1");
       startTransition(() => router.refresh());
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Queue create failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Queue create failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -93,18 +136,15 @@ export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
   return (
     <div className="mt-6 space-y-4">
       {message ? (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            message.tone === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-rose-200 bg-rose-50 text-rose-800"
-          }`}
-        >
-          {message.text}
-        </div>
+        <NoticeBanner
+          tone={message.tone}
+          text={message.text}
+          diagnostic={message.diagnostic}
+        />
       ) : null}
       <FilterBar
         placeholder="Search queue name"
+        initialQuery={query}
         onQuery={handleQuery}
         rightSlot={
           <button

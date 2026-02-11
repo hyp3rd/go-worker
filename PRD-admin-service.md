@@ -203,9 +203,14 @@ Worker service job runner (containerized):
         - Action flows for queue weight/pause, schedule management, DLQ replay, job creation/run/edit/delete.
         - Run-level page for jobs and event panes for schedules/jobs.
         - SSE + polling fallback for live updates.
+        - Overview now includes a unified operations timeline (jobs + schedules + audit/queue/DLQ actions) with filters, paging, and run deep-links.
+        - Timeline filter state persists locally between page visits.
+        - Section state persistence is implemented for Queues, Schedules, Jobs, and DLQ (DLQ via URL query params).
+        - Action/API failures now surface structured diagnostics in-page (mapped cause hints + request ID when available).
+        - Gateway-facing Next API routes now emit a normalized error envelope (`error` + `errorDetail`) to keep diagnostics consistent across UI sections.
 - **Partial / gaps**
         - Overview analytics are snapshot-focused; no built-in trend charts across day/week/month windows for all domains.
-        - Event UX is list-based; no cursor-driven timeline, grouping, or cross-resource correlation view.
+        - Timeline is implemented, but correlation is still basic (no causal graph/grouping by request/task chain).
         - Some high-value admin workflows are still split across pages (no global command palette / cross-page quick actions).
         - Artifact handling is source-aware but still operationally coupled to environment mounts for local tarballs.
 
@@ -221,10 +226,10 @@ Worker service job runner (containerized):
 ### Must-have (admin UI)
 
 1. **Unified run visibility**: show queued/running/completed transitions consistently with per-run immutable detail pages.
-1. **Operational timelines**: add correlation view for queue/schedule/job/DLQ events (single timeline with filters).
+1. **Operational timelines**: implemented as a single filtered timeline; remaining work is richer correlation/grouping UX.
 1. **Safety UX**: richer confirmation modals for risky actions with impact preview (counts, targets, scope).
 1. **Error diagnostics**: structured error panels for gateway/API failures (request ID, mapped cause, recovery hint).
-1. **State persistence**: persist user filters/sorts/page-size per section for operator continuity.
+1. **State persistence**: partially implemented (timeline); extend to all sections for operator continuity.
 
 ### Nice-to-have (service)
 

@@ -4,12 +4,14 @@ import { StatusPill } from "@/components/status-pill";
 import { RunbookActions } from "@/components/runbook-actions";
 import { RefreshControls } from "@/components/refresh-controls";
 import { JobOverview } from "@/components/job-overview";
+import { OperationsTimeline } from "@/components/operations-timeline";
 import Link from "next/link";
 import {
   getAdminActionCounters,
   getAuditEvents,
   getCoordinationStatus,
   getJobEvents,
+  getScheduleEvents,
   getJobSchedules,
   getOverviewStats,
   getQueueSummaries,
@@ -19,13 +21,14 @@ import { formatLatency, formatNumber } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [stats, queues, jobs, coordination, actions, jobEvents, auditEvents] = await Promise.all([
+  const [stats, queues, jobs, coordination, actions, jobEvents, scheduleEvents, auditEvents] = await Promise.all([
     getOverviewStats(),
     getQueueSummaries(),
     getJobSchedules(),
     getCoordinationStatus(),
     getAdminActionCounters(),
     getJobEvents({ limit: 200 }),
+    getScheduleEvents({ limit: 200 }),
     getAuditEvents({ limit: 50 }),
   ]);
 
@@ -138,6 +141,8 @@ export default async function Home() {
       </section>
 
       <JobOverview events={jobEvents} />
+
+      <OperationsTimeline jobs={jobEvents} schedules={scheduleEvents} audits={auditEvents} />
 
       <section className="rounded-3xl border border-soft bg-white/95 p-6 shadow-soft">
           <SectionHeader

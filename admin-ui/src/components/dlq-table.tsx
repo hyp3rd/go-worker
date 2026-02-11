@@ -4,11 +4,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import type { DlqEntry, DlqEntryDetail } from "@/lib/types";
 import { formatDuration, formatNumber } from "@/lib/format";
+import { throwAPIResponseError } from "@/lib/fetch-api-error";
 import { FilterBar } from "@/components/filters";
 import { Pagination } from "@/components/pagination";
 import { Table, TableCell, TableRow } from "@/components/table";
 import { RelativeTime } from "@/components/relative-time";
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
+import { NoticeBanner } from "@/components/notice-banner";
+import type { ErrorDiagnostic } from "@/lib/error-diagnostics";
+import { parseErrorDiagnostic } from "@/lib/error-diagnostics";
 
 export function DlqTable({
   entries,
@@ -35,6 +39,7 @@ export function DlqTable({
   const [message, setMessage] = useState<{
     tone: "success" | "error" | "info";
     text: string;
+    diagnostic?: ErrorDiagnostic;
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const [detail, setDetail] = useState<DlqEntryDetail | null>(null);
@@ -161,8 +166,7 @@ export function DlqTable({
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Replay failed");
+        await throwAPIResponseError(res, "Replay failed");
       }
 
       const payload = (await res.json()) as { message?: string };
@@ -175,9 +179,11 @@ export function DlqTable({
         router.refresh();
       });
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Replay failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Replay failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -194,9 +200,11 @@ export function DlqTable({
         text: `Copied ${selected.size} ID(s) to clipboard.`,
       });
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Copy failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Copy failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -220,8 +228,7 @@ export function DlqTable({
       });
 
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Replay failed");
+        await throwAPIResponseError(res, "Replay failed");
       }
 
       const payload = (await res.json()) as { message?: string };
@@ -233,9 +240,11 @@ export function DlqTable({
         router.refresh();
       });
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Replay failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Replay failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -245,9 +254,11 @@ export function DlqTable({
       await navigator.clipboard.writeText(id);
       setMessage({ tone: "info", text: "Copied ID to clipboard." });
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Copy failed");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Copy failed",
+        text: diagnostic.message,
+        diagnostic,
       });
     }
   };
@@ -262,8 +273,7 @@ export function DlqTable({
         cache: "no-store",
       });
       if (!res.ok) {
-        const payload = (await res.json()) as { error?: string };
-        throw new Error(payload?.error ?? "Failed to load DLQ entry");
+        await throwAPIResponseError(res, "Failed to load DLQ entry");
       }
       const payload = (await res.json()) as { entry?: DlqEntryDetail };
       if (payload?.entry) {
@@ -272,9 +282,11 @@ export function DlqTable({
         throw new Error("DLQ entry unavailable");
       }
     } catch (error) {
+      const diagnostic = parseErrorDiagnostic(error, "Failed to load DLQ entry");
       setMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : "Failed to load DLQ entry",
+        text: diagnostic.message,
+        diagnostic,
       });
     } finally {
       setDetailLoading(false);
@@ -289,17 +301,11 @@ export function DlqTable({
   return (
     <div className="mt-6 space-y-4">
       {message ? (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm ${
-            message.tone === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : message.tone === "info"
-                ? "border-sky-200 bg-sky-50 text-sky-800"
-                : "border-rose-200 bg-rose-50 text-rose-800"
-          }`}
-        >
-          {message.text}
-        </div>
+        <NoticeBanner
+          tone={message.tone}
+          text={message.text}
+          diagnostic={message.diagnostic}
+        />
       ) : null}
       <FilterBar
         placeholder="Search by id, queue, handler"
