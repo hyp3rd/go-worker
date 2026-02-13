@@ -73,6 +73,9 @@ const (
 	adminAuditExportMax   = 5000
 	adminMetricsFmtJSON   = "json"
 	adminMetricsFmtProm   = "prometheus"
+	adminRequestIDMaxLen  = 128
+	adminASCIIControlMin  = 0x20
+	adminASCIIDelete      = 0x7f
 )
 
 // AdminGatewayConfig configures the admin HTTP gateway.
@@ -1438,6 +1441,7 @@ func (h *adminGatewayHandler) handleMetricsWithFormat(
 	if format == adminMetricsFmtProm {
 		w.Header().Set(adminHeaderType, adminMetricsPromContentType)
 
+		// #nosec G705 -- payload is plain-text Prometheus exposition, not rendered as HTML
 		_, err := io.WriteString(w, h.observability.Prometheus())
 		if err != nil {
 			log.Printf("admin gateway metrics write: %v", err)
@@ -1697,6 +1701,7 @@ func (w *adminEventWriter) ReplayFrom(lastID int64) error {
 
 	events := w.buffer.EventsSince(lastID)
 	for _, event := range events {
+		// #nosec G705 -- SSE frames carry JSON payload bytes and are consumed as event-stream, not HTML
 		_, err := fmt.Fprintf(
 			w.writer,
 			"id: %d\nevent: %s\ndata: %s\n\n",
@@ -2471,6 +2476,7 @@ func writeAdminJSON(w http.ResponseWriter, statusCode int, payload any) {
 	w.Header().Set(adminHeaderType, "application/json")
 	w.WriteHeader(statusCode)
 
+	// #nosec G705 -- response body is JSON-encoded and content-type is application/json
 	_, err = w.Write(data)
 	if err != nil {
 		_ = err
@@ -2496,7 +2502,13 @@ func writeAdminGRPCError(w http.ResponseWriter, requestID string, err error) {
 		httpStatus = grpcCodeToHTTP(code)
 	}
 
-	log.Printf("admin gateway error request_id=%s code=%s err=%v", requestID, code.String(), err)
+	// #nosec G706 -- request_id is normalized and error text is sanitized for control chars before logging
+	log.Printf(
+		"admin gateway error request_id=%s code=%s err=%s",
+		sanitizeLogField(requestID),
+		code.String(),
+		sanitizeLogField(err.Error()),
+	)
 	writeAdminError(w, httpStatus, strings.ToLower(code.String()), err.Error(), requestID)
 }
 
@@ -2571,11 +2583,70 @@ func requestID(r *http.Request, w http.ResponseWriter) string {
 	header := r.Header.Get(adminRequestIDHeader)
 	if header == "" {
 		header = uuid.NewString()
+	} else {
+		header = sanitizeRequestID(header)
+		if header == "" {
+			header = uuid.NewString()
+		}
 	}
 
 	w.Header().Set(adminRequestIDHeader, header)
 
 	return header
+}
+
+func sanitizeRequestID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	builder := strings.Builder{}
+	builder.Grow(len(raw))
+
+	for _, char := range raw {
+		if isRequestIDCharAllowed(char) {
+			builder.WriteRune(char)
+		}
+	}
+
+	value := builder.String()
+	if len(value) > adminRequestIDMaxLen {
+		value = value[:adminRequestIDMaxLen]
+	}
+
+	return value
+}
+
+func isRequestIDCharAllowed(char rune) bool {
+	if (char >= 'a' && char <= 'z') ||
+		(char >= 'A' && char <= 'Z') ||
+		(char >= '0' && char <= '9') {
+		return true
+	}
+
+	return char == '-' || char == '_' || char == '.'
+}
+
+func sanitizeLogField(raw string) string {
+	builder := strings.Builder{}
+	builder.Grow(len(raw))
+
+	for _, char := range raw {
+		if char == '\n' || char == '\r' || char == '\t' {
+			builder.WriteRune(' ')
+
+			continue
+		}
+
+		if char < adminASCIIControlMin || char == adminASCIIDelete {
+			continue
+		}
+
+		builder.WriteRune(char)
+	}
+
+	return strings.TrimSpace(builder.String())
 }
 
 func grpcCodeToHTTP(code codes.Code) int {
