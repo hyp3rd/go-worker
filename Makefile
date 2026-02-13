@@ -1,9 +1,9 @@
 include .project-settings.env
 
 REPO_ROOT = $(shell git rev-parse --show-toplevel)
-GOLANGCI_LINT_VERSION ?= v2.8.0
+GOLANGCI_LINT_VERSION ?= v2.9.0
 BUF_VERSION ?= v1.65.0
-GO_VERSION ?= 1.25.7
+GO_VERSION ?= 1.26.0
 GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true
 BENCHTIME ?= 1s
@@ -36,8 +36,7 @@ workerctl:
 	go build -trimpath -o bin/workerctl ./cmd/workerctl
 
 update-deps:
-	go get -v -u ./...
-	go mod tidy
+	go get -u -t ./... && go mod tidy -v && go mod verify
 
 init:
 	./setup-project.sh --module $(shell grep "^module " go.mod | awk '{print $$2}')

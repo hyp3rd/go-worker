@@ -59,6 +59,9 @@ type config struct {
 	globalBurst     int
 	leaderLease     time.Duration
 	auditEventLimit int
+	auditRetention  time.Duration
+	auditArchiveDir string
+	auditArchiveInt time.Duration
 	auditExportMax  int
 	adminGuardrails worker.AdminGuardrails
 }
@@ -107,6 +110,9 @@ func run() error {
 			worker.WithDurableBackend(backend),
 			worker.WithDurableLease(defaultLeaseDuration),
 			worker.WithAdminAuditEventLimit(cfg.auditEventLimit),
+			worker.WithAdminAuditRetention(cfg.auditRetention),
+			worker.WithAdminAuditArchiveDir(cfg.auditArchiveDir),
+			worker.WithAdminAuditArchiveInterval(cfg.auditArchiveInt),
 		)
 
 		grpcServer, err = startAdminGRPCServer(cfg, tm, observability)
@@ -214,6 +220,9 @@ func loadConfig() (config, error) {
 	cfg.globalBurst = parseInt(os.Getenv("WORKER_ADMIN_GLOBAL_BURST"))
 	cfg.leaderLease = parseDuration(os.Getenv("WORKER_ADMIN_LEADER_LEASE"))
 	cfg.auditEventLimit = parseIntWithDefault(os.Getenv("WORKER_ADMIN_AUDIT_EVENT_LIMIT"), defaultAdminAuditMax)
+	cfg.auditRetention = parseDuration(os.Getenv("WORKER_ADMIN_AUDIT_RETENTION"))
+	cfg.auditArchiveDir = strings.TrimSpace(os.Getenv("WORKER_ADMIN_AUDIT_ARCHIVE_DIR"))
+	cfg.auditArchiveInt = parseDuration(os.Getenv("WORKER_ADMIN_AUDIT_ARCHIVE_INTERVAL"))
 	cfg.auditExportMax = parseIntWithDefault(os.Getenv("WORKER_ADMIN_AUDIT_EXPORT_LIMIT_MAX"), defaultAuditExportMax)
 	cfg.adminGuardrails = worker.AdminGuardrails{
 		ReplayLimitMax:    parseIntWithDefault(os.Getenv("WORKER_ADMIN_REPLAY_LIMIT_MAX"), defaultAdminReplayCap),

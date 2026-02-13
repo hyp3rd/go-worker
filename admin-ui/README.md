@@ -35,6 +35,15 @@ Gateway env vars (set on `worker-admin`):
 
 - `WORKER_ADMIN_JOB_TARBALL_DIR` (optional; enables local tarball download proxy)
 - `WORKER_ADMIN_AUDIT_EXPORT_LIMIT_MAX` (optional cap for `GET /admin/v1/audit/export`)
+- `WORKER_ADMIN_AUDIT_RETENTION` (optional age cutoff, e.g. `168h`)
+- `WORKER_ADMIN_AUDIT_ARCHIVE_DIR` (optional archive directory for aged-out audit events)
+- `WORKER_ADMIN_AUDIT_ARCHIVE_INTERVAL` (optional archive flush interval, e.g. `30s`)
+
+Observability endpoints (gateway):
+
+- `GET /admin/v1/metrics` (JSON snapshot)
+- `GET /admin/v1/metrics/prometheus` (Prometheus text)
+- `GET /admin/v1/metrics?format=prometheus` (alternate Prometheus format)
 
 Worker-service job runner (for Jobs + events):
 

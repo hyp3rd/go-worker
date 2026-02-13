@@ -68,12 +68,19 @@ func (tm *TaskManager) recordAdminAuditEvent(ctx context.Context, event AdminAud
 	tm.auditEventsMu.Lock()
 
 	tm.auditEvents = append(tm.auditEvents, event)
+
+	archived := tm.pruneAuditEventsByAgeLocked(time.Now())
 	if tm.auditEventLimit > 0 && len(tm.auditEvents) > tm.auditEventLimit {
-		tm.auditEvents = tm.auditEvents[len(tm.auditEvents)-tm.auditEventLimit:]
+		dropCount := len(tm.auditEvents) - tm.auditEventLimit
+		dropped := make([]AdminAuditEvent, dropCount)
+		copy(dropped, tm.auditEvents[:dropCount])
+		archived = append(archived, dropped...)
+		tm.auditEvents = tm.auditEvents[dropCount:]
 	}
 
 	tm.auditEventsMu.Unlock()
 
+	tm.archiveAuditEvents(archived)
 	tm.persistAdminAuditEvent(ctx, event)
 }
 
@@ -121,6 +128,8 @@ func (tm *TaskManager) auditEventsFromBackend(
 
 	page, fetchErr := backend.AdminAuditEvents(ctx, filter)
 	if fetchErr == nil {
+		page = tm.filterAuditEventsByAge(page)
+
 		return page, true, nil
 	}
 
@@ -140,10 +149,15 @@ func (tm *TaskManager) auditEventsFromMemory(filter AdminAuditEventFilter) Admin
 	limit := normalizeAdminEventLimit(filter.Limit, tm.auditEventLimit)
 	action := strings.TrimSpace(filter.Action)
 	target := strings.TrimSpace(filter.Target)
+	cutoff, hasCutoff := tm.auditRetentionCutoff(time.Now())
 
 	filtered := make([]AdminAuditEvent, 0, min(limit, len(events)))
 	for i := len(events) - 1; i >= 0 && len(filtered) < limit; i-- {
 		event := events[i]
+		if hasCutoff && event.At.Before(cutoff) {
+			continue
+		}
+
 		if action != "" && event.Action != action {
 			continue
 		}
@@ -156,4 +170,61 @@ func (tm *TaskManager) auditEventsFromMemory(filter AdminAuditEventFilter) Admin
 	}
 
 	return AdminAuditEventPage{Events: filtered}
+}
+
+func (tm *TaskManager) auditRetentionCutoff(now time.Time) (time.Time, bool) {
+	if tm == nil || tm.auditRetention <= 0 {
+		return time.Time{}, false
+	}
+
+	return now.Add(-tm.auditRetention), true
+}
+
+func (tm *TaskManager) pruneAuditEventsByAgeLocked(now time.Time) []AdminAuditEvent {
+	cutoff, ok := tm.auditRetentionCutoff(now)
+	if !ok || len(tm.auditEvents) == 0 {
+		return nil
+	}
+
+	firstKeep := 0
+	for firstKeep < len(tm.auditEvents) && tm.auditEvents[firstKeep].At.Before(cutoff) {
+		firstKeep++
+	}
+
+	if firstKeep == 0 {
+		return nil
+	}
+
+	archived := make([]AdminAuditEvent, firstKeep)
+	copy(archived, tm.auditEvents[:firstKeep])
+
+	if firstKeep >= len(tm.auditEvents) {
+		tm.auditEvents = tm.auditEvents[:0]
+
+		return archived
+	}
+
+	tm.auditEvents = tm.auditEvents[firstKeep:]
+
+	return archived
+}
+
+func (tm *TaskManager) filterAuditEventsByAge(page AdminAuditEventPage) AdminAuditEventPage {
+	cutoff, ok := tm.auditRetentionCutoff(time.Now())
+	if !ok || len(page.Events) == 0 {
+		return page
+	}
+
+	filtered := make([]AdminAuditEvent, 0, len(page.Events))
+	for _, event := range page.Events {
+		if event.At.Before(cutoff) {
+			continue
+		}
+
+		filtered = append(filtered, event)
+	}
+
+	page.Events = filtered
+
+	return page
 }

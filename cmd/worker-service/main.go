@@ -95,6 +95,9 @@ type config struct {
 	jobEventCacheTTL    time.Duration
 	jobEventMaxEntries  int
 	auditEventLimit     int
+	auditRetention      time.Duration
+	auditArchiveDir     string
+	auditArchiveInt     time.Duration
 	adminGuardrails     worker.AdminGuardrails
 }
 
@@ -124,6 +127,9 @@ func run() error {
 		worker.WithDurableLease(cfg.durableLease),
 		worker.WithDurableHandlers(durableHandlers),
 		worker.WithAdminAuditEventLimit(cfg.auditEventLimit),
+		worker.WithAdminAuditRetention(cfg.auditRetention),
+		worker.WithAdminAuditArchiveDir(cfg.auditArchiveDir),
+		worker.WithAdminAuditArchiveInterval(cfg.auditArchiveInt),
 	)
 	tm.StartWorkers(context.Background())
 
@@ -236,6 +242,9 @@ func loadConfig() config {
 		jobEventCacheTTL:    defaultDuration(os.Getenv("WORKER_JOB_EVENT_CACHE_TTL"), defaultJobEventCache),
 		jobEventMaxEntries:  parseIntWithDefault(os.Getenv("WORKER_JOB_EVENT_MAX_ENTRIES"), defaultJobEventMax),
 		auditEventLimit:     parseIntWithDefault(os.Getenv("WORKER_ADMIN_AUDIT_EVENT_LIMIT"), defaultAuditEventMax),
+		auditRetention:      defaultDuration(os.Getenv("WORKER_ADMIN_AUDIT_RETENTION"), 0),
+		auditArchiveDir:     strings.TrimSpace(os.Getenv("WORKER_ADMIN_AUDIT_ARCHIVE_DIR")),
+		auditArchiveInt:     defaultDuration(os.Getenv("WORKER_ADMIN_AUDIT_ARCHIVE_INTERVAL"), 0),
 	}
 
 	cfg.durableCronHandlers = append([]string{}, defaultDurableCronHandlers()...)

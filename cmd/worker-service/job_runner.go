@@ -20,6 +20,7 @@ import (
 
 	"github.com/hyp3rd/ewrap"
 	sectools "github.com/hyp3rd/sectools/pkg/io"
+	sectvalidate "github.com/hyp3rd/sectools/pkg/validate"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -134,7 +135,7 @@ func (r *jobRunner) Run(ctx context.Context, job worker.AdminJob) (output string
 		return "", ewrap.New("job runner not configured")
 	}
 
-	err = r.validate(job)
+	err = r.validate(ctx, job)
 	if err != nil {
 		return "", err
 	}
@@ -202,7 +203,7 @@ func (r *jobRunner) startRunObservation() func(*error) {
 	}
 }
 
-func (r *jobRunner) validate(job worker.AdminJob) error {
+func (r *jobRunner) validate(ctx context.Context, job worker.AdminJob) error {
 	if r.dockerBin == "" {
 		return ewrap.New("job runner docker binary is required")
 	}
@@ -213,7 +214,7 @@ func (r *jobRunner) validate(job worker.AdminJob) error {
 	case worker.JobSourceGitTag:
 		return r.validateGitJob(job)
 	case worker.JobSourceTarballURL:
-		return r.validateTarballURLJob(job)
+		return r.validateTarballURLJob(ctx, job)
 	case worker.JobSourceTarballPath:
 		return r.validateTarballPathJob(job)
 	default:
@@ -256,12 +257,12 @@ func (r *jobRunner) validateGitJob(job worker.AdminJob) error {
 	return nil
 }
 
-func (r *jobRunner) validateTarballURLJob(job worker.AdminJob) error {
+func (r *jobRunner) validateTarballURLJob(ctx context.Context, job worker.AdminJob) error {
 	if strings.TrimSpace(job.TarballURL) == "" {
 		return ewrap.New("job tarball url is required")
 	}
 
-	return r.validateTarballURL(job.TarballURL)
+	return r.validateTarballURL(ctx, job.TarballURL)
 }
 
 func (r *jobRunner) validateTarballPathJob(job worker.AdminJob) error {
@@ -336,7 +337,7 @@ func (r *jobRunner) cloneRepo(ctx context.Context, job worker.AdminJob, repoDir 
 }
 
 func (r *jobRunner) extractTarballFromURL(ctx context.Context, job worker.AdminJob, repoDir string) (string, error) {
-	parsed, err := r.parseTarballURL(job.TarballURL)
+	parsed, err := r.parseTarballURL(ctx, job.TarballURL)
 	if err != nil {
 		return "", err
 	}
@@ -350,6 +351,7 @@ func (r *jobRunner) extractTarballFromURL(ctx context.Context, job worker.AdminJ
 
 	req.Header.Set("User-Agent", "go-worker/job-runner")
 
+	// #nosec G704 -- URL is validated with sectools URL validator + host allowlist before request
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", ewrap.Wrap(err, "download tarball")
@@ -412,24 +414,43 @@ func (r *jobRunner) extractTarballFromPath(ctx context.Context, job worker.Admin
 	return "tarball loaded", nil
 }
 
-func (r *jobRunner) parseTarballURL(raw string) (*url.URL, error) {
+func (r *jobRunner) parseTarballURL(ctx context.Context, raw string) (*url.URL, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, ewrap.New("job tarball url is required")
 	}
 
-	parsed, err := url.Parse(raw)
+	if ctx == nil {
+		return nil, ewrap.New("job tarball url context is required")
+	}
+
+	allowedHosts := r.normalizedTarballAllowHosts()
+
+	options := []sectvalidate.URLOption{
+		sectvalidate.WithURLAllowedSchemes("https"),
+		sectvalidate.WithURLAllowIDN(true),
+	}
+	if len(allowedHosts) > 0 {
+		options = append(options, sectvalidate.WithURLAllowedHosts(allowedHosts...))
+	}
+
+	validator, err := sectvalidate.NewURLValidator(options...)
+	if err != nil {
+		return nil, ewrap.Wrap(err, "build tarball url validator")
+	}
+
+	result, err := validator.Validate(ctx, raw)
+	if err != nil {
+		return nil, ewrap.New("job tarball url is invalid")
+	}
+
+	parsed, err := url.Parse(result.FinalURL)
 	if err != nil {
 		return nil, ewrap.New("job tarball url is invalid")
 	}
 
 	if parsed.Host == "" {
 		return nil, ewrap.New("job tarball url host is required")
-	}
-
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "https" && scheme != "http" {
-		return nil, ewrap.New("job tarball url must be http or https")
 	}
 
 	if !r.isTarballHostAllowed(parsed.Host) {
@@ -439,8 +460,41 @@ func (r *jobRunner) parseTarballURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (r *jobRunner) validateTarballURL(raw string) error {
-	_, err := r.parseTarballURL(raw)
+func (r *jobRunner) normalizedTarballAllowHosts() []string {
+	if r == nil || len(r.tarballAllowlist) == 0 {
+		return nil
+	}
+
+	hosts := make([]string, 0, len(r.tarballAllowlist))
+	seen := make(map[string]struct{}, len(r.tarballAllowlist))
+
+	for host := range r.tarballAllowlist {
+		normalized := strings.ToLower(strings.TrimSpace(host))
+		if normalized == "" {
+			continue
+		}
+
+		if base, _, ok := strings.Cut(normalized, ":"); ok {
+			normalized = base
+		}
+
+		if normalized == "" {
+			continue
+		}
+
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+
+		seen[normalized] = struct{}{}
+		hosts = append(hosts, normalized)
+	}
+
+	return hosts
+}
+
+func (r *jobRunner) validateTarballURL(ctx context.Context, raw string) error {
+	_, err := r.parseTarballURL(ctx, raw)
 
 	return err
 }
@@ -884,7 +938,7 @@ func (r *jobRunner) runImage(ctx context.Context, job worker.AdminJob, imageTag 
 		runArgs = append(runArgs, job.Command...)
 	}
 
-	// #nosec G204 -- docker binary/path is configured, inputs are normalized
+	// #nosec G204,G702 -- exec.CommandContext avoids shell interpolation; args are passed verbatim
 	cmd := exec.CommandContext(ctx, r.dockerBin, runArgs...)
 
 	return runCommand(cmd, r.outputBytes)
