@@ -71,6 +71,8 @@ const (
 	adminTarballMimeType  = "application/gzip"
 	adminErrNoArtifact    = "This job source has no downloadable tarball"
 	adminAuditExportMax   = 5000
+	adminMetricsFmtJSON   = "json"
+	adminMetricsFmtProm   = "prometheus"
 )
 
 // AdminGatewayConfig configures the admin HTTP gateway.
@@ -265,6 +267,7 @@ func newAdminGatewayMux(handler *adminGatewayHandler) *http.ServeMux {
 	mux.HandleFunc("/admin/v1/audit/export", handler.handleAuditExport)
 	mux.HandleFunc("/admin/v1/audit", handler.handleAudit)
 	mux.HandleFunc("/admin/v1/metrics", handler.handleMetrics)
+	mux.HandleFunc("/admin/v1/metrics/prometheus", handler.handleMetricsPrometheus)
 	mux.HandleFunc("/admin/v1/jobs", handler.handleJobs)
 	mux.HandleFunc("/admin/v1/jobs/", handler.handleJob)
 	mux.HandleFunc("/admin/v1/schedules", handler.handleSchedules)
@@ -1401,19 +1404,58 @@ func writeAuditExportCSV(w http.ResponseWriter, events []adminAuditEventJSON) {
 }
 
 func (h *adminGatewayHandler) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	h.handleMetricsWithFormat(w, r, strings.TrimSpace(r.URL.Query().Get("format")))
+}
+
+func (h *adminGatewayHandler) handleMetricsPrometheus(w http.ResponseWriter, r *http.Request) {
+	h.handleMetricsWithFormat(w, r, adminMetricsFmtProm)
+}
+
+func (h *adminGatewayHandler) handleMetricsWithFormat(
+	w http.ResponseWriter,
+	r *http.Request,
+	format string,
+) {
 	if r.Method != http.MethodGet {
 		writeAdminError(w, http.StatusMethodNotAllowed, adminErrMethodBlocked, adminErrMethodMessage, requestID(r, w))
 
 		return
 	}
 
+	format = normalizeMetricsFormat(format)
 	if h == nil || h.observability == nil {
+		if format == adminMetricsFmtProm {
+			w.Header().Set(adminHeaderType, adminMetricsPromContentType)
+
+			return
+		}
+
 		writeAdminJSON(w, http.StatusOK, AdminObservabilitySnapshot{})
 
 		return
 	}
 
+	if format == adminMetricsFmtProm {
+		w.Header().Set(adminHeaderType, adminMetricsPromContentType)
+
+		_, err := io.WriteString(w, h.observability.Prometheus())
+		if err != nil {
+			log.Printf("admin gateway metrics write: %v", err)
+		}
+
+		return
+	}
+
 	writeAdminJSON(w, http.StatusOK, h.observability.Snapshot())
+}
+
+func normalizeMetricsFormat(format string) string {
+	normalized := strings.ToLower(strings.TrimSpace(format))
+	if normalized == "prom" || normalized == "prometheus" || normalized == "text" {
+		return adminMetricsFmtProm
+	}
+
+	return adminMetricsFmtJSON
 }
 
 func (h *adminGatewayHandler) handleEvents(w http.ResponseWriter, r *http.Request) {

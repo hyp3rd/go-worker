@@ -20,6 +20,9 @@ type taskManagerConfig struct {
 	defaultQueue    string
 	queueWeights    map[string]int
 	auditEventLimit int
+	auditRetention  time.Duration
+	auditArchiveDir string
+	auditArchiveInt time.Duration
 
 	durableBackend      DurableBackend
 	durableHandlers     map[string]DurableHandlerSpec
@@ -49,6 +52,9 @@ func defaultTaskManagerConfig() taskManagerConfig {
 		durableCodec:        ProtoDurableCodec{},
 		cronLocation:        time.UTC,
 		auditEventLimit:     defaultAdminAuditEventLimit,
+		auditRetention:      0,
+		auditArchiveDir:     "",
+		auditArchiveInt:     0,
 	}
 }
 
@@ -179,5 +185,26 @@ func WithCronLocation(location *time.Location) TaskManagerOption {
 func WithAdminAuditEventLimit(limit int) TaskManagerOption {
 	return func(cfg *taskManagerConfig) {
 		cfg.auditEventLimit = limit
+	}
+}
+
+// WithAdminAuditRetention sets a max age for admin audit events. Set <= 0 to disable age pruning.
+func WithAdminAuditRetention(ttl time.Duration) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		cfg.auditRetention = ttl
+	}
+}
+
+// WithAdminAuditArchiveDir enables file archival for aged-out audit events.
+func WithAdminAuditArchiveDir(dir string) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		cfg.auditArchiveDir = dir
+	}
+}
+
+// WithAdminAuditArchiveInterval sets the flush interval for audit archival.
+func WithAdminAuditArchiveInterval(interval time.Duration) TaskManagerOption {
+	return func(cfg *taskManagerConfig) {
+		cfg.auditArchiveInt = interval
 	}
 }

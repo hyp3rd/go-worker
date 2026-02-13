@@ -144,6 +144,9 @@ Service: `worker.v1.AdminService`
 - `WORKER_ADMIN_HTTP_ADDR` (default `127.0.0.1:8081`)
 - `WORKER_ADMIN_TLS_CERT`, `WORKER_ADMIN_TLS_KEY`, `WORKER_ADMIN_TLS_CA`
 - `WORKER_ADMIN_AUDIT_EVENT_LIMIT` (max audit events retained by service/backend list operations)
+- `WORKER_ADMIN_AUDIT_RETENTION` (optional max age, e.g. `168h`; events older than cutoff are pruned/filtered)
+- `WORKER_ADMIN_AUDIT_ARCHIVE_DIR` (optional directory for archived audit JSONL files)
+- `WORKER_ADMIN_AUDIT_ARCHIVE_INTERVAL` (optional flush interval for archival writer)
 - `WORKER_ADMIN_AUDIT_EXPORT_LIMIT_MAX` (gateway cap for export query `limit`)
 - `WORKER_ADMIN_DEFAULT_QUEUE`, `WORKER_ADMIN_QUEUE_WEIGHTS` (backend defaults)
 
@@ -183,16 +186,16 @@ Worker service job runner (containerized):
         - Overview, health, queues (list/get/weight/pause), schedules (list/factories/create/delete/pause/run/pause-all), jobs (list/get/upsert/delete/run), DLQ (list/detail/replay/replay-by-id), pause/resume dequeue, SSE events.
         - Containerized job runner supports `git_tag`, `tarball_url`, `tarball_path`, allowlists, SHA256 validation, output truncation.
         - Job event persistence is available via file-backed store (`WORKER_JOB_EVENT_DIR`).
-        - Admin observability collector is available with gateway middleware and gRPC unary interceptors; snapshot endpoint: `GET /admin/v1/metrics` (HTTP/gRPC latency, error counts, and job-runner outcome counters).
+        - Admin observability collector is available with gateway middleware and gRPC unary interceptors; snapshot endpoint: `GET /admin/v1/metrics` and Prometheus endpoint: `GET /admin/v1/metrics/prometheus` (also `GET /admin/v1/metrics?format=prometheus`).
         - Guardrails are configurable via env for replay caps, schedule run caps, and optional approval token checks (`WORKER_ADMIN_REPLAY_LIMIT_MAX`, `WORKER_ADMIN_REPLAY_IDS_MAX`, `WORKER_ADMIN_SCHEDULE_RUN_MAX`, `WORKER_ADMIN_SCHEDULE_RUN_WINDOW`, `WORKER_ADMIN_REQUIRE_APPROVAL`, `WORKER_ADMIN_APPROVAL_TOKEN`).
         - Artifact API parity: gateway now exposes job artifact metadata and download endpoints (`GET /admin/v1/jobs/{name}/artifact/meta`, `GET /admin/v1/jobs/{name}/artifact`) so UI no longer needs direct filesystem access for tarball-path jobs.
         - Audit export is available at `GET /admin/v1/audit/export` (`jsonl`, `json`, `csv`) with action/target filtering and bounded limits.
-        - Audit retention is configurable via `WORKER_ADMIN_AUDIT_EVENT_LIMIT`, and gateway export limits are capped by `WORKER_ADMIN_AUDIT_EXPORT_LIMIT_MAX`.
+        - Audit retention is configurable via count (`WORKER_ADMIN_AUDIT_EVENT_LIMIT`) and optional age cutoff (`WORKER_ADMIN_AUDIT_RETENTION`); archived JSONL files can be enabled with `WORKER_ADMIN_AUDIT_ARCHIVE_DIR` (+ optional flush interval), and gateway export limits are capped by `WORKER_ADMIN_AUDIT_EXPORT_LIMIT_MAX`.
         - Gateway artifact handling now runs behind an internal artifact-store abstraction (filesystem implementation), reducing direct coupling in handlers.
 - **Partial / gaps**
         - Event stream now supports `Last-Event-ID` with bounded in-memory replay; replay does not survive gateway restarts.
-        - Metrics are in-memory snapshots; no OpenTelemetry/Prometheus export yet for cluster-wide scraping and long-term retention.
-        - Central audit log supports count-based retention + export; time-window retention policy is still pending.
+        - Metrics are in-memory snapshots with JSON + Prometheus text export; OTel/remote aggregation is still pending for cluster-wide long-term retention.
+        - Central audit log supports count+age retention, bounded export, and file-based scheduled archival; external archive shipping/lifecycle policies are still pending.
         - No RBAC/authorization model beyond mTLS + perimeter controls.
         - Artifact download for `tarball_path` depends on gateway runtime mounts/config (`WORKER_ADMIN_JOB_TARBALL_DIR`) when worker and gateway are split.
 
@@ -218,10 +221,10 @@ Worker service job runner (containerized):
 
 ### Must-have (service)
 
-1. **Admin observability**: implemented as in-memory service metrics + gateway endpoint; pending OTel/Prometheus export and durable retention.
+1. **Admin observability**: implemented as in-memory service metrics + gateway JSON/Prometheus endpoints; pending OTel export and durable retention backend.
 1. **Policy enforcement**: implemented for DLQ replay caps, schedule run caps, and optional approval token checks in admin mutations.
 1. **Artifact API parity**: implemented in gateway with an artifact-store abstraction; remaining work is non-filesystem providers (S3/object store) and signed URL policies.
-1. **Audit retention/export**: implemented for count-based retention + export endpoints; remaining work is time-window retention policy and scheduled archival.
+1. **Audit retention/export**: implemented for count+time-window retention + export endpoints, plus file-based scheduled archival; remaining work is external archival lifecycle (e.g., object storage + retention policies).
 
 ### Must-have (admin UI)
 

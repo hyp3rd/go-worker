@@ -1,6 +1,6 @@
 module github.com/hyp3rd/go-worker
 
-go 1.25.7
+go 1.26.0
 
 require (
 	github.com/goccy/go-json v0.10.5
@@ -13,7 +13,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.40.0
 	go.opentelemetry.io/otel/sdk/metric v1.40.0
 	golang.org/x/time v0.14.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )

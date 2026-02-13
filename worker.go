@@ -115,6 +115,8 @@ type TaskManager struct {
 	auditEventsMu   sync.RWMutex
 	auditEvents     []AdminAuditEvent
 	auditEventLimit int
+	auditRetention  time.Duration
+	auditArchiver   *adminAuditArchiver
 }
 
 // NewTaskManagerWithDefaults creates a new task manager with default values.
@@ -245,6 +247,8 @@ func newTaskManagerFromConfig(ctx context.Context, cfg taskManagerConfig) *TaskM
 		cronRuns:            map[uuid.UUID]cronRunInfo{},
 		jobEventLimit:       defaultAdminJobEventLimit,
 		auditEventLimit:     normalizeAdminEventLimit(cfg.auditEventLimit, defaultAdminAuditEventLimit),
+		auditRetention:      normalizeAdminAuditRetention(cfg.auditRetention),
+		auditArchiver:       newAdminAuditArchiver(cfg.auditArchiveDir, cfg.auditArchiveInt),
 	}
 
 	tm.queueCond = sync.NewCond(&tm.queueMu)
@@ -282,11 +286,27 @@ func normalizeTaskManagerConfig(cfg taskManagerConfig) taskManagerConfig {
 		cfg.maxRetries = DefaultMaxRetries
 	}
 
+	if cfg.auditRetention < 0 {
+		cfg.auditRetention = 0
+	}
+
+	if cfg.auditArchiveInt < 0 {
+		cfg.auditArchiveInt = 0
+	}
+
 	if cfg.durableCodec == nil {
 		cfg.durableCodec = ProtoDurableCodec{}
 	}
 
 	return cfg
+}
+
+func normalizeAdminAuditRetention(value time.Duration) time.Duration {
+	if value <= 0 {
+		return 0
+	}
+
+	return value
 }
 
 // IsEmpty checks if the task scheduler queue is empty.
@@ -327,6 +347,7 @@ func (tm *TaskManager) StartWorkers(ctx context.Context) {
 		}
 
 		tm.startCron()
+		tm.startAuditArchival(workerCtx)
 	})
 }
 

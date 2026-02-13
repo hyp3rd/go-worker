@@ -139,6 +139,8 @@ func getNumberValue(value any) float64 {
 		if err == nil {
 			return parsed
 		}
+	default:
+		return 0
 	}
 
 	return 0
