@@ -115,7 +115,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: codacy-sarif-chunks
-                  path: sarif-chunks
+                  path: sarif-chunks/*.sarif
                   if-no-files-found: error
 
     codacy-security-upload:
@@ -141,7 +141,10 @@ jobs:
               uses: actions/download-artifact@v5
               with:
                   name: codacy-sarif-chunks
-                  path: .
+                  path: sarif-chunks
+
+            - name: Verify SARIF chunk path
+              run: ls -la sarif-chunks
 
             - name: Upload SARIF chunk
               uses: github/codeql-action/upload-sarif@v4
