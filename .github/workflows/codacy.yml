@@ -28,6 +28,8 @@ permissions:
 
 jobs:
     codacy-security-scan:
+        outputs:
+            sarif_matrix: ${{ steps.split-sarif.outputs.matrix }}
         permissions:
             # for actions/checkout to fetch code
             contents: read
@@ -58,27 +60,94 @@ jobs:
                   # This will handover control about PR rejection to the GitHub side
                   max-allowed-issues: 2147483647
 
-            - name: Normalize SARIF run categories
+            - name: Normalize and split SARIF runs
+              id: split-sarif
               run: |
                   set -euo pipefail
                   python - <<'PY'
                   import json, os
+                  from pathlib import Path
+
+                  max_runs = 20
+
                   with open("results.sarif", "r", encoding="utf-8") as f:
                       sarif = json.load(f)
+
                   runs = sarif.get("runs", [])
                   if not runs:
                       raise SystemExit("results.sarif has no runs")
+
                   for idx, run in enumerate(runs):
                       auto = run.get("automationDetails") or {}
                       base = auto.get("id") or "codacy"
                       auto["id"] = f"{base}-{idx}"
                       run["automationDetails"] = auto
-                  with open("results-normalized.sarif", "w", encoding="utf-8") as f:
-                      json.dump(sarif, f)
+
+                  outdir = Path("sarif-chunks")
+                  outdir.mkdir(parents=True, exist_ok=True)
+
+                  base_payload = {k: v for k, v in sarif.items() if k != "runs"}
+                  include = []
+
+                  for chunk_idx, start in enumerate(range(0, len(runs), max_runs)):
+                      chunk_runs = runs[start : start + max_runs]
+                      chunk_file = outdir / f"results-{chunk_idx:03d}.sarif"
+
+                      payload = dict(base_payload)
+                      payload["runs"] = chunk_runs
+                      chunk_file.write_text(json.dumps(payload), encoding="utf-8")
+
+                      include.append(
+                          {
+                              "file": chunk_file.name,
+                              "category": f"codacy-{chunk_idx:03d}",
+                          }
+                      )
+
+                  matrix = json.dumps({"include": include}, separators=(",", ":"))
+                  with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+                      out.write(f"matrix={matrix}\n")
+
+                  print(f"Prepared {len(include)} SARIF chunk(s)")
                   PY
 
-            # Upload the SARIF file generated in the previous step
-            - name: Upload SARIF results file
+            - name: Upload SARIF chunks artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: codacy-sarif-chunks
+                  path: sarif-chunks/*.sarif
+                  if-no-files-found: error
+
+    codacy-security-upload:
+        name: Codacy Security Scan Upload
+        needs: codacy-security-scan
+        if: ${{ needs.codacy-security-scan.outputs.sarif_matrix != '' }}
+        permissions:
+            # for actions/checkout to fetch code
+            contents: read
+            # for github/codeql-action/upload-sarif to upload SARIF results
+            security-events: write
+            # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
+            actions: read
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix: ${{ fromJson(needs.codacy-security-scan.outputs.sarif_matrix) }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Download SARIF chunks artifact
+              uses: actions/download-artifact@v5
+              with:
+                  name: codacy-sarif-chunks
+                  path: sarif-chunks
+
+            - name: Verify SARIF chunk path
+              run: ls -la sarif-chunks
+
+            - name: Upload SARIF chunk
               uses: github/codeql-action/upload-sarif@v4
               with:
-                  sarif_file: results-normalized.sarif
+                  sarif_file: sarif-chunks/${{ matrix.file }}
+                  category: ${{ matrix.category }}
