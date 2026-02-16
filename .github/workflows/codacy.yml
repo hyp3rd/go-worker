@@ -138,7 +138,7 @@ jobs:
               uses: actions/checkout@v6
 
             - name: Download SARIF chunks artifact
-              uses: actions/download-artifact@v5
+              uses: actions/download-artifact@v7
               with:
                   name: codacy-sarif-chunks
                   path: sarif-chunks
