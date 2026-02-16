@@ -112,7 +112,7 @@ jobs:
                   PY
 
             - name: Upload SARIF chunks artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v6
               with:
                   name: codacy-sarif-chunks
                   path: sarif-chunks/*.sarif
