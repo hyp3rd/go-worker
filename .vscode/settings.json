@@ -1,5 +1,7 @@
 {
   "yaml.schemas": {
     "https://golangci-lint.run/jsonschema/golangci.jsonschema.json": "file:///Users/dy14uc/Developer/github.com/hyp3rd/go-worker/.golangci.yaml"
-  }
+  },
+  "snyk.advanced.organization": "e3a23328-9b6e-43a2-acb5-e23bc7cfc9dc",
+  "snyk.advanced.autoSelectOrganization": true
 }
