@@ -11,7 +11,8 @@ repos:
             cspell.json |
             admin-ui/package.json |
             admin-ui/package-lock.json |
-            admin-ui/tsconfig.json
+            admin-ui/tsconfig.json |
+            .vscode/settings.json
           )$
       - id: end-of-file-fixer
       - id: mixed-line-ending

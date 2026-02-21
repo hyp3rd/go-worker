@@ -9,17 +9,17 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "dayjs": "^1.11.13",
+    "dayjs": "^1.11.19",
     "next": "16.1.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^24.10.12",
+    "@types/node": "^25.3.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.1",
     "eslint-config-next": "^16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
