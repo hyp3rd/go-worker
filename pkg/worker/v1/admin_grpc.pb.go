@@ -8,7 +8,6 @@ package workerpb
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -416,111 +415,84 @@ type UnimplementedAdminServiceServer struct{}
 func (UnimplementedAdminServiceServer) GetHealth(context.Context, *GetHealthRequest) (*GetHealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetHealth not implemented")
 }
-
 func (UnimplementedAdminServiceServer) GetOverview(context.Context, *GetOverviewRequest) (*GetOverviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOverview not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListQueues not implemented")
 }
-
 func (UnimplementedAdminServiceServer) GetQueue(context.Context, *GetQueueRequest) (*GetQueueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetQueue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) UpdateQueueWeight(context.Context, *UpdateQueueWeightRequest) (*UpdateQueueWeightResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateQueueWeight not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ResetQueueWeight(context.Context, *ResetQueueWeightRequest) (*ResetQueueWeightResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResetQueueWeight not implemented")
 }
-
 func (UnimplementedAdminServiceServer) PauseQueue(context.Context, *PauseQueueRequest) (*PauseQueueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseQueue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListJobs not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListJobEvents(context.Context, *ListJobEventsRequest) (*ListJobEventsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListJobEvents not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListAuditEvents(context.Context, *ListAuditEventsRequest) (*ListAuditEventsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAuditEvents not implemented")
 }
-
 func (UnimplementedAdminServiceServer) GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetJob not implemented")
 }
-
 func (UnimplementedAdminServiceServer) UpsertJob(context.Context, *UpsertJobRequest) (*UpsertJobResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpsertJob not implemented")
 }
-
 func (UnimplementedAdminServiceServer) DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteJob not implemented")
 }
-
 func (UnimplementedAdminServiceServer) RunJob(context.Context, *RunJobRequest) (*RunJobResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RunJob not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListScheduleFactories(context.Context, *ListScheduleFactoriesRequest) (*ListScheduleFactoriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListScheduleFactories not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListScheduleEvents(context.Context, *ListScheduleEventsRequest) (*ListScheduleEventsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListScheduleEvents not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSchedules not implemented")
 }
-
 func (UnimplementedAdminServiceServer) CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateSchedule not implemented")
 }
-
 func (UnimplementedAdminServiceServer) DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteSchedule not implemented")
 }
-
 func (UnimplementedAdminServiceServer) PauseSchedule(context.Context, *PauseScheduleRequest) (*PauseScheduleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseSchedule not implemented")
 }
-
 func (UnimplementedAdminServiceServer) RunSchedule(context.Context, *RunScheduleRequest) (*RunScheduleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RunSchedule not implemented")
 }
-
 func (UnimplementedAdminServiceServer) PauseSchedules(context.Context, *PauseSchedulesRequest) (*PauseSchedulesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseSchedules not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ListDLQ(context.Context, *ListDLQRequest) (*ListDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDLQ not implemented")
 }
-
 func (UnimplementedAdminServiceServer) GetDLQEntry(context.Context, *GetDLQEntryRequest) (*GetDLQEntryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDLQEntry not implemented")
 }
-
 func (UnimplementedAdminServiceServer) PauseDequeue(context.Context, *PauseDequeueRequest) (*PauseDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PauseDequeue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ResumeDequeue(context.Context, *ResumeDequeueRequest) (*ResumeDequeueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeDequeue not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ReplayDLQ(context.Context, *ReplayDLQRequest) (*ReplayDLQResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReplayDLQ not implemented")
 }
-
 func (UnimplementedAdminServiceServer) ReplayDLQByID(context.Context, *ReplayDLQByIDRequest) (*ReplayDLQByIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReplayDLQByID not implemented")
 }
