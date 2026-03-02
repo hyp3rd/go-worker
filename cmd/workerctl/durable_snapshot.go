@@ -119,7 +119,7 @@ func runSnapshotExport(cfg *redisConfig, opts snapshotExportOptions) error {
 	}
 	defer client.Close()
 
-	ctx, cancel := cfg.context()
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeoutOrDefault())
 	defer cancel()
 
 	writer, closeFn, err := openOutput(opts.out)
@@ -185,7 +185,7 @@ func runSnapshotImport(cfg *redisConfig, opts snapshotImportOptions) error {
 	}
 	defer client.Close()
 
-	ctx, cancel := cfg.context()
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeoutOrDefault())
 	defer cancel()
 
 	prefix := keyPrefix(cfg.prefix)

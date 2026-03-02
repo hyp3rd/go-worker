@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -97,7 +98,7 @@ func runDurableEnqueue(cfg *redisConfig, opts enqueueOptions) error {
 	}
 	defer client.Close()
 
-	ctx, cancel := cfg.context()
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeoutOrDefault())
 	defer cancel()
 
 	backend, err := newDurableBackend(client, cfg.prefix, opts.defaultQueue)

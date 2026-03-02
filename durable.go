@@ -415,25 +415,25 @@ func (tm *TaskManager) startDurableLeaseRenewal(
 
 	renewCtx := baseCtx
 
-	renewCancel := func() {}
+	parentDone := (<-chan struct{})(nil)
 	if ctx != nil && ctx != baseCtx {
-		renewCtx, renewCancel = mergeContext(baseCtx, ctx)
+		parentDone = ctx.Done()
 	}
 
 	done := make(chan struct{})
 
 	tm.workerWg.Go(func() {
-		tm.runDurableLeaseRenewalLoop(renewCtx, lease, leaseDuration, interval, done)
+		tm.runDurableLeaseRenewalLoop(renewCtx, parentDone, lease, leaseDuration, interval, done)
 	})
 
 	return func() {
 		close(done)
-		renewCancel()
 	}
 }
 
 func (tm *TaskManager) runDurableLeaseRenewalLoop(
 	renewCtx context.Context,
+	parentDone <-chan struct{},
 	lease DurableTaskLease,
 	leaseDuration time.Duration,
 	interval time.Duration,
@@ -445,6 +445,8 @@ func (tm *TaskManager) runDurableLeaseRenewalLoop(
 	for {
 		select {
 		case <-done:
+			return
+		case <-parentDone:
 			return
 		case <-renewCtx.Done():
 			return
@@ -478,6 +480,35 @@ func (tm *TaskManager) handleDurableLeaseRenewal(
 func (tm *TaskManager) runDurableTask(ctx context.Context, task *Task, timeout time.Duration) (any, error) {
 	defer tm.wg.Done()
 
+	lease, err := tm.durableLeaseForRun(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	tm.hookStart(task)
+	tm.recordJobStart(task)
+
+	tm.metrics.running.Add(1)
+	defer tm.metrics.running.Add(1 * -1)
+
+	execCtx, effectiveTimeout := tm.taskContext(ctx, task, timeout)
+
+	cancel := func() {}
+	if effectiveTimeout > 0 {
+		execCtx, cancel = context.WithTimeout(execCtx, effectiveTimeout)
+	}
+
+	defer cancel()
+
+	stopRenew := tm.startDurableLeaseRenewal(ctx, execCtx, *lease)
+	defer stopRenew()
+
+	result, runErr := tm.executeTaskWithSpan(execCtx, task)
+
+	return tm.finalizeDurableTaskRun(ctx, task, *lease, execCtx.Err(), result, runErr)
+}
+
+func (tm *TaskManager) durableLeaseForRun(ctx context.Context, task *Task) (*DurableTaskLease, error) {
 	if task == nil {
 		return nil, ewrap.New("task is nil")
 	}
@@ -487,69 +518,46 @@ func (tm *TaskManager) runDurableTask(ctx context.Context, task *Task, timeout t
 		return nil, ewrap.New("durable lease missing")
 	}
 
-	if !task.markRunning() {
-		err := tm.durableBackend.Fail(ctx, *lease, ErrTaskAlreadyStarted)
-		if err != nil && ctx.Err() != nil {
-			tm.metrics.failed.Add(1)
-		}
-
-		return nil, ErrTaskAlreadyStarted
+	if task.markRunning() {
+		return lease, nil
 	}
 
-	tm.hookStart(task)
-	tm.recordJobStart(task)
+	err := tm.durableBackend.Fail(ctx, *lease, ErrTaskAlreadyStarted)
+	if err != nil && ctx.Err() != nil {
+		tm.metrics.failed.Add(1)
+	}
 
-	tm.metrics.running.Add(1)
-	defer tm.metrics.running.Add(1 * -1)
+	return nil, ErrTaskAlreadyStarted
+}
 
-	execCtx, cancel := tm.taskContext(ctx, task, timeout)
-	defer cancel()
-
-	stopRenew := tm.startDurableLeaseRenewal(ctx, execCtx, *lease)
-	defer stopRenew()
-
-	var (
-		result any
-		err    error
-	)
-
-	execCtx, span := tm.startSpan(execCtx, task)
-
-	defer func() {
-		tm.endSpan(span, err)
-	}()
-
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				err = ewrap.Newf("task panic: %v", r)
-			}
-		}()
-
-		result, err = task.Execute(execCtx)
-	}()
-
+func (tm *TaskManager) finalizeDurableTaskRun(
+	ctx context.Context,
+	task *Task,
+	lease DurableTaskLease,
+	execErr error,
+	result any,
+	err error,
+) (any, error) {
 	if err == nil {
 		tm.finishTask(task, Completed, result, nil)
-
-		tm.ackDurable(ctx, *lease)
+		tm.ackDurable(ctx, lease)
 
 		return result, nil
 	}
 
-	if errors.Is(execCtx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+	if errors.Is(execErr, context.Canceled) || errors.Is(err, context.Canceled) {
 		tm.finishTask(task, Cancelled, result, ErrTaskCancelled)
-
-		tm.failDurable(ctx, *lease, ErrTaskCancelled)
+		tm.failDurable(ctx, lease, ErrTaskCancelled)
 
 		return result, ErrTaskCancelled
 	}
 
-	if errors.Is(execCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-		return tm.handleDurableRetryOrFail(ctx, task, *lease, result, err, ContextDeadlineReached)
+	terminalStatus := Failed
+	if errors.Is(execErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		terminalStatus = ContextDeadlineReached
 	}
 
-	return tm.handleDurableRetryOrFail(ctx, task, *lease, result, err, Failed)
+	return tm.handleDurableRetryOrFail(ctx, task, lease, result, err, terminalStatus)
 }
 
 func (tm *TaskManager) handleDurableRetryOrFail(

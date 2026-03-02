@@ -104,7 +104,7 @@ func runDurableDump(cfg *redisConfig, opts dumpOptions) error {
 	}
 	defer client.Close()
 
-	ctx, cancel := cfg.context()
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeoutOrDefault())
 	defer cancel()
 
 	prefix := keyPrefix(cfg.prefix)

@@ -861,7 +861,7 @@ func (h *adminGatewayHandler) handleJobArtifact(w http.ResponseWriter, r *http.R
 	defer func() {
 		closeErr := file.Close()
 		if closeErr != nil {
-			log.Printf("admin gateway artifact close request_id=%s err=%v", reqID, closeErr)
+			log.Printf("admin gateway artifact close err=%v", closeErr)
 		}
 	}()
 

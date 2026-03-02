@@ -88,7 +88,7 @@ func runDurableStats(cfg *redisConfig, opts statsOptions) error {
 }
 
 func collectDurableStats(cfg *redisConfig, client rueidis.Client) (statsSnapshot, error) {
-	ctx, cancel := cfg.context()
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeoutOrDefault())
 	defer cancel()
 
 	prefix := keyPrefix(cfg.prefix)

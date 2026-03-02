@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"strings"
 	"time"
@@ -52,13 +51,13 @@ func (cfg *redisConfig) tlsConfig() *tls.Config {
 	return tlsCfg
 }
 
-func (cfg *redisConfig) context() (context.Context, context.CancelFunc) {
+func (cfg *redisConfig) timeoutOrDefault() time.Duration {
 	timeout := cfg.timeout
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
 
-	return context.WithTimeout(context.Background(), timeout)
+	return timeout
 }
 
 func keyPrefix(prefix string) string {
