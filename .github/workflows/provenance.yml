@@ -45,7 +45,7 @@ jobs:
           archive="${{ steps.archive.outputs.archive }}"
           cosign sign-blob --yes --output-signature "${archive}.sig" --output-certificate "${archive}.pem" "${archive}"
       - name: Upload source artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: source-archive
           path: |
