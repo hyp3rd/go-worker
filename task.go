@@ -241,6 +241,17 @@ func (task *Task) CancelledChan() <-chan struct{} {
 	return task.Ctx.Done()
 }
 
+// Cancel invokes the task cancel function when available.
+func (task *Task) Cancel() {
+	if task == nil {
+		return
+	}
+
+	if task.CancelFunc != nil {
+		task.CancelFunc()
+	}
+}
+
 // ShouldSchedule returns an error if the task should not be scheduled.
 func (task *Task) ShouldSchedule() error {
 	task.mu.Lock()

@@ -495,7 +495,7 @@ func (tm *TaskManager) StopGraceful(ctx context.Context) error {
 func (tm *TaskManager) StopNow() {
 	tm.stopOnce.Do(func() {
 		tm.accepting.Store(false)
-		tm.cancel()
+		tm.cancelContext()
 		tm.queueCond.Broadcast()
 		tm.cancelAllInternal()
 		tm.results.Close()
@@ -515,9 +515,7 @@ func (tm *TaskManager) CancelTask(id uuid.UUID) error {
 		return err
 	}
 
-	if task.CancelFunc != nil {
-		task.CancelFunc()
-	}
+	task.Cancel()
 
 	status := task.Status()
 
@@ -618,6 +616,12 @@ func (tm *TaskManager) GetTasks() []*Task {
 	}
 
 	return tasks
+}
+
+func (tm *TaskManager) cancelContext() {
+	if tm.cancel != nil {
+		tm.cancel()
+	}
 }
 
 func (tm *TaskManager) waitWorkers(ctx context.Context) error {
@@ -773,29 +777,87 @@ func (tm *TaskManager) prepareTaskForRegister(ctx context.Context, task *Task) e
 	task.initRetryState(tm.retryDelay, tm.maxRetries)
 	tm.applyQueueDefaults(task)
 
-	taskCtx, cancel := mergeContext(ctx, task.Ctx)
+	otherCtx := task.Ctx
+
+	var (
+		otherDeadline    time.Time
+		hasOtherDeadline bool
+		otherDone        <-chan struct{}
+	)
+
+	if otherCtx != nil {
+		otherDeadline, hasOtherDeadline = otherCtx.Deadline()
+		otherDone = otherCtx.Done()
+	}
+
+	taskCtx := registerTaskContext(ctx, task, otherDeadline, hasOtherDeadline)
+	tm.attachTaskCancellationWatchers(taskCtx, task, otherDone)
+
+	return validatePreparedTask(task)
+}
+
+func registerTaskContext(
+	parent context.Context,
+	task *Task,
+	otherDeadline time.Time,
+	hasOtherDeadline bool,
+) context.Context {
+	taskCtx, cancel := context.WithCancel(parent)
+
+	if hasOtherDeadline && isEarlierThanParentDeadline(parent, otherDeadline) {
+		cancel()
+		taskCtx, cancel = context.WithDeadline(parent, otherDeadline)
+	}
+
 	task.Ctx = taskCtx
 	task.CancelFunc = cancel
 
-	if tm.ctx != nil {
+	return taskCtx
+}
+
+func isEarlierThanParentDeadline(parent context.Context, candidate time.Time) bool {
+	parentDeadline, hasParentDeadline := parent.Deadline()
+	if !hasParentDeadline {
+		return true
+	}
+
+	return candidate.Before(parentDeadline)
+}
+
+func (tm *TaskManager) attachTaskCancellationWatchers(taskCtx context.Context, task *Task, otherDone <-chan struct{}) {
+	if otherDone != nil {
 		go func() {
 			select {
-			case <-tm.ctx.Done():
-				cancel()
+			case <-otherDone:
+				task.Cancel()
 			case <-taskCtx.Done():
 				return
 			}
 		}()
 	}
 
-	err := task.IsValid()
-	if err != nil {
-		task.markTerminal(Invalid, nil, err)
+	if tm.ctx != nil {
+		go func() {
+			select {
+			case <-tm.ctx.Done():
+				task.Cancel()
+			case <-taskCtx.Done():
+				return
+			}
+		}()
+	}
+}
 
-		return err
+func validatePreparedTask(task *Task) error {
+	err := task.IsValid()
+	if err == nil {
+		return nil
 	}
 
-	return nil
+	task.Cancel()
+	task.markTerminal(Invalid, nil, err)
+
+	return err
 }
 
 func (tm *TaskManager) applyQueueDefaults(task *Task) {
@@ -1046,43 +1108,52 @@ func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Dur
 	tm.metrics.running.Add(1)
 	defer tm.metrics.running.Add(1 * -1)
 
-	execCtx, cancel := tm.taskContext(ctx, task, timeout)
+	execCtx, effectiveTimeout := tm.taskContext(ctx, task, timeout)
+
+	cancel := func() {}
+	if effectiveTimeout > 0 {
+		execCtx, cancel = context.WithTimeout(execCtx, effectiveTimeout)
+	}
+
 	defer cancel()
 
-	var (
-		result any
-		err    error
-	)
+	result, err := tm.executeTaskWithSpan(execCtx, task)
 
+	return tm.finalizeTaskRun(task, execCtx.Err(), result, err)
+}
+
+func (tm *TaskManager) executeTaskWithSpan(execCtx context.Context, task *Task) (result any, err error) {
 	execCtx, span := tm.startSpan(execCtx, task)
 
 	defer func() {
 		tm.endSpan(span, err)
 	}()
 
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				err = ewrap.Newf("task panic: %v", r)
-			}
-		}()
-
-		result, err = task.Execute(execCtx)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = ewrap.Newf("task panic: %v", recovered)
+		}
 	}()
 
+	result, err = task.Execute(execCtx)
+
+	return result, err
+}
+
+func (tm *TaskManager) finalizeTaskRun(task *Task, execErr error, result any, err error) (any, error) {
 	if err == nil {
 		tm.finishTask(task, Completed, result, nil)
 
 		return result, nil
 	}
 
-	if errors.Is(execCtx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+	if errors.Is(execErr, context.Canceled) || errors.Is(err, context.Canceled) {
 		tm.finishTask(task, Cancelled, result, ErrTaskCancelled)
 
 		return result, err
 	}
 
-	if errors.Is(execCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(execErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 		if tm.scheduleRetry(task) {
 			return result, err
 		}
@@ -1101,37 +1172,7 @@ func (tm *TaskManager) runTask(ctx context.Context, task *Task, timeout time.Dur
 	return result, err
 }
 
-func mergeContext(parent, other context.Context) (context.Context, context.CancelFunc) {
-	base := parent
-	baseCancel := func() {}
-
-	if other != nil {
-		if dl, ok := other.Deadline(); ok {
-			if parentDl, ok := parent.Deadline(); !ok || dl.Before(parentDl) {
-				base, baseCancel = context.WithDeadline(parent, dl)
-			}
-		}
-	}
-
-	merged, cancel := context.WithCancel(base)
-
-	if other != nil {
-		go func() {
-			select {
-			case <-other.Done():
-				cancel()
-			case <-merged.Done():
-			}
-		}()
-	}
-
-	return merged, func() {
-		baseCancel()
-		cancel()
-	}
-}
-
-func (tm *TaskManager) taskContext(parent context.Context, task *Task, timeout time.Duration) (context.Context, context.CancelFunc) {
+func (tm *TaskManager) taskContext(parent context.Context, task *Task, timeout time.Duration) (context.Context, time.Duration) {
 	base := task.Ctx
 	if base == nil {
 		base = parent
@@ -1142,16 +1183,16 @@ func (tm *TaskManager) taskContext(parent context.Context, task *Task, timeout t
 	}
 
 	if timeout > 0 {
-		return context.WithTimeout(base, timeout)
+		return base, timeout
 	}
 
 	if tm.timeout > 0 {
 		if _, ok := base.Deadline(); !ok {
-			return context.WithTimeout(base, tm.timeout)
+			return base, tm.timeout
 		}
 	}
 
-	return base, func() {}
+	return base, 0
 }
 
 func (tm *TaskManager) scheduleRetry(task *Task) bool {

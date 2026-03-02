@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -66,7 +67,7 @@ func setDurablePauseState(cfg *redisConfig, paused, apply bool) error {
 	}
 	defer client.Close()
 
-	ctx, cancel := cfg.context()
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeoutOrDefault())
 	defer cancel()
 
 	key := pausedKey(keyPrefix(cfg.prefix))
