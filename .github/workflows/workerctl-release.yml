@@ -63,7 +63,7 @@ jobs:
           (cd dist && sha256sum "${BIN}" > "${BIN}.sha256")
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: workerctl-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/workerctl-${{ matrix.os }}-${{ matrix.arch }}*
