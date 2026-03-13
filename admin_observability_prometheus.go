@@ -1,7 +1,7 @@
 package worker
 
 import (
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -91,7 +91,7 @@ func sortedKeys[T any](values map[string]T) []string {
 		keys = append(keys, key)
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	return keys
 }

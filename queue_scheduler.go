@@ -1,6 +1,6 @@
 package worker
 
-import "sort"
+import "slices"
 
 type taskQueue struct {
 	name      string
@@ -45,7 +45,7 @@ func (s *queueScheduler) Push(task *Task, weight int) {
 		}
 		s.queues[queue] = queueState
 		s.order = append(s.order, queue)
-		sort.Strings(s.order)
+		slices.Sort(s.order)
 	} else if weight > 0 {
 		queueState.weight = weight
 	}

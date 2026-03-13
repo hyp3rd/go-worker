@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -601,7 +601,7 @@ func mergeQueueNames(queues []string, weights map[string]int) []string {
 		out = append(out, queue)
 	}
 
-	sort.Strings(out)
+	slices.Sort(out)
 
 	return out
 }
@@ -1098,8 +1098,8 @@ func (b *RedisDurableBackend) AdminJobs(ctx context.Context) ([]AdminJob, error)
 		jobs = append(jobs, job)
 	}
 
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].Name < jobs[j].Name
+	slices.SortFunc(jobs, func(a, b AdminJob) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 
 	return jobs, nil

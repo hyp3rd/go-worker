@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -178,7 +178,7 @@ func resolveQueues(ctx context.Context, client rueidis.Client, queuesKey, filter
 		return []string{defaultQueueName}, nil
 	}
 
-	sort.Strings(list)
+	slices.Sort(list)
 
 	return list, nil
 }

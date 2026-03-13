@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -221,8 +221,8 @@ func (s *FileJobEventStore) readEvents(key string, limit int) ([]AdminJobEvent, 
 		files = append(files, entry)
 	}
 
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Name() > files[j].Name()
+	slices.SortFunc(files, func(a, b os.DirEntry) int {
+		return strings.Compare(b.Name(), a.Name())
 	})
 
 	events := make([]AdminJobEvent, 0, min(limit, len(files)))
@@ -274,8 +274,8 @@ func (s *FileJobEventStore) pruneOldest(dir string) {
 		return
 	}
 
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Name() < files[j].Name()
+	slices.SortFunc(files, func(a, b os.DirEntry) int {
+		return strings.Compare(a.Name(), b.Name())
 	})
 
 	excess := len(files) - s.maxEntries
