@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -146,8 +146,8 @@ func (tm *TaskManager) AdminSchedules(ctx context.Context) ([]AdminSchedule, err
 		})
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
+	slices.SortFunc(results, func(a, b AdminSchedule) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 
 	return results, nil
@@ -178,8 +178,8 @@ func (tm *TaskManager) AdminScheduleFactories(ctx context.Context) ([]AdminSched
 		})
 	}
 
-	sort.Slice(factories, func(i, j int) bool {
-		return factories[i].Name < factories[j].Name
+	slices.SortFunc(factories, func(a, b AdminScheduleFactory) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 
 	return factories, nil

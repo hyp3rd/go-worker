@@ -1,7 +1,7 @@
 package worker
 
 import (
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -189,8 +189,16 @@ func (tm *TaskManager) pruneRegistry(now time.Time, cfg retentionConfig) {
 		return
 	}
 
-	sort.Slice(terminal, func(i, j int) bool {
-		return terminal[i].at.Before(terminal[j].at)
+	slices.SortFunc(terminal, func(a, b retentionEntry) int {
+		if a.at.Before(b.at) {
+			return -1
+		}
+
+		if a.at.After(b.at) {
+			return 1
+		}
+
+		return 0
 	})
 
 	for _, entry := range terminal {

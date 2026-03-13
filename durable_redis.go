@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -457,7 +456,7 @@ func (b *RedisDurableBackend) dequeueQueues(ctx context.Context) ([]string, map[
 	}
 
 	queues = ensureQueueList(queues, defaultQueue)
-	sort.Strings(queues)
+	slices.Sort(queues)
 
 	paused, err := b.pausedQueues(ctx)
 	if err != nil {
