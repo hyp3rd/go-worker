@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hyp3rd/ewrap"
-	sectools "github.com/hyp3rd/sectools/pkg/io"
+	sectools "github.com/hyp3rd/sectools/pkg/iosec"
 )
 
 const (

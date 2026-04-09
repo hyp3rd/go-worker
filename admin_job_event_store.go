@@ -13,7 +13,7 @@ import (
 
 	"github.com/goccy/go-json"
 	"github.com/hyp3rd/ewrap"
-	sectools "github.com/hyp3rd/sectools/pkg/io"
+	sectools "github.com/hyp3rd/sectools/pkg/iosec"
 )
 
 const (

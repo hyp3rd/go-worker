@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hyp3rd/ewrap"
 	sectconv "github.com/hyp3rd/sectools/pkg/converters"
-	sectools "github.com/hyp3rd/sectools/pkg/io"
+	sectools "github.com/hyp3rd/sectools/pkg/iosec"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
