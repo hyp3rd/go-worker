@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/hyp3rd/ewrap"
-	sectools "github.com/hyp3rd/sectools/pkg/io"
+	sectools "github.com/hyp3rd/sectools/pkg/iosec"
 	sectvalidate "github.com/hyp3rd/sectools/pkg/validate"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"

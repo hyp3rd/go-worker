@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/hyp3rd/ewrap"
-	sectools "github.com/hyp3rd/sectools/pkg/io"
+	sectools "github.com/hyp3rd/sectools/pkg/iosec"
 
 	workerpb "github.com/hyp3rd/go-worker/pkg/worker/v1"
 )
