@@ -2,13 +2,14 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyp3rd/cron/v4"
 	"github.com/hyp3rd/ewrap"
-	"github.com/robfig/cron/v3"
 )
 
 const errParseCronSchedule = "parse cron schedule"
@@ -66,7 +67,7 @@ func (tm *TaskManager) RegisterCronTask(
 		Origin:      cronFactoryOriginUser,
 	}
 
-	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
+	entryID := tm.scheduleCronEntry(normalized, schedule)
 
 	tm.cronEntries[normalized] = entryID
 	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: false}
@@ -103,7 +104,7 @@ func (tm *TaskManager) RegisterDurableCronTask(
 		Origin:         cronFactoryOriginUser,
 	}
 
-	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(normalized)))
+	entryID := tm.scheduleCronEntry(normalized, schedule)
 
 	tm.cronEntries[normalized] = entryID
 	tm.cronSpecs[normalized] = cronSpec{Spec: strings.TrimSpace(spec), Durable: true}
@@ -111,24 +112,26 @@ func (tm *TaskManager) RegisterDurableCronTask(
 	return nil
 }
 
-func (tm *TaskManager) cronJob(name string) func() {
-	return func() {
-		if tm.skipCronTick() {
-			return
+func (tm *TaskManager) cronJob(name string) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if tm.skipCronTick(ctx) {
+			return nil
 		}
 
 		spec, factory, ok := tm.cronSpecAndFactory(name)
 		if !ok {
-			return
+			return nil
 		}
 
 		if factory.Durable {
-			tm.runDurableCron(name, spec, factory)
+			tm.runDurableCron(ctx, name, spec, factory)
 
-			return
+			return nil
 		}
 
-		tm.runInMemoryCron(name, spec, factory)
+		tm.runInMemoryCron(ctx, name, spec, factory)
+
+		return nil
 	}
 }
 
@@ -145,8 +148,8 @@ func (tm *TaskManager) cronSpecAndFactory(name string) (cronSpec, cronFactory, b
 	return spec, factory, true
 }
 
-func (tm *TaskManager) runDurableCron(name string, spec cronSpec, factory cronFactory) {
-	task, err := factory.DurableFactory(tm.ctx)
+func (tm *TaskManager) runDurableCron(ctx context.Context, name string, spec cronSpec, factory cronFactory) {
+	task, err := factory.DurableFactory(ctx)
 	if err != nil {
 		cronLogError("cron durable task factory", name, err)
 
@@ -187,15 +190,15 @@ func (tm *TaskManager) runDurableCron(name string, spec cronSpec, factory cronFa
 
 	tm.noteCronRun(runInfo)
 
-	err = tm.RegisterDurableTask(tm.ctx, task)
+	err = tm.RegisterDurableTask(ctx, task)
 	if err != nil {
 		tm.dropCronRun(task.ID)
 		cronLogError("cron register durable task", name, err)
 	}
 }
 
-func (tm *TaskManager) runInMemoryCron(name string, spec cronSpec, factory cronFactory) {
-	task, err := factory.TaskFactory(tm.ctx)
+func (tm *TaskManager) runInMemoryCron(ctx context.Context, name string, spec cronSpec, factory cronFactory) {
+	task, err := factory.TaskFactory(ctx)
 	if err != nil {
 		cronLogError("cron task factory", name, err)
 
@@ -215,7 +218,7 @@ func (tm *TaskManager) runInMemoryCron(name string, spec cronSpec, factory cronF
 	runInfo := cronRunInfoFromTask(name, spec, task, tm.defaultQueue)
 	tm.noteCronRun(runInfo)
 
-	err = tm.RegisterTask(tm.ctx, task)
+	err = tm.RegisterTask(ctx, task)
 	if err != nil {
 		tm.dropCronRun(task.ID)
 		cronLogError("cron register task", name, err)
@@ -258,8 +261,12 @@ func (tm *TaskManager) prepareCronRegistration(
 	return name, schedule, nil
 }
 
-func (tm *TaskManager) skipCronTick() bool {
-	return tm.ctx.Err() != nil || !tm.accepting.Load()
+func (tm *TaskManager) scheduleCronEntry(name string, schedule cron.Schedule) cron.EntryID {
+	return tm.cron.ScheduleNamed(name, schedule, cron.FuncJob(tm.cronJob(name)))
+}
+
+func (tm *TaskManager) skipCronTick(ctx context.Context) bool {
+	return ctx.Err() != nil || tm.ctx.Err() != nil || !tm.accepting.Load()
 }
 
 // UnregisterCronTask removes a cron job by name.
@@ -295,7 +302,7 @@ func (tm *TaskManager) initCron() {
 		tm.cronLoc = location
 	}
 
-	parser := cron.NewParser(
+	parser := cron.NewSpecParser(
 		cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
 	)
 	tm.cron = cron.New(cron.WithLocation(location), cron.WithParser(parser))
@@ -306,7 +313,7 @@ func (tm *TaskManager) startCron() {
 	defer tm.cronMu.Unlock()
 
 	if tm.cron != nil {
-		tm.cron.Start()
+		tm.cron.Start(tm.ctx)
 	}
 }
 
@@ -315,7 +322,10 @@ func (tm *TaskManager) stopCron() {
 	defer tm.cronMu.Unlock()
 
 	if tm.cron != nil {
-		tm.cron.Stop()
+		err := tm.cron.Stop(tm.ctx)
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			cronLogError("cron stop", "scheduler", err)
+		}
 	}
 }
 
@@ -358,13 +368,13 @@ func parseCronSpec(spec string, location *time.Location) (cron.Schedule, error) 
 }
 
 func cronParserStandard(_ *time.Location) cron.Parser {
-	return cron.NewParser(
+	return cron.NewSpecParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
 	)
 }
 
 func cronParserSeconds(_ *time.Location) cron.Parser {
-	return cron.NewParser(
+	return cron.NewSpecParser(
 		cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
 	)
 }
