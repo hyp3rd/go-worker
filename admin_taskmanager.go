@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyp3rd/cron/v4"
 	"github.com/hyp3rd/ewrap"
-	"github.com/robfig/cron/v3"
 )
 
 func (tm *TaskManager) adminBackend() (AdminBackend, error) {
@@ -124,7 +124,11 @@ func (tm *TaskManager) AdminSchedules(ctx context.Context) ([]AdminSchedule, err
 
 	results := make([]AdminSchedule, 0, len(tm.cronEntries))
 	for _, entry := range tm.cron.Entries() {
-		name := nameByID[entry.ID]
+		name := entry.Name
+		if name == "" {
+			name = nameByID[entry.ID]
+		}
+
 		if name == "" {
 			continue
 		}
@@ -474,7 +478,7 @@ func (tm *TaskManager) AdminCreateSchedule(ctx context.Context, spec AdminSchedu
 		tm.cron.Remove(existing)
 	}
 
-	entryID := tm.cron.Schedule(schedule, cron.FuncJob(tm.cronJob(name)))
+	entryID := tm.scheduleCronEntry(name, schedule)
 	tm.cronEntries[name] = entryID
 	tm.cronSpecs[name] = cronSpec{Spec: specValue, Durable: factory.Durable}
 

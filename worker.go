@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hyp3rd/cron/v4"
 	"github.com/hyp3rd/ewrap"
-	"github.com/robfig/cron/v3"
 	"golang.org/x/time/rate"
 )
 
