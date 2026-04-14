@@ -5,10 +5,10 @@ go 1.26.2
 require (
 	github.com/goccy/go-json v0.10.6
 	github.com/google/uuid v1.6.0
-	github.com/hyp3rd/cron/v4 v4.0.0
-	github.com/hyp3rd/ewrap v1.3.9
+	github.com/hyp3rd/cron/v4 v4.0.1
+	github.com/hyp3rd/ewrap v1.4.0
 	github.com/hyp3rd/sectools v1.2.4
-	github.com/redis/rueidis v1.0.73
+	github.com/redis/rueidis v1.0.74
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel/metric v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
@@ -32,5 +32,5 @@ require (
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 )
