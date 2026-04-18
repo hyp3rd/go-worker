@@ -400,6 +400,10 @@ func (tm *TaskManager) adminRunDurableCron(name string, spec cronSpec, factory c
 	if err != nil {
 		tm.dropCronRun(task.ID)
 
+		if IsDurableTaskAlreadyExists(err) {
+			return task.ID.String(), nil
+		}
+
 		return "", err
 	}
 
