@@ -2,7 +2,7 @@ include .project-settings.env
 
 REPO_ROOT = $(shell git rev-parse --show-toplevel)
 GOLANGCI_LINT_VERSION ?= v2.11.4
-BUF_VERSION ?= v1.67.0
+BUF_VERSION ?= v1.68.2
 GO_VERSION ?= 1.26.2
 GCI_PREFIX ?= github.com/hyp3rd/go-worker
 PROTO_ENABLED ?= true

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,19 @@ import (
 )
 
 const errMsgDurableHandlerMissing = "durable handler not registered"
+
+// ErrDurableTaskAlreadyExists is returned when a durable task with the same ID already exists in the backend.
+var ErrDurableTaskAlreadyExists = ewrap.New("durable task already exists")
+
+// IsDurableTaskAlreadyExists checks if the error indicates that a durable task with the same ID already exists.
+func IsDurableTaskAlreadyExists(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return errors.Is(err, ErrDurableTaskAlreadyExists) ||
+		strings.Contains(strings.ToLower(err.Error()), ErrDurableTaskAlreadyExists.Error())
+}
 
 // RegisterDurableTask registers a durable task into the configured backend.
 func (tm *TaskManager) RegisterDurableTask(ctx context.Context, task DurableTask) error {

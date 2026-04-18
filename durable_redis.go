@@ -264,7 +264,7 @@ func (b *RedisDurableBackend) Enqueue(ctx context.Context, task DurableTask) err
 	}
 
 	if result != 1 {
-		return ewrap.New("durable task already exists")
+		return ErrDurableTaskAlreadyExists
 	}
 
 	return nil

@@ -193,6 +193,11 @@ func (tm *TaskManager) runDurableCron(ctx context.Context, name string, spec cro
 	err = tm.RegisterDurableTask(ctx, task)
 	if err != nil {
 		tm.dropCronRun(task.ID)
+
+		if IsDurableTaskAlreadyExists(err) {
+			return
+		}
+
 		cronLogError("cron register durable task", name, err)
 	}
 }
