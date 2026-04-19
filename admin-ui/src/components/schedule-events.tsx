@@ -34,10 +34,6 @@ export function ScheduleEvents({ events }: { events: ScheduleEvent[] }) {
   } | null>(null);
 
   useEffect(() => {
-    setItems(events);
-  }, [events]);
-
-  useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
     let source: EventSource | null = null;
     let active = true;

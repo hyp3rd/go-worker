@@ -76,6 +76,11 @@ Mount a persistent volume at `WORKER_JOB_EVENT_DIR` in production so restarts
 do not wipe the history. The storage interface is pluggable; future backends
 can target object storage (S3) without changing the UI contract.
 
+Schedule events follow a different path: when the worker uses a durable backend,
+schedule execution history is recorded in that backend and is therefore shared
+across worker instances. The in-memory fallback only applies when no durable
+admin backend is available.
+
 ## DLQ
 
 - Replay is at-least-once; ensure handlers are idempotent.
@@ -87,4 +92,6 @@ can target object storage (S3) without changing the UI contract.
 - **Gateway unreachable:** confirm the gateway URL and mTLS cert paths in the container.
 - **No data:** ensure the worker service is running and handlers are registered.
 - **Events stale:** SSE blocked by proxy; UI falls back to polling every 15s.
-- **Events missing after restart:** set `WORKER_JOB_EVENT_DIR` so events persist.
+- **Job events missing after restart:** set `WORKER_JOB_EVENT_DIR` so events persist.
+- **Schedule events only show local runs:** use a durable backend; shared schedule
+  history is persisted through the durable admin backend, not the local process.

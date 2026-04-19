@@ -10,18 +10,18 @@ import (
 )
 
 const (
-	defaultAdminJobEventLimit   = 200
-	jobEventResultMaxLen        = 240
-	adminJobEventPersistTimeout = 2 * time.Second
-	adminStatusRateLimited      = "rate_limited"
-	adminStatusQueued           = "queued"
-	adminStatusRunning          = "running"
-	adminStatusDeadline         = "deadline"
-	adminStatusCompleted        = "completed"
-	adminStatusFailed           = "failed"
-	adminStatusCancelled        = "cancelled"
-	adminStatusInvalid          = "invalid"
-	adminStatusUnknown          = "unknown"
+	defaultAdminJobEventLimit = 200
+	jobEventResultMaxLen      = 240
+	adminEventPersistTimeout  = 2 * time.Second
+	adminStatusRateLimited    = "rate_limited"
+	adminStatusQueued         = "queued"
+	adminStatusRunning        = "running"
+	adminStatusDeadline       = "deadline"
+	adminStatusCompleted      = "completed"
+	adminStatusFailed         = "failed"
+	adminStatusCancelled      = "cancelled"
+	adminStatusInvalid        = "invalid"
+	adminStatusUnknown        = "unknown"
 )
 
 type adminJobEventRecorder interface {
@@ -203,7 +203,7 @@ func (tm *TaskManager) persistJobEvent(ctx context.Context, event AdminJobEvent)
 
 	ctx = context.WithoutCancel(ctx)
 
-	persistCtx, cancel := context.WithTimeout(ctx, adminJobEventPersistTimeout)
+	persistCtx, cancel := context.WithTimeout(ctx, adminEventPersistTimeout)
 	defer cancel()
 
 	err := recorder.AdminRecordJobEvent(persistCtx, event, tm.jobEventLimit)

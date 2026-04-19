@@ -64,6 +64,7 @@ export default async function DlqPage({ searchParams }: DlqPageProps) {
         }
       />
       <DlqTable
+        key={`${queueParam ?? ""}|${handlerParam ?? ""}`}
         entries={entries}
         total={total}
         page={page}

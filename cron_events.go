@@ -1,8 +1,10 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"maps"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +29,10 @@ type cronRunInfo struct {
 	queue      string
 	enqueuedAt time.Time
 	metadata   map[string]string
+}
+
+type adminScheduleEventRecorder interface {
+	AdminRecordScheduleEvent(ctx context.Context, event AdminScheduleEvent, limit int) error
 }
 
 func (tm *TaskManager) noteCronRun(info cronRunInfo) {
@@ -76,18 +82,21 @@ func (tm *TaskManager) recordCronCompletion(task *Task, status TaskStatus, resul
 	}
 
 	tm.cronEventsMu.Lock()
-	defer tm.cronEventsMu.Unlock()
-
 	if tm.cronRuns == nil {
+		tm.cronEventsMu.Unlock()
+
 		return
 	}
 
 	info, ok := tm.cronRuns[task.ID]
 	if !ok {
+		tm.cronEventsMu.Unlock()
+
 		return
 	}
 
 	delete(tm.cronRuns, task.ID)
+	tm.cronEventsMu.Unlock()
 
 	event := AdminScheduleEvent{
 		TaskID:     task.ID.String(),
@@ -111,7 +120,11 @@ func (tm *TaskManager) recordCronCompletion(task *Task, status TaskStatus, resul
 		event.DurationMs = event.FinishedAt.Sub(event.StartedAt).Milliseconds()
 	}
 
+	tm.cronEventsMu.Lock()
 	tm.appendCronEventLocked(event)
+	tm.cronEventsMu.Unlock()
+
+	tm.persistCronEvent(task.Ctx, event)
 }
 
 func (tm *TaskManager) appendCronEventLocked(event AdminScheduleEvent) {
@@ -122,6 +135,32 @@ func (tm *TaskManager) appendCronEventLocked(event AdminScheduleEvent) {
 
 	if len(tm.cronEvents) > tm.cronEventLimit {
 		tm.cronEvents = tm.cronEvents[len(tm.cronEvents)-tm.cronEventLimit:]
+	}
+}
+
+func (tm *TaskManager) persistCronEvent(ctx context.Context, event AdminScheduleEvent) {
+	if tm == nil {
+		return
+	}
+
+	recorder, ok := tm.durableBackend.(adminScheduleEventRecorder)
+	if !ok || recorder == nil {
+		return
+	}
+
+	if ctx == nil {
+		return
+	}
+
+	ctx = context.WithoutCancel(ctx)
+
+	persistCtx, cancel := context.WithTimeout(ctx, adminEventPersistTimeout)
+	defer cancel()
+
+	err := recorder.AdminRecordScheduleEvent(persistCtx, event, tm.cronEventLimit)
+	if err != nil {
+		// Best-effort persistence; ignore to avoid blocking task completion.
+		fmt.Fprintln(os.Stderr, err)
 	}
 }
 

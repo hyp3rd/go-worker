@@ -57,6 +57,9 @@ Worker-service job runner (for Jobs + events):
 - `WORKER_JOB_EVENT_MAX_ENTRIES` (per key; default 10000)
 - `WORKER_JOB_EVENT_CACHE_TTL` (default 10s)
 
+Schedule events are persisted automatically by durable backends and are shared
+across worker instances; no separate schedule-event directory is required.
+
 ## Audit export
 
 The Overview runbook now includes an `Export audit` control that downloads

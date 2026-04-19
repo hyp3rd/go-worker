@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { DlqEntry, DlqEntryDetail } from "@/lib/types";
 import { formatDuration, formatNumber } from "@/lib/format";
 import { throwAPIResponseError } from "@/lib/fetch-api-error";
@@ -47,15 +47,9 @@ export function DlqTable({
   const [detailLoading, setDetailLoading] = useState(false);
   const { confirm, dialogProps } = useConfirmDialog();
 
-  useEffect(() => {
-    setQueueValue(queueFilter);
-  }, [queueFilter]);
-
-  useEffect(() => {
-    setHandlerValue(handlerFilter);
-  }, [handlerFilter]);
-
-  useEffect(() => {
+  const [prevEntries, setPrevEntries] = useState(entries);
+  if (prevEntries !== entries) {
+    setPrevEntries(entries);
     setSelected((current) => {
       if (entries.length === 0) {
         return new Set();
@@ -68,7 +62,7 @@ export function DlqTable({
       });
       return next;
     });
-  }, [entries]);
+  }
 
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());

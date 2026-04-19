@@ -32,6 +32,7 @@ const (
 	adminDLQReplayByIDArgsPrefix = 3
 	parseIntBitSize              = 64
 	adminJobsKeyName             = "admin:jobs"
+	adminScheduleEventsKeyName   = "admin:schedule_events"
 	adminJobEventsKeyName        = "admin:job_events"
 	adminAuditEventsKeyName      = "admin:audit_events"
 	adminJobDefaultDockerfile    = "Dockerfile"
@@ -342,13 +343,44 @@ func (*RedisDurableBackend) AdminScheduleFactories(ctx context.Context) ([]Admin
 	return nil, ErrAdminUnsupported
 }
 
-// AdminScheduleEvents is not supported by the Redis durable backend.
-func (*RedisDurableBackend) AdminScheduleEvents(ctx context.Context, _ AdminScheduleEventFilter) (AdminScheduleEventPage, error) {
+// AdminScheduleEvents returns schedule execution events from Redis.
+func (b *RedisDurableBackend) AdminScheduleEvents(ctx context.Context, filter AdminScheduleEventFilter) (AdminScheduleEventPage, error) {
 	if ctx == nil {
 		return AdminScheduleEventPage{}, ErrInvalidTaskContext
 	}
 
-	return AdminScheduleEventPage{}, ErrAdminUnsupported
+	limit := normalizeAdminEventLimit(filter.Limit, 0)
+	if limit <= 0 {
+		return AdminScheduleEventPage{Events: []AdminScheduleEvent{}}, nil
+	}
+
+	name := strings.TrimSpace(filter.Name)
+
+	key := b.scheduleEventsKey()
+	if name != "" {
+		key = b.scheduleEventsKeyForName(name)
+	}
+
+	resp := b.client.Do(ctx, b.client.B().Lrange().Key(key).Start(0).Stop(int64(limit-1)).Build())
+
+	values, err := resp.AsStrSlice()
+	if err != nil {
+		return AdminScheduleEventPage{}, ewrap.Wrap(err, "read admin schedule events")
+	}
+
+	events := make([]AdminScheduleEvent, 0, len(values))
+	for _, raw := range values {
+		var event AdminScheduleEvent
+
+		err := json.Unmarshal([]byte(raw), &event)
+		if err != nil {
+			return AdminScheduleEventPage{}, ewrap.Wrap(err, "decode admin schedule event")
+		}
+
+		events = append(events, event)
+	}
+
+	return AdminScheduleEventPage{Events: events}, nil
 }
 
 // AdminCreateSchedule is not supported by the Redis durable backend.
@@ -1246,6 +1278,41 @@ func (b *RedisDurableBackend) AdminRecordJobEvent(ctx context.Context, event Adm
 	return nil
 }
 
+// AdminRecordScheduleEvent persists a schedule execution event.
+func (b *RedisDurableBackend) AdminRecordScheduleEvent(ctx context.Context, event AdminScheduleEvent, limit int) error {
+	if ctx == nil {
+		return ErrInvalidTaskContext
+	}
+
+	raw, err := json.Marshal(event)
+	if err != nil {
+		return ewrap.Wrap(err, "encode admin schedule event")
+	}
+
+	if limit <= 0 {
+		limit = defaultAdminScheduleEventLimit
+	}
+
+	baseKey := b.scheduleEventsKey()
+
+	err = b.pushScheduleEvent(ctx, baseKey, raw, limit)
+	if err != nil {
+		return err
+	}
+
+	name := strings.TrimSpace(event.Name)
+	if name == "" {
+		return nil
+	}
+
+	err = b.pushScheduleEvent(ctx, b.scheduleEventsKeyForName(name), raw, limit)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // AdminJobEvents returns job execution events from Redis.
 func (b *RedisDurableBackend) AdminJobEvents(ctx context.Context, filter AdminJobEventFilter) (AdminJobEventPage, error) {
 	if ctx == nil {
@@ -1303,6 +1370,24 @@ func (b *RedisDurableBackend) pushJobEvent(ctx context.Context, key string, raw 
 	trimResp := b.client.Do(ctx, b.client.B().Ltrim().Key(key).Start(0).Stop(int64(limit-1)).Build())
 	if trimResp.Error() != nil {
 		return ewrap.Wrap(trimResp.Error(), "trim admin job events")
+	}
+
+	return nil
+}
+
+func (b *RedisDurableBackend) pushScheduleEvent(ctx context.Context, key string, raw []byte, limit int) error {
+	resp := b.client.Do(ctx, b.client.B().Lpush().Key(key).Element(string(raw)).Build())
+	if resp.Error() != nil {
+		return ewrap.Wrap(resp.Error(), "write admin schedule event")
+	}
+
+	if limit <= 0 {
+		return nil
+	}
+
+	trimResp := b.client.Do(ctx, b.client.B().Ltrim().Key(key).Start(0).Stop(int64(limit-1)).Build())
+	if trimResp.Error() != nil {
+		return ewrap.Wrap(trimResp.Error(), "trim admin schedule events")
 	}
 
 	return nil
@@ -1594,12 +1679,20 @@ func (b *RedisDurableBackend) jobsKey() string {
 	return b.keyPrefix() + redisKVSeparator + adminJobsKeyName
 }
 
+func (b *RedisDurableBackend) scheduleEventsKey() string {
+	return b.keyPrefix() + redisKVSeparator + adminScheduleEventsKeyName
+}
+
 func (b *RedisDurableBackend) jobEventsKey() string {
 	return b.keyPrefix() + redisKVSeparator + adminJobEventsKeyName
 }
 
 func (b *RedisDurableBackend) auditEventsKey() string {
 	return b.keyPrefix() + redisKVSeparator + adminAuditEventsKeyName
+}
+
+func (b *RedisDurableBackend) scheduleEventsKeyForName(name string) string {
+	return b.scheduleEventsKey() + redisKVSeparator + name
 }
 
 func (b *RedisDurableBackend) jobEventsKeyForName(name string) string {

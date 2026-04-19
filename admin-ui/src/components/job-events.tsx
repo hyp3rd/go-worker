@@ -132,10 +132,6 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
   }, [searchParams]);
 
   useEffect(() => {
-    setItems(events);
-  }, [events]);
-
-  useEffect(() => {
     const bootstrapId = window.setTimeout(() => setNowMs(Date.now()), 0);
     const tickId = window.setInterval(() => setNowMs(Date.now()), refreshIntervalMs);
 
@@ -329,9 +325,12 @@ export function JobEvents({ events }: { events: JobEvent[] }) {
     return counts;
   }, [filteredItems]);
 
-  useEffect(() => {
+  const filterKey = `${filterName}|${queueFilter}|${rangeFilter}|${sourceFilter}|${statusFilter}`;
+  const [filterKeyAtPage, setFilterKeyAtPage] = useState(filterKey);
+  if (filterKey !== filterKeyAtPage) {
+    setFilterKeyAtPage(filterKey);
     setPage(1);
-  }, [filterName, queueFilter, rangeFilter, sourceFilter, statusFilter]);
+  }
 
   const handlePageSize = (value: number) => {
     setPageSize(value);

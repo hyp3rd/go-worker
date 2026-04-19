@@ -190,6 +190,8 @@ func (tm *TaskManager) AdminScheduleFactories(ctx context.Context) ([]AdminSched
 }
 
 // AdminScheduleEvents returns recent cron schedule execution events.
+//
+//nolint:dupl // intentional parallel to AdminJobEvents; distinct event types & buffers, methods can't be generic.
 func (tm *TaskManager) AdminScheduleEvents(
 	ctx context.Context,
 	filter AdminScheduleEventFilter,
@@ -200,6 +202,18 @@ func (tm *TaskManager) AdminScheduleEvents(
 
 	if ctx == nil {
 		return AdminScheduleEventPage{}, ErrInvalidTaskContext
+	}
+
+	backend, err := tm.adminBackend()
+	if err == nil && backend != nil {
+		page, fetchErr := backend.AdminScheduleEvents(ctx, filter)
+		if fetchErr == nil {
+			return page, nil
+		}
+
+		if !errors.Is(fetchErr, ErrAdminUnsupported) {
+			return AdminScheduleEventPage{}, fetchErr
+		}
 	}
 
 	tm.cronEventsMu.RLock()
@@ -217,6 +231,8 @@ func (tm *TaskManager) AdminScheduleEvents(
 }
 
 // AdminJobEvents returns recent job execution events.
+//
+//nolint:dupl // intentional parallel to AdminScheduleEvents; distinct event types & buffers, methods can't be generic.
 func (tm *TaskManager) AdminJobEvents(
 	ctx context.Context,
 	filter AdminJobEventFilter,
