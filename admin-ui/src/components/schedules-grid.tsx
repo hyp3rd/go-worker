@@ -48,16 +48,30 @@ export function SchedulesGrid({
   schedules: JobSchedule[];
   factories: ScheduleFactory[];
 }) {
-  const initialState = loadSectionState<SchedulesViewState>(
-    schedulesStateKey,
-    { query: "", status: "all", page: 1, pageSize: 6 },
-    isSchedulesViewState
-  );
   const router = useRouter();
-  const [query, setQuery] = useState(initialState.query);
-  const [status, setStatus] = useState(initialState.status);
-  const [page, setPage] = useState(initialState.page);
-  const [pageSize, setPageSize] = useState(initialState.pageSize);
+  // Defaults must match SSR output (no localStorage access). Persisted view
+  // state is restored after hydration in the effect below to avoid React
+  // error #418 (hydration text mismatch).
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
+
+  useEffect(() => {
+    const saved = loadSectionState<SchedulesViewState>(
+      schedulesStateKey,
+      { query: "", status: "all", page: 1, pageSize: 6 },
+      isSchedulesViewState,
+    );
+    // localStorage is client-only; restore persisted view state after hydration
+    // to avoid React error #418 (hydration text mismatch).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setQuery(saved.query);
+    setStatus(saved.status);
+    setPage(saved.page);
+    setPageSize(saved.pageSize);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createSpec, setCreateSpec] = useState("");

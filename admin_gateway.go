@@ -597,7 +597,7 @@ func (h *adminGatewayHandler) handleQueuePause(w http.ResponseWriter, r *http.Re
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
-	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+	ctx = withAdminMetadata(ctx, r, reqID)
 
 	defer cancel()
 
@@ -1981,7 +1981,7 @@ func (h *adminGatewayHandler) handleSchedulesPause(w http.ResponseWriter, r *htt
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
-	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+	ctx = withAdminMetadata(ctx, r, reqID)
 
 	defer cancel()
 
@@ -2090,7 +2090,7 @@ func (h *adminGatewayHandler) handleSchedulePause(w http.ResponseWriter, r *http
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), adminRequestTimeout)
-	ctx = metadata.AppendToOutgoingContext(ctx, adminRequestIDMetaKey, reqID)
+	ctx = withAdminMetadata(ctx, r, reqID)
 
 	defer cancel()
 
