@@ -45,7 +45,7 @@ jobs:
           archive="${{ steps.archive.outputs.archive }}"
           cosign sign-blob --yes --output-signature "${archive}.sig" --output-certificate "${archive}.pem" "${archive}"
       - name: Upload source artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: source-archive
           path: |
@@ -54,7 +54,7 @@ jobs:
             ${{ steps.archive.outputs.archive }}.pem
       - name: Upload release assets
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             ${{ steps.archive.outputs.archive }}
