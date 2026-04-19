@@ -31,6 +31,8 @@ const (
 	redisErrUnexpectedLeaseCount = "expected 1 lease, got %d"
 	redisHandler                 = "test_handler"
 	redisPayload                 = "payload"
+	scheduleEventDurationTick    = 1500
+	scheduleEventDurationOther   = 1000
 )
 
 func TestRedisDurableBackend_EnqueueDequeueAck(t *testing.T) {
@@ -448,6 +450,97 @@ func TestRedisDurableBackend_GlobalRateLimit(t *testing.T) {
 
 	if len(leases) != 1 {
 		t.Fatalf("expected 1 lease after refill, got %d", len(leases))
+	}
+}
+
+func newTickScheduleEvent() worker.AdminScheduleEvent {
+	return worker.AdminScheduleEvent{
+		TaskID:     uuid.NewString(),
+		Name:       "tick",
+		Spec:       "*/1 * * * * *",
+		Durable:    true,
+		Status:     "completed",
+		Queue:      "default",
+		StartedAt:  time.Now().UTC().Add(-scheduleEventDurationTick * time.Millisecond),
+		FinishedAt: time.Now().UTC(),
+		DurationMs: scheduleEventDurationTick,
+		Result:     "ok",
+	}
+}
+
+func newOtherScheduleEvent() worker.AdminScheduleEvent {
+	return worker.AdminScheduleEvent{
+		TaskID:     uuid.NewString(),
+		Name:       "other",
+		Spec:       "0 * * * *",
+		Durable:    true,
+		Status:     "failed",
+		Queue:      "default",
+		StartedAt:  time.Now().UTC().Add(-3 * time.Second),
+		FinishedAt: time.Now().UTC().Add(-2 * time.Second),
+		DurationMs: scheduleEventDurationOther,
+		Error:      "boom",
+	}
+}
+
+func TestRedisDurableBackend_ScheduleEvents(t *testing.T) {
+	t.Parallel()
+
+	addr := os.Getenv(redisEnvAddr)
+	if addr == "" {
+		t.Skipf(redisErrEnvNotSet, redisEnvAddr)
+	}
+
+	password := os.Getenv(redisEnvPassword)
+	prefix := redisTestPrefix(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), redisTestTimeout)
+	defer cancel()
+
+	client := newRedisClient(t, addr, password)
+	defer client.Close()
+
+	cleanupRedisPrefix(ctx, t, client, prefix)
+
+	backend := newRedisBackend(t, client, prefix)
+
+	first := newTickScheduleEvent()
+	second := newOtherScheduleEvent()
+
+	err := backend.AdminRecordScheduleEvent(ctx, first, 10)
+	if err != nil {
+		t.Fatalf("record first schedule event: %v", err)
+	}
+
+	err = backend.AdminRecordScheduleEvent(ctx, second, 10)
+	if err != nil {
+		t.Fatalf("record second schedule event: %v", err)
+	}
+
+	page, err := backend.AdminScheduleEvents(ctx, worker.AdminScheduleEventFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("list schedule events: %v", err)
+	}
+
+	if len(page.Events) != 2 {
+		t.Fatalf("expected 2 schedule events, got %d", len(page.Events))
+	}
+
+	if page.Events[0].TaskID != second.TaskID {
+		t.Fatalf("expected newest event first, got %s", page.Events[0].TaskID)
+	}
+
+	page, err = backend.AdminScheduleEvents(ctx, worker.AdminScheduleEventFilter{Name: "tick", Limit: 10})
+	if err != nil {
+		t.Fatalf("list filtered schedule events: %v", err)
+	}
+
+	if len(page.Events) != 1 {
+		t.Fatalf("expected 1 filtered schedule event, got %d", len(page.Events))
+	}
+
+	if page.Events[0].TaskID != first.TaskID {
+		t.Fatalf("expected filtered task id %s, got %s", first.TaskID, page.Events[0].TaskID)
 	}
 }
 

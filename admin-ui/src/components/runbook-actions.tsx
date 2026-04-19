@@ -47,10 +47,6 @@ export function RunbookActions({ paused, initialAuditEvents }: RunbookActionsPro
   const { confirm, dialogProps } = useConfirmDialog();
 
   useEffect(() => {
-    setAuditEvents(initialAuditEvents);
-  }, [initialAuditEvents]);
-
-  useEffect(() => {
     const source = new EventSource("/api/events");
     source.addEventListener("audit_events", (event) => {
       try {

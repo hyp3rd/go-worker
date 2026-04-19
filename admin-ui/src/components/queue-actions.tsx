@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog, useConfirmDialog } from "@/components/confirm-dialog";
 import { throwAPIResponseError } from "@/lib/fetch-api-error";
@@ -16,7 +16,7 @@ export function QueueActions({
   paused: boolean;
 }) {
   const router = useRouter();
-  const [isPaused, setIsPaused] = useState(paused);
+  const [optimisticPaused, setOptimisticPaused] = useOptimistic(paused);
   const [message, setMessage] = useState<{
     tone: "success" | "error";
     text: string;
@@ -25,12 +25,8 @@ export function QueueActions({
   const [pending, startTransition] = useTransition();
   const { confirm, dialogProps } = useConfirmDialog();
 
-  useEffect(() => {
-    setIsPaused(paused);
-  }, [paused]);
-
   const togglePause = async () => {
-    const next = !isPaused;
+    const next = !optimisticPaused;
     const ok = await confirm({
       title: next ? `Pause queue "${name}"?` : `Resume queue "${name}"?`,
       message: next
@@ -43,39 +39,41 @@ export function QueueActions({
     }
 
     setMessage(null);
-    try {
-      const res = await fetch(
-        `/api/queues/${encodeURIComponent(name)}/pause`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paused: next }),
+    startTransition(async () => {
+      setOptimisticPaused(next);
+      try {
+        const res = await fetch(
+          `/api/queues/${encodeURIComponent(name)}/pause`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paused: next }),
+          }
+        );
+
+        if (!res.ok) {
+          await throwAPIResponseError(res, "Failed to update queue state");
         }
-      );
 
-      if (!res.ok) {
-        await throwAPIResponseError(res, "Failed to update queue state");
+        const payload = (await res.json()) as {
+          queue?: { paused?: boolean };
+        };
+        const nextPaused =
+          typeof payload.queue?.paused === "boolean" ? payload.queue.paused : next;
+        setMessage({
+          tone: "success",
+          text: nextPaused ? "Queue paused." : "Queue resumed.",
+        });
+        router.refresh();
+      } catch (error) {
+        const diagnostic = parseErrorDiagnostic(error, "Failed to update queue");
+        setMessage({
+          tone: "error",
+          text: diagnostic.message,
+          diagnostic,
+        });
       }
-
-      const payload = (await res.json()) as {
-        queue?: { paused?: boolean };
-      };
-      const nextPaused =
-        typeof payload.queue?.paused === "boolean" ? payload.queue.paused : next;
-      setIsPaused(nextPaused);
-      setMessage({
-        tone: "success",
-        text: nextPaused ? "Queue paused." : "Queue resumed.",
-      });
-      startTransition(() => router.refresh());
-    } catch (error) {
-      const diagnostic = parseErrorDiagnostic(error, "Failed to update queue");
-      setMessage({
-        tone: "error",
-        text: diagnostic.message,
-        diagnostic,
-      });
-    }
+    });
   };
 
   return (
@@ -86,10 +84,10 @@ export function QueueActions({
             Queue state
           </p>
           <p className="mt-2 text-sm font-semibold text-slate-900">
-            {isPaused ? "Paused" : "Active"}
+            {optimisticPaused ? "Paused" : "Active"}
           </p>
           <p className="mt-1 text-xs text-muted">
-            {isPaused
+            {optimisticPaused
               ? "Dequeue is disabled for this queue."
               : "Tasks can be dequeued normally."}
           </p>
@@ -98,12 +96,12 @@ export function QueueActions({
           onClick={togglePause}
           disabled={pending}
           className={`rounded-full px-4 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-            isPaused
+            optimisticPaused
               ? "border border-soft bg-white text-slate-700"
               : "bg-amber-500 text-white"
           }`}
         >
-          {isPaused ? "Resume queue" : "Pause queue"}
+          {optimisticPaused ? "Resume queue" : "Pause queue"}
         </button>
       </div>
       {message ? (

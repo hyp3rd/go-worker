@@ -254,18 +254,6 @@ export function OperationsTimeline({
   const [nowMs, setNowMs] = useState(0);
 
   useEffect(() => {
-    setJobItems(jobs);
-  }, [jobs]);
-
-  useEffect(() => {
-    setScheduleItems(schedules);
-  }, [schedules]);
-
-  useEffect(() => {
-    setAuditItems(audits);
-  }, [audits]);
-
-  useEffect(() => {
     const bootstrapID = window.setTimeout(() => setNowMs(Date.now()), 0);
     const intervalID = window.setInterval(() => setNowMs(Date.now()), refreshIntervalMs);
     return () => {
@@ -430,9 +418,12 @@ export function OperationsTimeline({
     return list;
   }, [nowMs, rangeFilter, searchFilter, sourceFilter, statusFilter, timeline]);
 
-  useEffect(() => {
+  const filterKey = `${sourceFilter}|${statusFilter}|${searchFilter}|${rangeFilter}`;
+  const [filterKeyAtPage, setFilterKeyAtPage] = useState(filterKey);
+  if (filterKey !== filterKeyAtPage) {
+    setFilterKeyAtPage(filterKey);
     setPage(1);
-  }, [sourceFilter, statusFilter, searchFilter, rangeFilter]);
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") {

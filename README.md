@@ -43,6 +43,8 @@ docker compose -f compose.admin.yaml up --build
 
 Job event history can be persisted across restarts by configuring the worker
 service file-backed store (`WORKER_JOB_EVENT_DIR`); see the admin UI docs.
+Schedule event history for durable backends is stored in the durable backend
+itself, so it is shared across worker instances.
 
 ## Architecture
 

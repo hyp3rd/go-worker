@@ -57,6 +57,7 @@
     "DLQJSON",
     "dockerfiles",
     "dotenv",
+    "dupl",
     "dupword",
     "durationpb",
     "EDITMSG",

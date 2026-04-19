@@ -362,10 +362,6 @@ export function JobsGrid({
   });
 
   useEffect(() => {
-    setLiveEvents(events);
-  }, [events]);
-
-  useEffect(() => {
     let source: EventSource | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
 
