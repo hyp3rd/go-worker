@@ -63,14 +63,14 @@ jobs:
           (cd dist && sha256sum "${BIN}" > "${BIN}.sha256")
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: workerctl-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/workerctl-${{ matrix.os }}-${{ matrix.arch }}*
 
       - name: Upload release assets
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/workerctl-${{ matrix.os }}-${{ matrix.arch }}*
