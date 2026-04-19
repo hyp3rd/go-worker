@@ -26,13 +26,27 @@
 - Retries: exponential backoff with capped delays.
 - Durability: optional Redis-backed durable task queue (at-least-once, lease-based).
 
-## Admin UI
+## Admin API & UI
 
-The admin UI is a Next.js app that connects to the worker admin gateway over
-HTTP/JSON with mTLS. For local setup and environment variables, see:
+`go-worker` ships an **admin gateway** — an HTTP/JSON layer (mTLS by default)
+that fronts the gRPC `AdminService` — plus a **Next.js admin UI** that consumes
+it. Together they provide the operational control plane for running deployments:
 
-- `docs/admin-ui.md`
-- `PRD-admin-service.md` (API contract + gateway design)
+- **Observability**: live overview (active workers, queue depth, latency),
+  per-queue summaries, Prometheus scrape endpoint, Server-Sent Events stream
+  for real-time dashboards.
+- **Control**: pause/resume dequeue globally or per queue, adjust queue
+  weights, create/pause/run cron schedules, upsert container job definitions.
+- **Recovery**: inspect and replay DLQ entries (bulk or by ID), inspect job
+  run output via artifact download, follow SSE for state changes.
+- **Auditability**: every destructive action is recorded as an audit event
+  with actor, request ID, action, target, and payload hash; events are
+  exportable as JSONL/JSON/CSV.
+
+Security model: mTLS on the gateway, optional `X-Admin-Approval` header gate
+on destructive operations (DLQ replay, schedule/job run). Every request is
+tagged with an `X-Request-Id` that propagates through gRPC metadata for
+end-to-end tracing.
 
 Local stack:
 
@@ -41,10 +55,16 @@ Local stack:
 docker compose -f compose.admin.yaml up --build
 ```
 
-Job event history can be persisted across restarts by configuring the worker
-service file-backed store (`WORKER_JOB_EVENT_DIR`); see the admin UI docs.
-Schedule event history for durable backends is stored in the durable backend
-itself, so it is shared across worker instances.
+References:
+
+- [`docs/admin-ui.md`](docs/admin-ui.md) — setup, environment variables, SSE
+  event types, troubleshooting.
+- [`PRD-admin-service.md`](PRD-admin-service.md) — HTTP API contract,
+  endpoint enumeration, and gateway design.
+
+Job event history can be persisted across restarts via the file-backed store
+(`WORKER_JOB_EVENT_DIR`). Schedule event history for durable (Redis) backends
+is stored in the backend itself, so it is shared across worker instances.
 
 ## Architecture
 

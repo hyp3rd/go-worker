@@ -34,7 +34,7 @@ EXPOSE 50052
 
 ENTRYPOINT ["/usr/local/bin/worker-service"]
 
-FROM alpine:3.20 AS runtime-docker
+FROM alpine:3.23.4 AS runtime-docker
 
 RUN apk add --no-cache ca-certificates docker-cli docker-cli-buildx git
 
