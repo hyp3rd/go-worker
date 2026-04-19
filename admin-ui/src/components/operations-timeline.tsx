@@ -241,17 +241,36 @@ export function OperationsTimeline({
   schedules: ScheduleEvent[];
   audits: AdminAuditEvent[];
 }) {
-  const [initialState] = useState<TimelineState | null>(() => loadTimelineState());
   const [jobItems, setJobItems] = useState<JobEvent[]>(jobs);
   const [scheduleItems, setScheduleItems] = useState<ScheduleEvent[]>(schedules);
   const [auditItems, setAuditItems] = useState<AdminAuditEvent[]>(audits);
-  const [sourceFilter, setSourceFilter] = useState(initialState?.sourceFilter ?? "all");
-  const [statusFilter, setStatusFilter] = useState(initialState?.statusFilter ?? "all");
-  const [rangeFilter, setRangeFilter] = useState(initialState?.rangeFilter ?? "7d");
-  const [searchFilter, setSearchFilter] = useState(initialState?.searchFilter ?? "");
+  // Defaults below must match what SSR produces (no localStorage access). After
+  // hydration the effect below restores any persisted filter state from
+  // localStorage. This avoids React error #418 (hydration text mismatch).
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [rangeFilter, setRangeFilter] = useState("7d");
+  const [searchFilter, setSearchFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(initialState?.pageSize ?? timelinePageSizes[0]);
+  const [pageSize, setPageSize] = useState<number>(timelinePageSizes[0]);
   const [nowMs, setNowMs] = useState(0);
+
+  useEffect(() => {
+    const saved = loadTimelineState();
+    if (!saved) {
+      return;
+    }
+    // localStorage is client-only; restoring persisted filters here keeps the
+    // server-rendered HTML and the first client render identical, avoiding
+    // React error #418 (hydration text mismatch).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setSourceFilter(saved.sourceFilter);
+    setStatusFilter(saved.statusFilter);
+    setRangeFilter(saved.rangeFilter);
+    setSearchFilter(saved.searchFilter);
+    setPageSize(saved.pageSize);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   useEffect(() => {
     const bootstrapID = window.setTimeout(() => setNowMs(Date.now()), 0);

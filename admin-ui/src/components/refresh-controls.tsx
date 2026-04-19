@@ -20,14 +20,20 @@ const formatRefreshAge = (lastRefresh: number | null) => {
 
 export function RefreshControls() {
   const router = useRouter();
-  const [autoRefresh, setAutoRefresh] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return window.localStorage.getItem(autoRefreshKey) === "true";
-  });
+  // Start with `false` so SSR and the first client render match. The real value
+  // from localStorage is applied after hydration via the effect below — a brief
+  // flip is acceptable and avoids a hydration-text mismatch (React error #418).
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    // localStorage is client-only; defer the read until after hydration to keep
+    // the server-rendered HTML and the first client render identical, avoiding
+    // React error #418 (hydration text mismatch).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAutoRefresh(window.localStorage.getItem(autoRefreshKey) === "true");
+  }, []);
 
   useEffect(() => {
     if (!autoRefresh) {

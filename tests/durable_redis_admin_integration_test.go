@@ -328,14 +328,30 @@ func TestRedisDurableBackend_AdminReplayDLQMovesEntries(t *testing.T) {
 		t.Fatalf("DLQ not drained after replay, entries = %d", len(page.Entries))
 	}
 
-	// Replayed tasks should be re-dequeueable.
-	leases, err := backend.Dequeue(ctx, adminTestSeedTaskCount, redisLease)
-	if err != nil {
-		t.Fatalf("dequeue replayed: %v", err)
+	// Replayed tasks should be re-dequeueable. Dequeue is weighted round-robin:
+	// default queue weight is 1, so a single call returns at most one task per
+	// queue. Drain in a loop capped at 2x the expected count to avoid a tight
+	// infinite loop if replay silently dropped entries.
+	total := 0
+
+	for range adminTestSeedTaskCount * 2 {
+		batch, dequeueErr := backend.Dequeue(ctx, 1, redisLease)
+		if dequeueErr != nil {
+			t.Fatalf("dequeue replayed: %v", dequeueErr)
+		}
+
+		total += len(batch)
+		if total >= adminTestSeedTaskCount {
+			break
+		}
+
+		if len(batch) == 0 {
+			break
+		}
 	}
 
-	if len(leases) != adminTestSeedTaskCount {
-		t.Fatalf("dequeued %d leases, want %d", len(leases), adminTestSeedTaskCount)
+	if total != adminTestSeedTaskCount {
+		t.Fatalf("dequeued %d leases across attempts, want %d", total, adminTestSeedTaskCount)
 	}
 }
 

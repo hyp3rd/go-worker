@@ -40,16 +40,29 @@ const isQueuesViewState = (value: unknown): value is QueuesViewState => {
 };
 
 export function QueuesTable({ queues }: { queues: QueueSummary[] }) {
-  const initialState = loadSectionState<QueuesViewState>(
-    queuesStateKey,
-    { query: "", page: 1, pageSize: defaultPageSize },
-    isQueuesViewState
-  );
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState(initialState.query);
-  const [page, setPage] = useState(initialState.page);
-  const [pageSize, setPageSize] = useState(initialState.pageSize);
+  // Defaults must match SSR output (no localStorage access). The persisted
+  // view state is restored post-mount via the effect below, avoiding React
+  // error #418 (hydration text mismatch).
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultPageSize);
+
+  useEffect(() => {
+    const saved = loadSectionState<QueuesViewState>(
+      queuesStateKey,
+      { query: "", page: 1, pageSize: defaultPageSize },
+      isQueuesViewState,
+    );
+    // localStorage is client-only; restore persisted view state after hydration
+    // to avoid React error #418 (hydration text mismatch).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setQuery(saved.query);
+    setPage(saved.page);
+    setPageSize(saved.pageSize);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
   const [createOpen, setCreateOpen] = useState(
     () => searchParams.get("create") === "1"
   );

@@ -316,20 +316,13 @@ export function JobsGrid({
   jobs: AdminJob[];
   events?: JobEvent[];
 }) {
-  const initialState = loadSectionState<JobsViewState>(
-    jobsStateKey,
-    {
-      query: "",
-      statusFilter: "all",
-      page: 1,
-      pageSize: 10,
-    },
-    isJobsViewState
-  );
   const router = useRouter();
   const [liveEvents, setLiveEvents] = useState<JobEvent[]>(events);
-  const [query, setQuery] = useState(initialState.query);
-  const [statusFilter, setStatusFilter] = useState(initialState.statusFilter);
+  // Defaults must match SSR output (no localStorage access). Persisted view
+  // state is restored after hydration in the effect below to avoid React
+  // error #418 (hydration text mismatch).
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState<{
     tone: "success" | "error";
     text: string;
@@ -337,8 +330,24 @@ export function JobsGrid({
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const [optimisticEvents, setOptimisticEvents] = useState<JobEvent[]>([]);
-  const [page, setPage] = useState(initialState.page);
-  const [pageSize, setPageSize] = useState(initialState.pageSize);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    const saved = loadSectionState<JobsViewState>(
+      jobsStateKey,
+      { query: "", statusFilter: "all", page: 1, pageSize: 10 },
+      isJobsViewState,
+    );
+    // localStorage is client-only; restore persisted view state after hydration
+    // to avoid React error #418 (hydration text mismatch).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setQuery(saved.query);
+    setStatusFilter(saved.statusFilter);
+    setPage(saved.page);
+    setPageSize(saved.pageSize);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
   const { confirm, dialogProps } = useConfirmDialog();
 
   const [createOpen, setCreateOpen] = useState(false);
