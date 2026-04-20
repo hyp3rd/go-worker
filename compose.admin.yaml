@@ -62,7 +62,10 @@ services:
       WORKER_CRON_DEFAULT_SPEC: "@every 1m"
       WORKER_DURABLE_CRON_HANDLERS: cron_handler
       WORKER_JOB_TARBALL_DIR: /workspace
-      WORKER_JOB_WORKDIR: /workspace/.job-work
+      # Kept outside /workspace because that bind mount is read-only; nesting a
+      # named volume inside a :ro bind mount is unreliable under Docker Desktop's
+      # VirtioFS (surfaces as EROFS on mkdir during job run).
+      WORKER_JOB_WORKDIR: /var/lib/go-worker/job-work
       WORKER_JOB_EVENT_DIR: /var/lib/go-worker/job-events
       WORKER_JOB_EVENT_MAX_ENTRIES: "10000"
       WORKER_JOB_EVENT_CACHE_TTL: 5s
@@ -75,7 +78,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/workspace:ro
-      - worker-job-work:/workspace/.job-work
+      - worker-job-work:/var/lib/go-worker/job-work
       - worker-job-events:/var/lib/go-worker/job-events
     networks:
       - redis-worker-net
