@@ -42,19 +42,22 @@ run:
   # Define the Go version limit.
   # Mainly related to generics support since go1.18.
   # Default: use Go version from the go.mod file, fallback on the env var `GOVERSION`, fallback on 1.17
-  go: "1.26.2"
+  go: "1.26.3"
 
 linters:
   # Enable specific linter
   # https://golangci-lint.run/usage/linters/#enabled-by-default
   default: all
   enable:
+    - gomodguard_v2
     - wsl_v5
   disable:
     - depguard
     - embeddedstructfieldcheck
     - exhaustruct
+    - goconst # re-enable it
     - gomoddirectives
+    - gomodguard
     - ireturn
     - lll
     - nonamedreturns
