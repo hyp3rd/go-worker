@@ -8,7 +8,7 @@ require (
 	github.com/hyp3rd/cron/v4 v4.0.1
 	github.com/hyp3rd/ewrap v1.5.1
 	github.com/hyp3rd/sectools v1.2.6
-	github.com/redis/rueidis v1.0.74
+	github.com/redis/rueidis v1.0.75
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel/metric v1.43.0
 	go.opentelemetry.io/otel/sdk/metric v1.43.0
