@@ -36,7 +36,12 @@ workerctl:
 	go build -trimpath -o bin/workerctl ./cmd/workerctl
 
 update-deps:
+	@echo "Updating Go module dependencies..."
 	go get -u -t ./... && go mod tidy -v && go mod verify
+
+	@echo "\nUpdating npm dependencies for admin-ui..."
+	cd admin-ui/ && npm update -a
+
 
 init:
 	./setup-project.sh --module $(shell grep "^module " go.mod | awk '{print $$2}')
