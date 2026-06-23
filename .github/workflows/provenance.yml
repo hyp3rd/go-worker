@@ -16,7 +16,7 @@ jobs:
       base64_subjects: ${{ steps.subjects.outputs.base64 }}
       archive_name: ${{ steps.archive.outputs.archive }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Create source archive

@@ -42,7 +42,7 @@ jobs:
         steps:
             # Checkout the repository to the GitHub Actions runner
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             # Execute Codacy Analysis CLI and generate a SARIF output with the security issues identified during the analysis
             - name: Run Codacy Analysis CLI
@@ -135,7 +135,7 @@ jobs:
             matrix: ${{ fromJson(needs.codacy-security-scan.outputs.sarif_matrix) }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Download SARIF chunks artifact
               uses: actions/download-artifact@v7
