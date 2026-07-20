@@ -20,7 +20,7 @@ jobs:
           echo "go_version=${GO_VERSION}" >> "$GITHUB_OUTPUT"
           echo "golangci_lint_version=${GOLANGCI_LINT_VERSION}" >> "$GITHUB_OUTPUT"
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.x"
       - name: Setup Go
