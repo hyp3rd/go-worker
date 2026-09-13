@@ -54,7 +54,7 @@ const (
 	adminErrInvalidJob    = "invalid_job"
 	adminErrInvalidJobMsg = "Invalid job name"
 	adminRequestTimeout   = 5 * time.Second
-	adminRequestIDHeader  = "X-Request-Id"
+	adminRequestIDHeader  = "X-Request-ID"
 	adminRequestIDMetaKey = "x-request-id"
 	adminApprovalHeader   = "X-Admin-Approval"
 	adminHeaderType       = "Content-Type"
@@ -789,7 +789,8 @@ func (h *adminGatewayHandler) handleJobDelete(w http.ResponseWriter, r *http.Req
 }
 
 func (h *adminGatewayHandler) handleJobRun(w http.ResponseWriter, r *http.Request, name string) {
-	handleRunAction(w, r, name, adminErrInvalidJob, adminErrInvalidJobMsg,
+	handleRunAction(
+		w, r, name, adminErrInvalidJob, adminErrInvalidJobMsg,
 		func(ctx context.Context, decoded string) (string, error) {
 			resp, err := h.client.RunJob(ctx, &workerpb.RunJobRequest{Name: decoded})
 			if err != nil {
@@ -2110,7 +2111,8 @@ func (h *adminGatewayHandler) handleSchedulePause(w http.ResponseWriter, r *http
 }
 
 func (h *adminGatewayHandler) handleScheduleRun(w http.ResponseWriter, r *http.Request, name string) {
-	handleRunAction(w, r, name, "invalid_name", "invalid schedule name",
+	handleRunAction(
+		w, r, name, "invalid_name", "invalid schedule name",
 		func(ctx context.Context, decoded string) (string, error) {
 			resp, err := h.client.RunSchedule(ctx, &workerpb.RunScheduleRequest{Name: decoded})
 			if err != nil {

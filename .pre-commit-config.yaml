@@ -37,7 +37,7 @@ repos:
         types: [file, yaml]
         entry: yamllint --strict -f parsable
   - repo: https://github.com/streetsidesoftware/cspell-cli
-    rev: v10.0.0
+    rev: v10.2.0
     hooks:
       # Spell check changed files
       - id: cspell
@@ -53,7 +53,7 @@ repos:
         stages: [commit-msg]
         always_run: true
   - repo: https://github.com/markdownlint/markdownlint.git
-    rev: v0.15.0
+    rev: v0.18.1
     hooks:
       - id: markdownlint
         name: Markdownlint

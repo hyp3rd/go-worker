@@ -1712,24 +1712,22 @@ func parseAdminJobRecord(raw string) (AdminJob, error) {
 
 func adminJobFromRecord(record adminJobRecord) AdminJob {
 	job := AdminJob{
-		AdminJobSpec: AdminJobSpec{
-			Name:        record.Name,
-			Description: record.Description,
-			Repo:        record.Repo,
-			Tag:         record.Tag,
-			Source:      record.Source,
-			TarballURL:  record.TarballURL,
-			TarballPath: record.TarballPath,
-			TarballSHA:  record.TarballSHA,
-			Path:        record.Path,
-			Dockerfile:  record.Dockerfile,
-			Command:     record.Command,
-			Env:         record.Env,
-			Queue:       record.Queue,
-			Retries:     record.Retries,
-		},
-		CreatedAt: time.UnixMilli(record.CreatedAtMs),
-		UpdatedAt: time.UnixMilli(record.UpdatedAtMs),
+		Name:        record.Name,
+		Description: record.Description,
+		Repo:        record.Repo,
+		Tag:         record.Tag,
+		Source:      record.Source,
+		TarballURL:  record.TarballURL,
+		TarballPath: record.TarballPath,
+		TarballSHA:  record.TarballSHA,
+		Path:        record.Path,
+		Dockerfile:  record.Dockerfile,
+		Command:     record.Command,
+		Env:         record.Env,
+		Queue:       record.Queue,
+		Retries:     record.Retries,
+		CreatedAt:   time.UnixMilli(record.CreatedAtMs),
+		UpdatedAt:   time.UnixMilli(record.UpdatedAtMs),
 	}
 
 	if record.TimeoutSeconds > 0 {
