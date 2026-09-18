@@ -8,7 +8,7 @@ require (
 	github.com/hyp3rd/cron/v4 v4.0.1
 	github.com/hyp3rd/ewrap v1.5.2
 	github.com/hyp3rd/sectools v1.2.9
-	github.com/redis/rueidis v1.0.77
+	github.com/redis/rueidis v1.0.78
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel/metric v1.46.0
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
@@ -33,5 +33,5 @@ require (
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260911204522-f61a6ca850bd // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260918162117-cecb64721679 // indirect
 )
