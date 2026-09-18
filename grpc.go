@@ -607,7 +607,8 @@ func idempotencySignature(taskReq *workerpb.Task) ([idempotencySignatureSize]byt
 		return [idempotencySignatureSize]byte{}, ewrap.Wrapf(
 			err,
 			"marshal task request for idempotency signature calculation. Task name: %q",
-			taskReq.GetName())
+			taskReq.GetName(),
+		)
 	}
 
 	return sha256.Sum256(payload), nil
@@ -619,7 +620,8 @@ func idempotencySignatureDurable(taskReq *workerpb.DurableTask) ([idempotencySig
 		return [idempotencySignatureSize]byte{}, ewrap.Wrapf(
 			err,
 			"marshal durable task request for idempotency signature calculation. Task name: %q",
-			taskReq.GetName())
+			taskReq.GetName(),
+		)
 	}
 
 	return sha256.Sum256(payload), nil
