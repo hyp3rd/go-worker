@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Generate SBOM
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@v0.24.2
         with:
           path: .
           format: cyclonedx-json

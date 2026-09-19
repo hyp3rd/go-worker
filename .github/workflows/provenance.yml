@@ -36,7 +36,7 @@ jobs:
           sum=$(sha256sum "${archive}" | awk '{print $1}')
           printf '%s  %s\n' "$sum" "$archive" | base64 -w0 > subjects.b64
           echo "base64=$(cat subjects.b64)" >> "$GITHUB_OUTPUT"
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@v4.1.2
       - name: Sign source archive
         env:
           COSIGN_EXPERIMENTAL: "true"
