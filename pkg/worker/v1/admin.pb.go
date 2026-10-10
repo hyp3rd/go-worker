@@ -7,11 +7,12 @@
 package workerpb
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -4152,82 +4153,85 @@ func file_worker_v1_admin_proto_rawDescGZIP() []byte {
 	return file_worker_v1_admin_proto_rawDescData
 }
 
-var file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 73)
-var file_worker_v1_admin_proto_goTypes = []any{
-	(*GetOverviewRequest)(nil),            // 0: worker.v1.GetOverviewRequest
-	(*OverviewStats)(nil),                 // 1: worker.v1.OverviewStats
-	(*CoordinationStatus)(nil),            // 2: worker.v1.CoordinationStatus
-	(*AdminActionCounters)(nil),           // 3: worker.v1.AdminActionCounters
-	(*GetOverviewResponse)(nil),           // 4: worker.v1.GetOverviewResponse
-	(*GetHealthRequest)(nil),              // 5: worker.v1.GetHealthRequest
-	(*GetHealthResponse)(nil),             // 6: worker.v1.GetHealthResponse
-	(*QueueSummary)(nil),                  // 7: worker.v1.QueueSummary
-	(*ListQueuesRequest)(nil),             // 8: worker.v1.ListQueuesRequest
-	(*ListQueuesResponse)(nil),            // 9: worker.v1.ListQueuesResponse
-	(*GetQueueRequest)(nil),               // 10: worker.v1.GetQueueRequest
-	(*GetQueueResponse)(nil),              // 11: worker.v1.GetQueueResponse
-	(*UpdateQueueWeightRequest)(nil),      // 12: worker.v1.UpdateQueueWeightRequest
-	(*UpdateQueueWeightResponse)(nil),     // 13: worker.v1.UpdateQueueWeightResponse
-	(*ResetQueueWeightRequest)(nil),       // 14: worker.v1.ResetQueueWeightRequest
-	(*ResetQueueWeightResponse)(nil),      // 15: worker.v1.ResetQueueWeightResponse
-	(*PauseQueueRequest)(nil),             // 16: worker.v1.PauseQueueRequest
-	(*PauseQueueResponse)(nil),            // 17: worker.v1.PauseQueueResponse
-	(*ScheduleEntry)(nil),                 // 18: worker.v1.ScheduleEntry
-	(*ScheduleFactory)(nil),               // 19: worker.v1.ScheduleFactory
-	(*ScheduleEvent)(nil),                 // 20: worker.v1.ScheduleEvent
-	(*ListScheduleFactoriesRequest)(nil),  // 21: worker.v1.ListScheduleFactoriesRequest
-	(*ListScheduleFactoriesResponse)(nil), // 22: worker.v1.ListScheduleFactoriesResponse
-	(*ListScheduleEventsRequest)(nil),     // 23: worker.v1.ListScheduleEventsRequest
-	(*ListScheduleEventsResponse)(nil),    // 24: worker.v1.ListScheduleEventsResponse
-	(*ListSchedulesRequest)(nil),          // 25: worker.v1.ListSchedulesRequest
-	(*ListSchedulesResponse)(nil),         // 26: worker.v1.ListSchedulesResponse
-	(*CreateScheduleRequest)(nil),         // 27: worker.v1.CreateScheduleRequest
-	(*CreateScheduleResponse)(nil),        // 28: worker.v1.CreateScheduleResponse
-	(*DeleteScheduleRequest)(nil),         // 29: worker.v1.DeleteScheduleRequest
-	(*DeleteScheduleResponse)(nil),        // 30: worker.v1.DeleteScheduleResponse
-	(*PauseScheduleRequest)(nil),          // 31: worker.v1.PauseScheduleRequest
-	(*PauseScheduleResponse)(nil),         // 32: worker.v1.PauseScheduleResponse
-	(*RunScheduleRequest)(nil),            // 33: worker.v1.RunScheduleRequest
-	(*RunScheduleResponse)(nil),           // 34: worker.v1.RunScheduleResponse
-	(*PauseSchedulesRequest)(nil),         // 35: worker.v1.PauseSchedulesRequest
-	(*PauseSchedulesResponse)(nil),        // 36: worker.v1.PauseSchedulesResponse
-	(*JobSpec)(nil),                       // 37: worker.v1.JobSpec
-	(*Job)(nil),                           // 38: worker.v1.Job
-	(*JobEvent)(nil),                      // 39: worker.v1.JobEvent
-	(*ListJobsRequest)(nil),               // 40: worker.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),              // 41: worker.v1.ListJobsResponse
-	(*ListJobEventsRequest)(nil),          // 42: worker.v1.ListJobEventsRequest
-	(*ListJobEventsResponse)(nil),         // 43: worker.v1.ListJobEventsResponse
-	(*AuditEvent)(nil),                    // 44: worker.v1.AuditEvent
-	(*ListAuditEventsRequest)(nil),        // 45: worker.v1.ListAuditEventsRequest
-	(*ListAuditEventsResponse)(nil),       // 46: worker.v1.ListAuditEventsResponse
-	(*GetJobRequest)(nil),                 // 47: worker.v1.GetJobRequest
-	(*GetJobResponse)(nil),                // 48: worker.v1.GetJobResponse
-	(*UpsertJobRequest)(nil),              // 49: worker.v1.UpsertJobRequest
-	(*UpsertJobResponse)(nil),             // 50: worker.v1.UpsertJobResponse
-	(*DeleteJobRequest)(nil),              // 51: worker.v1.DeleteJobRequest
-	(*DeleteJobResponse)(nil),             // 52: worker.v1.DeleteJobResponse
-	(*RunJobRequest)(nil),                 // 53: worker.v1.RunJobRequest
-	(*RunJobResponse)(nil),                // 54: worker.v1.RunJobResponse
-	(*DLQEntry)(nil),                      // 55: worker.v1.DLQEntry
-	(*DLQEntryDetail)(nil),                // 56: worker.v1.DLQEntryDetail
-	(*GetDLQEntryRequest)(nil),            // 57: worker.v1.GetDLQEntryRequest
-	(*GetDLQEntryResponse)(nil),           // 58: worker.v1.GetDLQEntryResponse
-	(*ListDLQRequest)(nil),                // 59: worker.v1.ListDLQRequest
-	(*ListDLQResponse)(nil),               // 60: worker.v1.ListDLQResponse
-	(*PauseDequeueRequest)(nil),           // 61: worker.v1.PauseDequeueRequest
-	(*PauseDequeueResponse)(nil),          // 62: worker.v1.PauseDequeueResponse
-	(*ResumeDequeueRequest)(nil),          // 63: worker.v1.ResumeDequeueRequest
-	(*ResumeDequeueResponse)(nil),         // 64: worker.v1.ResumeDequeueResponse
-	(*ReplayDLQRequest)(nil),              // 65: worker.v1.ReplayDLQRequest
-	(*ReplayDLQResponse)(nil),             // 66: worker.v1.ReplayDLQResponse
-	(*ReplayDLQByIDRequest)(nil),          // 67: worker.v1.ReplayDLQByIDRequest
-	(*ReplayDLQByIDResponse)(nil),         // 68: worker.v1.ReplayDLQByIDResponse
-	nil,                                   // 69: worker.v1.ScheduleEvent.MetadataEntry
-	nil,                                   // 70: worker.v1.JobEvent.MetadataEntry
-	nil,                                   // 71: worker.v1.AuditEvent.MetadataEntry
-	nil,                                   // 72: worker.v1.DLQEntryDetail.MetadataEntry
-}
+var (
+	file_worker_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 73)
+	file_worker_v1_admin_proto_goTypes  = []any{
+		(*GetOverviewRequest)(nil),            // 0: worker.v1.GetOverviewRequest
+		(*OverviewStats)(nil),                 // 1: worker.v1.OverviewStats
+		(*CoordinationStatus)(nil),            // 2: worker.v1.CoordinationStatus
+		(*AdminActionCounters)(nil),           // 3: worker.v1.AdminActionCounters
+		(*GetOverviewResponse)(nil),           // 4: worker.v1.GetOverviewResponse
+		(*GetHealthRequest)(nil),              // 5: worker.v1.GetHealthRequest
+		(*GetHealthResponse)(nil),             // 6: worker.v1.GetHealthResponse
+		(*QueueSummary)(nil),                  // 7: worker.v1.QueueSummary
+		(*ListQueuesRequest)(nil),             // 8: worker.v1.ListQueuesRequest
+		(*ListQueuesResponse)(nil),            // 9: worker.v1.ListQueuesResponse
+		(*GetQueueRequest)(nil),               // 10: worker.v1.GetQueueRequest
+		(*GetQueueResponse)(nil),              // 11: worker.v1.GetQueueResponse
+		(*UpdateQueueWeightRequest)(nil),      // 12: worker.v1.UpdateQueueWeightRequest
+		(*UpdateQueueWeightResponse)(nil),     // 13: worker.v1.UpdateQueueWeightResponse
+		(*ResetQueueWeightRequest)(nil),       // 14: worker.v1.ResetQueueWeightRequest
+		(*ResetQueueWeightResponse)(nil),      // 15: worker.v1.ResetQueueWeightResponse
+		(*PauseQueueRequest)(nil),             // 16: worker.v1.PauseQueueRequest
+		(*PauseQueueResponse)(nil),            // 17: worker.v1.PauseQueueResponse
+		(*ScheduleEntry)(nil),                 // 18: worker.v1.ScheduleEntry
+		(*ScheduleFactory)(nil),               // 19: worker.v1.ScheduleFactory
+		(*ScheduleEvent)(nil),                 // 20: worker.v1.ScheduleEvent
+		(*ListScheduleFactoriesRequest)(nil),  // 21: worker.v1.ListScheduleFactoriesRequest
+		(*ListScheduleFactoriesResponse)(nil), // 22: worker.v1.ListScheduleFactoriesResponse
+		(*ListScheduleEventsRequest)(nil),     // 23: worker.v1.ListScheduleEventsRequest
+		(*ListScheduleEventsResponse)(nil),    // 24: worker.v1.ListScheduleEventsResponse
+		(*ListSchedulesRequest)(nil),          // 25: worker.v1.ListSchedulesRequest
+		(*ListSchedulesResponse)(nil),         // 26: worker.v1.ListSchedulesResponse
+		(*CreateScheduleRequest)(nil),         // 27: worker.v1.CreateScheduleRequest
+		(*CreateScheduleResponse)(nil),        // 28: worker.v1.CreateScheduleResponse
+		(*DeleteScheduleRequest)(nil),         // 29: worker.v1.DeleteScheduleRequest
+		(*DeleteScheduleResponse)(nil),        // 30: worker.v1.DeleteScheduleResponse
+		(*PauseScheduleRequest)(nil),          // 31: worker.v1.PauseScheduleRequest
+		(*PauseScheduleResponse)(nil),         // 32: worker.v1.PauseScheduleResponse
+		(*RunScheduleRequest)(nil),            // 33: worker.v1.RunScheduleRequest
+		(*RunScheduleResponse)(nil),           // 34: worker.v1.RunScheduleResponse
+		(*PauseSchedulesRequest)(nil),         // 35: worker.v1.PauseSchedulesRequest
+		(*PauseSchedulesResponse)(nil),        // 36: worker.v1.PauseSchedulesResponse
+		(*JobSpec)(nil),                       // 37: worker.v1.JobSpec
+		(*Job)(nil),                           // 38: worker.v1.Job
+		(*JobEvent)(nil),                      // 39: worker.v1.JobEvent
+		(*ListJobsRequest)(nil),               // 40: worker.v1.ListJobsRequest
+		(*ListJobsResponse)(nil),              // 41: worker.v1.ListJobsResponse
+		(*ListJobEventsRequest)(nil),          // 42: worker.v1.ListJobEventsRequest
+		(*ListJobEventsResponse)(nil),         // 43: worker.v1.ListJobEventsResponse
+		(*AuditEvent)(nil),                    // 44: worker.v1.AuditEvent
+		(*ListAuditEventsRequest)(nil),        // 45: worker.v1.ListAuditEventsRequest
+		(*ListAuditEventsResponse)(nil),       // 46: worker.v1.ListAuditEventsResponse
+		(*GetJobRequest)(nil),                 // 47: worker.v1.GetJobRequest
+		(*GetJobResponse)(nil),                // 48: worker.v1.GetJobResponse
+		(*UpsertJobRequest)(nil),              // 49: worker.v1.UpsertJobRequest
+		(*UpsertJobResponse)(nil),             // 50: worker.v1.UpsertJobResponse
+		(*DeleteJobRequest)(nil),              // 51: worker.v1.DeleteJobRequest
+		(*DeleteJobResponse)(nil),             // 52: worker.v1.DeleteJobResponse
+		(*RunJobRequest)(nil),                 // 53: worker.v1.RunJobRequest
+		(*RunJobResponse)(nil),                // 54: worker.v1.RunJobResponse
+		(*DLQEntry)(nil),                      // 55: worker.v1.DLQEntry
+		(*DLQEntryDetail)(nil),                // 56: worker.v1.DLQEntryDetail
+		(*GetDLQEntryRequest)(nil),            // 57: worker.v1.GetDLQEntryRequest
+		(*GetDLQEntryResponse)(nil),           // 58: worker.v1.GetDLQEntryResponse
+		(*ListDLQRequest)(nil),                // 59: worker.v1.ListDLQRequest
+		(*ListDLQResponse)(nil),               // 60: worker.v1.ListDLQResponse
+		(*PauseDequeueRequest)(nil),           // 61: worker.v1.PauseDequeueRequest
+		(*PauseDequeueResponse)(nil),          // 62: worker.v1.PauseDequeueResponse
+		(*ResumeDequeueRequest)(nil),          // 63: worker.v1.ResumeDequeueRequest
+		(*ResumeDequeueResponse)(nil),         // 64: worker.v1.ResumeDequeueResponse
+		(*ReplayDLQRequest)(nil),              // 65: worker.v1.ReplayDLQRequest
+		(*ReplayDLQResponse)(nil),             // 66: worker.v1.ReplayDLQResponse
+		(*ReplayDLQByIDRequest)(nil),          // 67: worker.v1.ReplayDLQByIDRequest
+		(*ReplayDLQByIDResponse)(nil),         // 68: worker.v1.ReplayDLQByIDResponse
+		nil,                                   // 69: worker.v1.ScheduleEvent.MetadataEntry
+		nil,                                   // 70: worker.v1.JobEvent.MetadataEntry
+		nil,                                   // 71: worker.v1.AuditEvent.MetadataEntry
+		nil,                                   // 72: worker.v1.DLQEntryDetail.MetadataEntry
+	}
+)
+
 var file_worker_v1_admin_proto_depIdxs = []int32{
 	1,  // 0: worker.v1.GetOverviewResponse.stats:type_name -> worker.v1.OverviewStats
 	2,  // 1: worker.v1.GetOverviewResponse.coordination:type_name -> worker.v1.CoordinationStatus
