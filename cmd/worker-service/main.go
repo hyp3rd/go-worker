@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -341,8 +342,7 @@ func buildHandlerMaps(
 		durableHandlers[worker.JobHandlerName] = jobDurableHandlerSpec(jobRunner)
 	}
 
-	addNames := append([]string{}, cfg.cronHandlers...)
-	addNames = append(addNames, cfg.durableCronHandlers...)
+	addNames := slices.Concat(cfg.cronHandlers, cfg.durableCronHandlers)
 
 	for _, name := range addNames {
 		if _, ok := handlers[name]; !ok {
