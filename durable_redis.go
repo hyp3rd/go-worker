@@ -343,13 +343,13 @@ func (b *RedisDurableBackend) Nack(ctx context.Context, lease DurableTaskLease, 
 		queue = b.defaultQueueName()
 	}
 
-	readyAt := time.Now().Add(delay).UnixMilli()
+	readyAtMs := time.Now().Add(delay).UnixMilli()
 
 	resp := b.nack.Exec(
 		ctx,
 		b.client,
 		[]string{b.readyKey(queue), b.processingKey(queue), taskKey},
-		[]string{taskID, strconv.FormatInt(readyAt, 10)},
+		[]string{taskID, strconv.FormatInt(readyAtMs, 10)},
 	)
 
 	err := resp.Error()
@@ -416,8 +416,8 @@ func (b *RedisDurableBackend) Extend(ctx context.Context, lease DurableTaskLease
 		queue = b.defaultQueueName()
 	}
 
-	now := time.Now().UnixMilli()
-	leaseAt := now + leaseDuration.Milliseconds()
+	nowMs := time.Now().UnixMilli()
+	leaseAt := nowMs + leaseDuration.Milliseconds()
 
 	resp := b.extend.Exec(
 		ctx,
@@ -426,7 +426,7 @@ func (b *RedisDurableBackend) Extend(ctx context.Context, lease DurableTaskLease
 		[]string{
 			taskID,
 			strconv.FormatInt(leaseAt, 10),
-			strconv.FormatInt(now, 10),
+			strconv.FormatInt(nowMs, 10),
 		},
 	)
 
@@ -556,7 +556,7 @@ func applyLeaseDefaults(lease *DurableTaskLease, queue string) {
 
 // dequeueOne retrieves a single durable task lease from Redis.
 func (b *RedisDurableBackend) dequeueOne(ctx context.Context, queue string, lease time.Duration) (DurableTaskLease, bool, error) {
-	now := time.Now().UnixMilli()
+	nowMs := time.Now().UnixMilli()
 
 	leaseMs := lease.Milliseconds()
 	if leaseMs <= 0 {
@@ -568,7 +568,7 @@ func (b *RedisDurableBackend) dequeueOne(ctx context.Context, queue string, leas
 		b.client,
 		[]string{b.readyKey(queue), b.processingKey(queue), b.taskPrefixKey()},
 		[]string{
-			strconv.FormatInt(now, 10),
+			strconv.FormatInt(nowMs, 10),
 			strconv.FormatInt(leaseMs, 10),
 			strconv.Itoa(b.batchSize),
 		},
@@ -768,7 +768,7 @@ func parseLease(values []string) (DurableTaskLease, error) {
 	if err != nil {
 		return DurableTaskLease{}, ewrap.Wrap(err, "parse durable retries")
 	}
-	//nolint:revive
+
 	retryDelayMs, err := strconv.ParseInt(values[leaseIdxRetryDelayMs], 10, 64)
 	if err != nil {
 		return DurableTaskLease{}, ewrap.Wrap(err, "parse durable retry delay")

@@ -42,7 +42,7 @@ run:
   # Define the Go version limit.
   # Mainly related to generics support since go1.18.
   # Default: use Go version from the go.mod file, fallback on the env var `GOVERSION`, fallback on 1.17
-  go: "1.27.1"
+  go: "1.27.3"
 
 linters:
   # Enable specific linter
@@ -62,6 +62,7 @@ linters:
     - ireturn
     - lll
     - nonamedreturns
+    - nolintlint
     - recvcheck
     - tagliatelle
     - tagalign
@@ -189,6 +190,12 @@ linters:
           severity: warning
           disabled: true
           exclude: [""]
+
+        - name: add-constant
+          disabled: true
+
+        - name: unhandled-error
+          disabled: true
 
     wrapcheck:
       # An array of strings that specify globs of packages to ignore.

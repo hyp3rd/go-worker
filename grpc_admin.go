@@ -1083,21 +1083,21 @@ func timeToMillis(value time.Time) int64 {
 }
 
 func scheduleToProto(schedule AdminSchedule) *workerpb.ScheduleEntry {
-	nextRun := int64(0)
+	nextRunMs := int64(0)
 	if !schedule.NextRun.IsZero() {
-		nextRun = schedule.NextRun.UnixMilli()
+		nextRunMs = schedule.NextRun.UnixMilli()
 	}
 
-	lastRun := int64(0)
+	lastRunMs := int64(0)
 	if !schedule.LastRun.IsZero() {
-		lastRun = schedule.LastRun.UnixMilli()
+		lastRunMs = schedule.LastRun.UnixMilli()
 	}
 
 	return &workerpb.ScheduleEntry{
 		Name:      schedule.Name,
 		Spec:      schedule.Spec,
-		NextRunMs: nextRun,
-		LastRunMs: lastRun,
+		NextRunMs: nextRunMs,
+		LastRunMs: lastRunMs,
 		Durable:   schedule.Durable,
 		Paused:    schedule.Paused,
 	}

@@ -36,7 +36,7 @@ repos:
         stages: [commit-msg]
         always_run: true
   - repo: https://github.com/markdownlint/markdownlint.git
-    rev: v0.15.0
+    rev: v0.18.1
     hooks:
       - id: markdownlint
         name: Markdownlint
