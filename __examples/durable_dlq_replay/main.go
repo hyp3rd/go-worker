@@ -79,7 +79,7 @@ func main() {
 	queuesKey := prefix + ":queues"
 	taskPrefix := prefix + ":task:"
 
-	now := time.Now().UnixMilli()
+	nowMs := time.Now().UnixMilli()
 	limit := *batch
 	if limit <= 0 {
 		limit = defaultBatchSize
@@ -105,7 +105,7 @@ func main() {
 		client,
 		[]string{deadKey, taskPrefix, queuesKey},
 		[]string{
-			int64ToString(now),
+			int64ToString(nowMs),
 			intToString(limit),
 			prefix,
 			defaultQueueName,
